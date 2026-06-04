@@ -19,6 +19,15 @@ builds the same `Dockerfile` and provides managed Postgres.
     ├── requirements.txt
     ├── manage.py
     └── config/             # Django project (settings, urls, wsgi, asgi)
+├── frontend/
+│   ├── Dockerfile          # frontend image for local Docker development
+│   ├── package.json        # React/Vite dependencies and scripts
+│   ├── index.html
+│   └── src/
+│       ├── App.jsx         # main React app component
+│       ├── App.css         # main styling for the landing page
+│       └── assets/         # logos, images and frontend assets
+
 ```
 
 ## Local development (standard: Docker)
@@ -35,6 +44,7 @@ auto-reload, `db` is Postgres 16.
 
 - App:   http://127.0.0.1:8000
 - Admin: http://127.0.0.1:8000/admin
+- Frontend: http://127.0.0.1:5173
 
 Everyday use:
 
