@@ -9,6 +9,7 @@
 #   docker compose exec web python manage.py createsuperuser
 #
 # App: http://127.0.0.1:8000   ·   Admin: http://127.0.0.1:8000/admin
+# Frontend: http://127.0.0.1:5173
 services:
   db:
     image: postgres:16
@@ -47,5 +48,20 @@ services:
       db:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+    # Dev command: run Vite dev server and expose it to the Docker network.
+    command: npm run dev -- --host 0.0.0.0
+    volumes:
+      # Mount frontend source for live reload; keep node_modules inside container.
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - web
+
 volumes:
   pgdata:
+  
