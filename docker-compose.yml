@@ -1,0 +1,51 @@
+# Local development stack: Django (web) + PostgreSQL (db).
+# Railway provides its own managed Postgres in production and builds the web image
+# from backend/Dockerfile (this compose file is not used there).
+#
+#   docker compose up --build        # start everything (rebuild after dep changes)
+#   docker compose up -d             # start in background (no rebuild)
+#   docker compose down              # stop (keeps data)
+#   docker compose down -v           # stop and wipe data
+#   docker compose exec web python manage.py createsuperuser
+#
+# App: http://127.0.0.1:8000   ·   Admin: http://127.0.0.1:8000/admin
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ./backend
+    # Dev command: migrate then runserver (auto-reloads on code changes).
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Inside the compose network the database is reachable as host "db",
+      # not localhost. This overrides DATABASE_URL from .env.
+      DATABASE_URL: postgres://app:app@db:5432/app
+    volumes:
+      # Mount source for live reload; mask host's .venv (macOS binaries).
+      - ./backend:/app
+      - /app/.venv
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
