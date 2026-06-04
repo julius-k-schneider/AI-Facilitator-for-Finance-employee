@@ -1,0 +1,15 @@
+# Keep the build context small and avoid baking host-only / secret files.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+staticfiles/
+media/
+db.sqlite3
+.env
+.env.*
+!.env.example
+.git/
+.idea/
+.vscode/
+.DS_Store
