@@ -1,0 +1,61 @@
+/* HERO */
+
+.hero {
+  min-height: 560px;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.12)),
+    linear-gradient(120deg, #e9f2fb 0%, #ffffff 45%, #d8e7f5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 110px;
+}
+
+.hero-box {
+  background: #193f9a;
+  color: #ffffff;
+  max-width: 760px;
+  padding: 36px 42px 44px;
+  border-radius: 4px;
+}
+
+.hero-box h1 {
+  font-size: 58px;
+  font-weight: 300;
+  margin: 0 0 16px;
+  letter-spacing: 1px;
+}
+
+.hero-box p {
+  font-size: 30px;
+  line-height: 1.35;
+  margin: 0 0 28px;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.hero-button {
+  background: #ffffff;
+  color: #05164d;
+  border: none;
+  border-radius: 6px;
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 900px) {
+  .hero {
+    padding: 50px 32px;
+  }
+
+  .hero-box h1 {
+    font-size: 42px;
+  }
+
+  .hero-box p {
+    font-size: 24px;
+  }
+}

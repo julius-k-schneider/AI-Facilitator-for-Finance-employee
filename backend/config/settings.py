@@ -54,6 +54,8 @@ if RAILWAY_PUBLIC_DOMAIN:
 # Application definition
 
 INSTALLED_APPS = [
+    'corsheaders',
+    'accounts',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -64,6 +66,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     # WhiteNoise serves static files in production; must come right after security.
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -159,6 +162,19 @@ STORAGES = {
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS.extend([
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+])
+
+SESSION_COOKIE_SAMESITE = 'Lax'
 
 # Security hardening when running with DEBUG off (i.e. in production).
 if not DEBUG:
