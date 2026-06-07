@@ -1,95 +1,59 @@
-.profile {
-  min-height: calc(100vh - 130px);
-  background: #f3f6ff;
-  padding: 60px 110px;
-}
-
-.profile-card {
-  width: 100%;
-  max-width: 900px;
-  background: #ffffff;
-  border: 1px solid #dfe6f2;
-  border-radius: 12px;
-  padding: 48px 42px;
-  margin: 0 auto;
-}
-
-.profile-card h1 {
-  margin: 0 0 42px;
-  font-size: 42px;
-  color: #05164d;
-  letter-spacing: 0.2px;
-}
-
 .profile-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 22px;
-  margin-bottom: 28px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
 }
 
 .profile-label {
-  margin: 0 0 6px;
-  font-size: 14px;
+  color: var(--primary);
+  font-size: 12px;
   font-weight: 700;
-  color: #3d4a7d;
+  letter-spacing: 0.5px;
+  margin: 0 0 8px;
+  text-transform: uppercase;
 }
 
 .profile-row p {
-  margin: 0;
+  color: var(--text-dark);
   font-size: 16px;
-  color: #05164d;
+  font-weight: 500;
+  margin: 0;
 }
 
 .password-form label {
-  display: block;
-  margin-bottom: 16px;
-  color: #2b3a6e;
-  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.profile-stats-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 28px;
+}
+
+.profile-badges {
+  margin-bottom: 28px;
 }
 
 .password-form input {
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid #d5dbe8;
-  border-radius: 12px;
-  margin-top: 8px;
-  font-size: 15px;
-}
-
-.action-button {
-  width: 100%;
-  margin-top: 18px;
-  padding: 14px 16px;
-  border: none;
-  border-radius: 12px;
-  background: #0e2eb8;
-  color: #ffffff;
-  font-size: 16px;
-  cursor: pointer;
+  margin-bottom: 16px;
 }
 
 .password-message {
-  margin-top: 18px;
   color: #28a745;
   font-weight: 600;
+  margin-top: 18px;
 }
 
-@media (max-width: 900px) {
-  .profile {
-    padding: 40px 32px;
-  }
-
-  .profile-card {
-    padding: 32px 28px;
-  }
-
-  .profile-card h1 {
-    font-size: 32px;
-    margin-bottom: 28px;
-  }
-
+@media (max-width: 560px) {
   .profile-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .profile-stats-grid {
     grid-template-columns: 1fr;
   }
 }

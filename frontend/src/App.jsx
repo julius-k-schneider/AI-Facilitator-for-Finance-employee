@@ -1,6 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
 import './App.css'
-import lufthansaLogo from './assets/Lufthansa_Group_2025.svg.png'
 import Home from './pages/Home'
 import Profile from './pages/Profile'
 import LearningPath from './pages/LearningPath'
@@ -8,6 +7,7 @@ import Missions from './pages/Missions'
 import Progress from './pages/Progress'
 import Leaderboard from './pages/Leaderboard'
 import Resources from './pages/Resources'
+import { useUserProgress } from './hooks/useUserProgress'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
@@ -17,6 +17,7 @@ function App() {
   const [page, setPage] = useState('home')
   const [mode, setMode] = useState('login')
   const [message, setMessage] = useState('')
+  const [language, setLanguage] = useState('de')
   const [form, setForm] = useState({
     username: '',
     password: '',
@@ -24,6 +25,7 @@ function App() {
     first_name: '',
     last_name: '',
   })
+  const userProgress = useUserProgress(user)
 
   useEffect(() => {
     fetch(`${API_BASE}/api/auth/user/`, {
@@ -107,14 +109,23 @@ function App() {
     <div className="app">
       <header className="header">
         <div className="header-top">
-          <img src={lufthansaLogo} alt="Lufthansa Group Logo" className="logo" />
           <div className="header-actions">
             {user && (
               <button className="logout-button" onClick={handleLogout}>
                 Logout
               </button>
             )}
-            <button className="language-button">Deutsch</button>
+            <button
+              className="language-button"
+              type="button"
+              onClick={() => setLanguage((current) => (current === 'de' ? 'en' : 'de'))}
+            >
+              {language === 'de' ? 'Deutsch' : 'English'}
+            </button>
+          </div>
+          <div className="brand-logo">
+            <h1 className="brand-name">AI Facilitator</h1>
+            <p className="brand-subtitle">Finance Employee</p>
           </div>
         </div>
 
@@ -179,19 +190,19 @@ function App() {
         </main>
       ) : user ? (
         page === 'profile' ? (
-          <Profile user={user} />
+          <Profile user={user} progressData={userProgress} />
         ) : page === 'learning-path' ? (
-          <LearningPath />
+          <LearningPath progressData={userProgress} onNavigate={setPage} />
         ) : page === 'missions' ? (
-          <Missions />
+          <Missions progressData={userProgress} onNavigate={setPage} />
         ) : page === 'progress' ? (
-          <Progress />
+          <Progress progressData={userProgress} onNavigate={setPage} />
         ) : page === 'leaderboard' ? (
-          <Leaderboard />
+          <Leaderboard user={user} progressData={userProgress} />
         ) : page === 'resources' ? (
           <Resources />
         ) : (
-          <Home />
+          <Home user={user} progressData={userProgress} onNavigate={setPage} />
         )
       ) : (
         <main className="auth-page">

@@ -1,9 +1,13 @@
 import { useState } from 'react'
+import Badge from '../components/Badge'
+import StatCard from '../components/StatCard'
+import { getRole } from '../utils/progressUtils'
 import './Profile.css'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
-function Profile({ user }) {
+function Profile({ user, progressData }) {
+  const { stats, badges } = progressData
   const [passwordMessage, setPasswordMessage] = useState('')
   const [passwordForm, setPasswordForm] = useState({
     old_password: '',
@@ -49,7 +53,29 @@ function Profile({ user }) {
             <p className="profile-label">Email</p>
             <p>{user.email}</p>
           </div>
+          <div>
+            <p className="profile-label">Role</p>
+            <p>{getRole(user)}</p>
+          </div>
         </div>
+
+        <div className="profile-stats-grid">
+          <StatCard label="Points" value={stats.points} />
+          <StatCard label="Level" value={stats.level} />
+          <StatCard label="Completed Missions" value={stats.completedMissions} />
+        </div>
+
+        <div className="profile-badges">
+          <p className="profile-label">Badges</p>
+          <div className="badge-grid">
+            {badges.length ? (
+              badges.map((badge) => <Badge key={badge.id} tone="success">{badge.label}</Badge>)
+            ) : (
+              <p>No badges yet. Complete your first mission to unlock one.</p>
+            )}
+          </div>
+        </div>
+
         <form className="password-form" onSubmit={handlePasswordChange}>
           <label>
             Current password
