@@ -29,13 +29,20 @@ def user_payload(user):
 @csrf_exempt
 def login_view(request):
     data = parse_json(request)
-    username = data.get('username', '').strip()
+    # Die Kennung kann eine E-Mail (bevorzugt) oder ein Username sein.
+    identifier = (data.get('email') or data.get('username') or '').strip()
     password = data.get('password', '')
 
-    if not username or not password:
-        return JsonResponse({'error': 'username and password required'}, status=400)
+    if not identifier or not password:
+        return JsonResponse({'error': 'email and password required'}, status=400)
 
-    user = authenticate(request, username=username, password=password)
+    # Falls eine E-Mail angegeben wurde, den zugehörigen Username auflösen.
+    if '@' in identifier:
+        match = User.objects.filter(email__iexact=identifier).first()
+        if match is not None:
+            identifier = match.username
+
+    user = authenticate(request, username=identifier, password=password)
     if user is None:
         return JsonResponse({'error': 'invalid credentials'}, status=401)
 
@@ -62,17 +69,18 @@ def user_view(request):
 @csrf_exempt
 def register_view(request):
     data = parse_json(request)
-    username = data.get('username', '').strip()
     password = data.get('password', '')
     email = data.get('email', '').strip()
     first_name = data.get('first_name', '').strip()
     last_name = data.get('last_name', '').strip()
+    # Der Username wird aus der E-Mail abgeleitet (E-Mail ist die Login-Kennung).
+    username = (data.get('username') or email).strip()
 
     if not all([username, password, email, first_name, last_name]):
         return JsonResponse({'error': 'all fields required'}, status=400)
 
-    if User.objects.filter(username=username).exists():
-        return JsonResponse({'error': 'username already exists'}, status=400)
+    if User.objects.filter(username=username).exists() or User.objects.filter(email__iexact=email).exists():
+        return JsonResponse({'error': 'account already exists'}, status=400)
 
     user = User.objects.create_user(
         username=username,

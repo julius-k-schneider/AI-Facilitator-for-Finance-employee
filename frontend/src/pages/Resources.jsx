@@ -1,12 +1,12 @@
-import './Resources.css'
+import { IconBooks } from '@tabler/icons-react'
+import PageShell from './PageShell'
 
 export default function Resources() {
   return (
-    <main className="resources">
-      <div className="page-container">
-        <h1>Resources</h1>
-        <p>Zusätzliche Materialien und Links zum Lernen</p>
-      </div>
-    </main>
+    <PageShell
+      title="Resources"
+      description="Zusätzliche Materialien und Links zum Lernen"
+      icon={IconBooks}
+    />
   )
 }

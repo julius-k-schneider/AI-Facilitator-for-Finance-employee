@@ -1,12 +1,12 @@
-import './Leaderboard.css'
+import { IconTrophy } from '@tabler/icons-react'
+import PageShell from './PageShell'
 
 export default function Leaderboard() {
   return (
-    <main className="leaderboard">
-      <div className="page-container">
-        <h1>Leaderboard</h1>
-        <p>Vergleiche deine Punkte mit deinen Kollegen</p>
-      </div>
-    </main>
+    <PageShell
+      title="Leaderboard"
+      description="Vergleiche deine Punkte mit deinen Kollegen"
+      icon={IconTrophy}
+    />
   )
 }
