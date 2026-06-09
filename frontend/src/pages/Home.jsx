@@ -4,7 +4,6 @@ import {
   Button,
   Group,
   Paper,
-  Progress,
   SimpleGrid,
   Stack,
   Text,
@@ -14,48 +13,33 @@ import {
 import {
   IconArrowRight,
   IconBolt,
-  IconFlame,
-  IconRoute,
+  IconChecklist,
   IconSparkles,
   IconTargetArrow,
   IconTrophy,
 } from '@tabler/icons-react'
+import { MISSIONS } from '../data/missions'
+import { useUserProgress } from '../hooks/useUserProgress'
+import { getLevel } from '../services/progressService'
 
-const STATS = [
-  { label: 'Punkte', value: '1.240', icon: IconBolt, color: 'brand' },
-  { label: 'Tagesstreak', value: '7', icon: IconFlame, color: 'accent' },
-  { label: 'Team-Rang', value: '#4', icon: IconTrophy, color: 'secondary' },
-]
+function displayName(user) {
+  const fullName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+  return fullName || user?.username || user?.email || 'Kollege'
+}
 
-const ACTIONS = [
-  {
-    title: 'Setze deinen Learning Path fort',
-    text: 'Modul „Prompting für Finance-Analysen“ wartet auf dich.',
-    icon: IconRoute,
-    cta: 'Weiterlernen',
-  },
-  {
-    title: 'Neue Mission verfügbar',
-    text: 'Erstelle eine automatisierte Reporting-Zusammenfassung mit AI.',
-    icon: IconTargetArrow,
-    cta: 'Mission starten',
-  },
-]
-
-function StatCard({ stat }) {
-  const Icon = stat.icon
+function StatCard({ label, value, icon: Icon, color = 'brand' }) {
   return (
     <Paper withBorder radius="lg" p="lg" bg="white">
       <Group justify="space-between" align="flex-start">
         <Stack gap={2}>
           <Text fz="sm" c="dimmed" fw={500}>
-            {stat.label}
+            {label}
           </Text>
           <Text fz={30} fw={700} c="secondary.9" lh={1} ff="var(--font-display)">
-            {stat.value}
+            {value}
           </Text>
         </Stack>
-        <ThemeIcon size={44} radius="md" variant="light" color={stat.color}>
+        <ThemeIcon size={44} radius="md" variant="light" color={color}>
           <Icon size={23} stroke={1.7} />
         </ThemeIcon>
       </Group>
@@ -63,10 +47,82 @@ function StatCard({ stat }) {
   )
 }
 
-export default function Home({ user }) {
+function DashboardSection({ title, children }) {
+  return (
+    <Stack gap="md">
+      <Title order={2} fz={22} c="secondary.9">
+        {title}
+      </Title>
+      {children}
+    </Stack>
+  )
+}
+
+function NextMissionCard({ mission, onStart }) {
+  if (!mission) {
+    return (
+      <Paper withBorder radius="lg" p="xl" bg="white">
+        <Group gap="md" align="flex-start">
+          <ThemeIcon size={48} radius="md" variant="light" color="accent">
+            <IconTrophy size={25} stroke={1.7} />
+          </ThemeIcon>
+          <Stack gap={6} style={{ flex: 1 }}>
+            <Text fw={700} c="secondary.9">
+              Alle Missions abgeschlossen
+            </Text>
+            <Text fz="sm" c="dimmed">
+              Du hast die aktuell verfuegbaren Finance-Missions abgeschlossen. Neue Missions
+              koennen spaeter ueber die zentrale Registry ergaenzt werden.
+            </Text>
+          </Stack>
+        </Group>
+      </Paper>
+    )
+  }
+
+  return (
+    <Paper withBorder radius="lg" p="xl" bg="white">
+      <Group align="flex-start" justify="space-between" gap="lg">
+        <Group gap="md" align="flex-start" wrap="nowrap" style={{ flex: 1 }}>
+          <ThemeIcon size={48} radius="md" variant="light" color="brand">
+            <IconTargetArrow size={25} stroke={1.7} />
+          </ThemeIcon>
+          <Stack gap={8} style={{ flex: 1 }}>
+            <Group gap="xs">
+              <Badge color="brand" variant="light">
+                {mission.category}
+              </Badge>
+              <Badge color="secondary" variant="light">
+                {mission.difficulty}
+              </Badge>
+            </Group>
+            <Box>
+              <Text fw={700} c="secondary.9" fz="lg">
+                {mission.title}
+              </Text>
+              <Text fz="sm" c="dimmed" mt={3}>
+                {mission.description}
+              </Text>
+            </Box>
+            <Text fz="sm" c="dimmed">
+              {mission.estimatedTime} · bis zu {mission.maxPoints} Punkte
+            </Text>
+          </Stack>
+        </Group>
+        <Button color="brand" rightSection={<IconArrowRight size={17} />} onClick={onStart}>
+          Mission starten
+        </Button>
+      </Group>
+    </Paper>
+  )
+}
+
+export default function Home({ user, navigate }) {
+  const { progress, nextMission } = useUserProgress(user)
+  const level = getLevel(progress.totalPoints)
+
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
-      {/* Hero */}
       <Paper
         radius="xl"
         p={{ base: 'xl', md: 44 }}
@@ -87,10 +143,11 @@ export default function Home({ user }) {
             width: 360,
             height: 360,
             borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(var(--gold-rgb),0.22) 0%, rgba(var(--gold-rgb),0) 68%)',
+            background:
+              'radial-gradient(circle, rgba(var(--gold-rgb),0.22) 0%, rgba(var(--gold-rgb),0) 68%)',
           }}
         />
-        <Stack gap="lg" style={{ position: 'relative', maxWidth: 640 }}>
+        <Stack gap="lg" style={{ position: 'relative', maxWidth: 680 }}>
           <Badge
             variant="light"
             color="yellow"
@@ -102,11 +159,10 @@ export default function Home({ user }) {
             AI ENABLEMENT
           </Badge>
           <Title order={1} fz={{ base: 32, md: 44 }} fw={600} lh={1.1}>
-            Willkommen zurück, {user?.first_name || 'Kollege'}.
+            Willkommen zurueck, {displayName(user)}.
           </Title>
           <Text fz={{ base: 17, md: 20 }} c="rgba(255,255,255,0.78)" lh={1.5}>
-            Baue die AI-Skills von morgen – Schritt für Schritt, mit echten
-            Cases aus deinem Finance-Alltag.
+            Trainiere deine AI-Skills mit kurzen Finance-Missions und sammle Punkte.
           </Text>
           <Group gap="md" mt={4}>
             <Button
@@ -115,72 +171,37 @@ export default function Home({ user }) {
               c="secondary.9"
               fw={700}
               rightSection={<IconArrowRight size={18} />}
+              onClick={() =>
+                navigate('missions', nextMission ? { startMissionId: nextMission.id } : {})
+              }
             >
-              Weiterlernen
+              {nextMission ? 'Naechste Mission starten' : 'Missions ansehen'}
             </Button>
-            <Button size="md" variant="default" color="gray">
-              Missionen ansehen
+            <Button size="md" variant="default" color="gray" onClick={() => navigate('leaderboard')}>
+              Leaderboard ansehen
             </Button>
           </Group>
         </Stack>
       </Paper>
 
-      {/* Stats */}
-      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg" mb="xl">
-        {STATS.map((stat) => (
-          <StatCard key={stat.label} stat={stat} />
-        ))}
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg" mb="xl">
+        <StatCard label="Gesamtpunkte" value={progress.totalPoints} icon={IconBolt} color="brand" />
+        <StatCard
+          label="Abgeschlossene Missions"
+          value={progress.completedMissions.length}
+          icon={IconChecklist}
+          color="accent"
+        />
+        <StatCard label="Verfuegbare Missions" value={MISSIONS.length} icon={IconTargetArrow} color="secondary" />
+        <StatCard label="Level" value={level} icon={IconTrophy} color="brand" />
       </SimpleGrid>
 
-      {/* Fortschritt + Aktionen */}
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-        <Paper withBorder radius="lg" p="xl" bg="white">
-          <Group justify="space-between" mb="md">
-            <Text fw={600} fz="lg" c="secondary.9">
-              Dein Wochenziel
-            </Text>
-            <Text fz="sm" c="dimmed">
-              3 / 5 Module
-            </Text>
-          </Group>
-          <Progress value={60} color="brand" size="lg" radius="xl" mb="lg" />
-          <Text c="dimmed" fz="sm">
-            Noch 2 Module bis zu deinem nächsten Badge. Bleib dran – du bist auf
-            einem starken Streak!
-          </Text>
-        </Paper>
-
-        <Stack gap="lg">
-          {ACTIONS.map((action) => {
-            const Icon = action.icon
-            return (
-              <Paper key={action.title} withBorder radius="lg" p="lg" bg="white">
-                <Group wrap="nowrap" align="flex-start" gap="md">
-                  <ThemeIcon size={46} radius="md" variant="light" color="brand">
-                    <Icon size={24} stroke={1.7} />
-                  </ThemeIcon>
-                  <Box style={{ flex: 1 }}>
-                    <Text fw={600} c="secondary.9">
-                      {action.title}
-                    </Text>
-                    <Text fz="sm" c="dimmed" mt={2}>
-                      {action.text}
-                    </Text>
-                  </Box>
-                  <Button
-                    variant="subtle"
-                    color="brand"
-                    size="compact-sm"
-                    rightSection={<IconArrowRight size={15} />}
-                  >
-                    {action.cta}
-                  </Button>
-                </Group>
-              </Paper>
-            )
-          })}
-        </Stack>
-      </SimpleGrid>
+      <DashboardSection title="Next Mission">
+        <NextMissionCard
+          mission={nextMission}
+          onStart={() => navigate('missions', { startMissionId: nextMission?.id })}
+        />
+      </DashboardSection>
     </Box>
   )
 }

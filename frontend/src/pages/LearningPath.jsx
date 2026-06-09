@@ -3,10 +3,6 @@ import PageShell from './PageShell'
 
 export default function LearningPath() {
   return (
-    <PageShell
-      title="Learning Path"
-      description="Deine personalisierte Lernroute durch die AI-Inhalte"
-      icon={IconRoute}
-    />
+    <PageShell title="Learning Path" icon={IconRoute} />
   )
 }

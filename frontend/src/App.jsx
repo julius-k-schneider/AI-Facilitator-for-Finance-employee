@@ -25,13 +25,15 @@ import Resources from './pages/Resources'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
 const PAGES = {
-  profile: (user) => <Profile user={user} />,
+  profile: ({ user }) => <Profile user={user} />,
   'learning-path': () => <LearningPath />,
-  missions: () => <Missions />,
+  missions: ({ user, navigate, startMissionId }) => (
+    <Missions user={user} navigate={navigate} startMissionId={startMissionId} />
+  ),
   progress: () => <Progress />,
-  leaderboard: () => <Leaderboard />,
+  leaderboard: ({ user }) => <Leaderboard user={user} />,
   resources: () => <Resources />,
-  home: (user) => <Home user={user} />,
+  home: ({ user, navigate }) => <Home user={user} navigate={navigate} />,
 }
 
 const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '' }
@@ -40,6 +42,8 @@ function App() {
   const [user, setUser] = useState(null)
   const [status, setStatus] = useState('loading')
   const [page, setPage] = useState('home')
+  const [pageRenderKey, setPageRenderKey] = useState(0)
+  const [startMissionId, setStartMissionId] = useState(null)
   const [mode, setMode] = useState('login')
   const [message, setMessage] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
@@ -107,7 +111,9 @@ function App() {
     setForm(EMPTY_FORM)
   }
 
-  const navigate = (value) => {
+  const navigate = (value, options = {}) => {
+    setStartMissionId(options.startMissionId || null)
+    setPageRenderKey((current) => current + 1)
     setPage(value)
     closeMobile()
   }
@@ -182,8 +188,12 @@ function App() {
           </Button>
         </Box>
 
-        <Box key={page} className="fade-up">
-          {(PAGES[page] || PAGES.home)(user)}
+        <Box key={`${page}-${pageRenderKey}-${startMissionId || 'overview'}`} className="fade-up">
+          {(PAGES[page] || PAGES.home)({
+            user,
+            navigate,
+            startMissionId,
+          })}
         </Box>
       </AppShell.Main>
     </AppShell>

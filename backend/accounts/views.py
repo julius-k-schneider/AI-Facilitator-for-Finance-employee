@@ -18,6 +18,7 @@ def parse_json(request):
 
 def user_payload(user):
     return {
+        'id': user.id,
         'username': user.username,
         'email': user.email,
         'first_name': user.first_name,
@@ -63,6 +64,15 @@ def user_view(request):
         return JsonResponse({'authenticated': False})
 
     return JsonResponse({'authenticated': True, 'user': user_payload(request.user)})
+
+
+@require_http_methods(['GET'])
+def users_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    users = User.objects.order_by('first_name', 'last_name', 'email', 'username')
+    return JsonResponse({'users': [user_payload(user) for user in users]})
 
 
 @require_http_methods(['POST'])

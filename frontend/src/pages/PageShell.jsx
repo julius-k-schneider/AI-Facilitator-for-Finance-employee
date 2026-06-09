@@ -35,11 +35,10 @@ export default function PageShell({ title, description, icon: Icon, children }) 
             )}
             <Stack align="center" gap={4}>
               <Text fz="lg" fw={600} c="secondary.9">
-                Demnächst verfügbar
+                Coming later
               </Text>
               <Text c="dimmed" ta="center" maw={420}>
-                Dieser Bereich wird gerade aufgebaut. Schau bald wieder vorbei –
-                hier entstehen neue Inhalte für dein AI-Enablement.
+                Diese Seite wird später ergänzt.
               </Text>
             </Stack>
           </Stack>
