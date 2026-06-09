@@ -1,12 +1,12 @@
-import './Missions.css'
+import { IconTargetArrow } from '@tabler/icons-react'
+import PageShell from './PageShell'
 
 export default function Missions() {
   return (
-    <main className="missions">
-      <div className="page-container">
-        <h1>Missions</h1>
-        <p>Erfülle spannende Aufgaben und sammle Punkte</p>
-      </div>
-    </main>
+    <PageShell
+      title="Missions"
+      description="Erfülle spannende Aufgaben und sammle Punkte"
+      icon={IconTargetArrow}
+    />
   )
 }

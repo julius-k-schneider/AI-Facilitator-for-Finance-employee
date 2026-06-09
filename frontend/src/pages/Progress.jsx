@@ -1,12 +1,12 @@
-import './Progress.css'
+import { IconChartArcs } from '@tabler/icons-react'
+import PageShell from './PageShell'
 
 export default function Progress() {
   return (
-    <main className="progress">
-      <div className="page-container">
-        <h1>Progress</h1>
-        <p>Verfolge deinen Fortschritt im AI-Kurs</p>
-      </div>
-    </main>
+    <PageShell
+      title="Progress"
+      description="Verfolge deinen Fortschritt im AI-Kurs"
+      icon={IconChartArcs}
+    />
   )
 }
