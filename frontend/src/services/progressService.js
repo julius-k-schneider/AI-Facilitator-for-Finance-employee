@@ -16,6 +16,14 @@ function writeStore(store) {
   window.dispatchEvent(new CustomEvent(PROGRESS_EVENT))
 }
 
+export function deleteUserProgress(userId) {
+  if (!userId) return
+
+  const store = readStore()
+  delete store[String(userId)]
+  writeStore(store)
+}
+
 export function getUserId(user) {
   return String(user?.id || user?.email || user?.username || '')
 }

@@ -10,10 +10,12 @@ import {
   Text,
   Title,
 } from '@mantine/core'
+import { IconShieldLock } from '@tabler/icons-react'
 import { useDisclosure } from '@mantine/hooks'
 import Sidebar from './components/Sidebar'
 import LoginScreen from './components/LoginScreen'
 import { NAV_LABELS } from './nav'
+import { PERMISSIONS, hasPermission } from './auth/permissions'
 import Home from './pages/Home'
 import Profile from './pages/Profile'
 import LearningPath from './pages/LearningPath'
@@ -21,6 +23,7 @@ import Missions from './pages/Missions'
 import Progress from './pages/Progress'
 import Leaderboard from './pages/Leaderboard'
 import Resources from './pages/Resources'
+import UserManagement from './pages/UserManagement'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
@@ -32,8 +35,60 @@ const PAGES = {
   ),
   progress: () => <Progress />,
   leaderboard: ({ user }) => <Leaderboard user={user} />,
+  'user-management': ({ user, setUser }) => (
+    <RequirePermission user={user} permission={PERMISSIONS.MANAGE_USERS}>
+      <UserManagement currentUser={user} onCurrentUserUpdate={setUser} />
+    </RequirePermission>
+  ),
   resources: () => <Resources />,
   home: ({ user, navigate }) => <Home user={user} navigate={navigate} />,
+}
+
+function AccessDenied() {
+  return (
+    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={860}>
+      <Box
+        bg="white"
+        p={{ base: 'xl', md: 40 }}
+        style={{
+          border: '1px solid var(--line)',
+          borderRadius: 18,
+        }}
+      >
+        <Group gap="md" align="flex-start">
+          <Box
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 14,
+              display: 'grid',
+              placeItems: 'center',
+              background: 'var(--mantine-color-brand-0)',
+              color: 'var(--mantine-color-brand-7)',
+            }}
+          >
+            <IconShieldLock size={25} stroke={1.7} />
+          </Box>
+          <Box>
+            <Title order={1} fz={{ base: 26, md: 32 }} c="secondary.9">
+              Kein Zugriff
+            </Title>
+            <Text c="dimmed" mt={6}>
+              Du hast keine Berechtigung, diese Seite zu öffnen.
+            </Text>
+          </Box>
+        </Group>
+      </Box>
+    </Box>
+  )
+}
+
+function RequirePermission({ user, permission, children }) {
+  if (!hasPermission(user, permission)) {
+    return <AccessDenied />
+  }
+
+  return children
 }
 
 const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '' }
@@ -191,6 +246,7 @@ function App() {
         <Box key={`${page}-${pageRenderKey}-${startMissionId || 'overview'}`} className="fade-up">
           {(PAGES[page] || PAGES.home)({
             user,
+            setUser,
             navigate,
             startMissionId,
           })}

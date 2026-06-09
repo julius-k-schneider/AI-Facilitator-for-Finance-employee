@@ -1,12 +1,16 @@
 import json
+import os
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from .models import UserProfile
+
 
 User = get_user_model()
+VALID_ROLES = {choice[0] for choice in UserProfile.ROLE_CHOICES}
 
 
 def parse_json(request):
@@ -16,13 +20,45 @@ def parse_json(request):
         return {}
 
 
+def should_seed_admin(user):
+    configured_email = os.environ.get('INITIAL_ADMIN_EMAIL', '').strip().lower()
+    if configured_email:
+        return user.email.lower() == configured_email
+
+    # MVP bootstrap: if no admin exists yet, the lowest-id existing account becomes admin.
+    # Later deployments can set INITIAL_ADMIN_EMAIL to make this explicit.
+    has_admin = UserProfile.objects.filter(role=UserProfile.ROLE_ADMIN).exists()
+    first_user = User.objects.order_by('id').first()
+    return not has_admin and first_user is not None and first_user.id == user.id
+
+
+def ensure_profile(user):
+    profile, created = UserProfile.objects.get_or_create(user=user)
+    if created and should_seed_admin(user):
+        profile.role = UserProfile.ROLE_ADMIN
+        profile.save(update_fields=['role'])
+    return profile
+
+
+def is_admin(user):
+    if not user.is_authenticated:
+        return False
+    return ensure_profile(user).role == UserProfile.ROLE_ADMIN
+
+
+def admin_count():
+    return UserProfile.objects.filter(role=UserProfile.ROLE_ADMIN).count()
+
+
 def user_payload(user):
+    profile = ensure_profile(user)
     return {
         'id': user.id,
         'username': user.username,
         'email': user.email,
         'first_name': user.first_name,
         'last_name': user.last_name,
+        'role': profile.role,
     }
 
 
@@ -73,6 +109,51 @@ def users_view(request):
 
     users = User.objects.order_by('first_name', 'last_name', 'email', 'username')
     return JsonResponse({'users': [user_payload(user) for user in users]})
+
+
+@require_http_methods(['PATCH'])
+@csrf_exempt
+def update_user_role_view(request, user_id):
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+
+    data = parse_json(request)
+    role = data.get('role')
+    if role not in VALID_ROLES:
+        return JsonResponse({'error': 'invalid role'}, status=400)
+
+    target = User.objects.filter(id=user_id).first()
+    if target is None:
+        return JsonResponse({'error': 'user not found'}, status=404)
+
+    profile = ensure_profile(target)
+    if profile.role == UserProfile.ROLE_ADMIN and role != UserProfile.ROLE_ADMIN and admin_count() <= 1:
+        return JsonResponse({'error': 'last admin cannot be downgraded'}, status=400)
+
+    profile.role = role
+    profile.save(update_fields=['role'])
+    return JsonResponse({'user': user_payload(target)})
+
+
+@require_http_methods(['DELETE'])
+@csrf_exempt
+def delete_user_view(request, user_id):
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+
+    target = User.objects.filter(id=user_id).first()
+    if target is None:
+        return JsonResponse({'error': 'user not found'}, status=404)
+
+    if target.id == request.user.id:
+        return JsonResponse({'error': 'current user cannot be deleted'}, status=400)
+
+    profile = ensure_profile(target)
+    if profile.role == UserProfile.ROLE_ADMIN and admin_count() <= 1:
+        return JsonResponse({'error': 'last admin cannot be deleted'}, status=400)
+
+    target.delete()
+    return JsonResponse({'ok': True})
 
 
 @require_http_methods(['POST'])

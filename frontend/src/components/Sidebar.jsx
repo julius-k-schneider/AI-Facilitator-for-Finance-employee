@@ -2,6 +2,7 @@ import { Avatar, Box, Image, Stack, Text, Tooltip, UnstyledButton } from '@manti
 import { IconLogout } from '@tabler/icons-react'
 import { branding } from '../branding'
 import { NAV_ITEMS } from '../nav'
+import { hasPermission } from '../auth/permissions'
 
 function initials(user) {
   const a = user?.first_name?.[0] || user?.username?.[0] || '?'
@@ -55,6 +56,8 @@ function NavLink({ item, active, onClick }) {
 }
 
 export default function Sidebar({ page, onNavigate, user, onLogout }) {
+  const visibleItems = NAV_ITEMS.filter((item) => !item.permission || hasPermission(user, item.permission))
+
   return (
     <Box
       style={{
@@ -108,7 +111,7 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
 
       {/* Navigation */}
       <Stack gap={4} px="md" style={{ flex: 1 }}>
-        {NAV_ITEMS.map((item) => (
+        {visibleItems.map((item) => (
           <NavLink
             key={item.value}
             item={item}
