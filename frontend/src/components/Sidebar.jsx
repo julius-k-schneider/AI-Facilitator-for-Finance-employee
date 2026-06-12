@@ -1,5 +1,6 @@
 import { Avatar, Box, Group, Image, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core'
 import { IconLogout, IconSettings } from '@tabler/icons-react'
+import { useTranslation } from 'react-i18next'
 import { branding } from '../branding'
 import { NAV_ITEMS } from '../nav'
 
@@ -9,13 +10,9 @@ function initials(user) {
   return `${a}${b}`.toUpperCase()
 }
 
-const ROLE_LABELS = {
-  controller: 'Controller',
-  accountant: 'Accountant',
-}
-
-function roleLabel(user) {
-  return user?.role_display || ROLE_LABELS[user?.role] || ''
+function roleLabel(user, t) {
+  if (user?.role_display) return user.role_display
+  return user?.role ? t(`roles.${user.role}`, { defaultValue: '' }) : ''
 }
 
 // Gemeinsames Styling für die kleinen Icon-Buttons in der User-Box.
@@ -40,6 +37,7 @@ const iconButtonReset = (e) => {
 }
 
 function NavLink({ item, active, onClick }) {
+  const { t } = useTranslation()
   const Icon = item.icon
   return (
     <UnstyledButton
@@ -78,13 +76,14 @@ function NavLink({ item, active, onClick }) {
       />
       <Icon size={21} stroke={1.8} color={active ? branding.colors.accent : 'currentColor'} />
       <span style={{ fontSize: 15, fontWeight: active ? 600 : 500, letterSpacing: '-0.01em' }}>
-        {item.label}
+        {t(item.labelKey)}
       </span>
     </UnstyledButton>
   )
 }
 
 export default function Sidebar({ page, onNavigate, user, onLogout }) {
+  const { t } = useTranslation()
   return (
     <Box
       style={{
@@ -132,7 +131,7 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
           />
         </Box>
         <Text c="rgba(255,255,255,0.45)" fz={11} fw={600} mt={14} style={{ letterSpacing: '0.14em' }}>
-          AI FACILITATOR
+          {t('sidebar.subtitle')}
         </Text>
       </Box>
 
@@ -168,7 +167,7 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
             <Text c="white" fz={14} fw={600} truncate>
               {user?.first_name ? `${user.first_name} ${user.last_name}` : user?.username}
             </Text>
-            {roleLabel(user) && (
+            {roleLabel(user, t) && (
               <Box
                 mt={6}
                 style={{
@@ -181,16 +180,16 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
                 }}
               >
                 <Text c="var(--gold)" fz={11} fw={600} style={{ letterSpacing: '0.04em' }}>
-                  {roleLabel(user)}
+                  {roleLabel(user, t)}
                 </Text>
               </Box>
             )}
           </Box>
           <Group gap={6} wrap="nowrap">
-            <Tooltip label="Profil" position="top" withArrow>
+            <Tooltip label={t('sidebar.tooltipProfile')} position="top" withArrow>
               <UnstyledButton
                 onClick={() => onNavigate('profile')}
-                aria-label="Profil"
+                aria-label={t('sidebar.tooltipProfile')}
                 style={iconButtonStyle}
                 onMouseEnter={iconButtonHover}
                 onMouseLeave={iconButtonReset}
@@ -198,10 +197,10 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
                 <IconSettings size={19} stroke={1.8} />
               </UnstyledButton>
             </Tooltip>
-            <Tooltip label="Logout" position="top" withArrow>
+            <Tooltip label={t('sidebar.tooltipLogout')} position="top" withArrow>
               <UnstyledButton
                 onClick={onLogout}
-                aria-label="Logout"
+                aria-label={t('sidebar.tooltipLogout')}
                 style={iconButtonStyle}
                 onMouseEnter={iconButtonHover}
                 onMouseLeave={iconButtonReset}

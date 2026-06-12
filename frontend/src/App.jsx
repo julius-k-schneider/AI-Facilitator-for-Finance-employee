@@ -11,9 +11,11 @@ import {
   Title,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
+import { useTranslation } from 'react-i18next'
+import { IconLanguage } from '@tabler/icons-react'
 import Sidebar from './components/Sidebar'
 import LoginScreen from './components/LoginScreen'
-import { NAV_LABELS } from './nav'
+import { NAV_LABEL_KEYS } from './nav'
 import Home from './pages/Home'
 import Profile from './pages/Profile'
 import Grundlagen from './pages/Grundlagen'
@@ -33,6 +35,8 @@ const PAGES = {
 const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '', role: 'accountant' }
 
 function App() {
+  const { t, i18n } = useTranslation()
+  const toggleLanguage = () => i18n.changeLanguage(i18n.language === 'de' ? 'en' : 'de')
   const [user, setUser] = useState({
   first_name: 'Test',
   last_name: 'User',
@@ -85,7 +89,7 @@ function App() {
 
     const data = await response.json()
     if (!response.ok) {
-      setMessage(data.error || 'Etwas ist schiefgelaufen')
+      setMessage(data.error || t('app.genericError'))
       return null
     }
     return data
@@ -122,7 +126,7 @@ function App() {
       <Center mih="100vh">
         <Group gap="sm">
           <Loader color="brand" size="sm" />
-          <Text c="dimmed">Authentifizierung wird geprüft…</Text>
+          <Text c="dimmed">{t('app.checkingAuth')}</Text>
         </Group>
       </Center>
     )
@@ -175,15 +179,23 @@ function App() {
             <Burger opened={mobileOpened} onClick={toggleMobile} hiddenFrom="sm" size="sm" />
             <Box>
               <Text fz={11} fw={700} c="brand.6" style={{ letterSpacing: '0.12em' }}>
-                {NAV_LABELS[page]?.toUpperCase()}
+                {NAV_LABEL_KEYS[page] ? t(NAV_LABEL_KEYS[page]).toUpperCase() : ''}
               </Text>
               <Title order={3} fz={18} c="secondary.9" fw={600}>
-                Hallo, {user.first_name || user.username} 👋
+                {t('app.greeting', { name: user.first_name || user.username })}
               </Title>
             </Box>
           </Group>
-          <Button variant="subtle" color="secondary" size="sm" radius="md">
-            Deutsch
+          <Button
+            variant="subtle"
+            color="secondary"
+            size="sm"
+            radius="md"
+            onClick={toggleLanguage}
+            aria-label={t('language.switchAria')}
+            leftSection={<IconLanguage size={16} />}
+          >
+            {t('language.current')}
           </Button>
         </Box>
 

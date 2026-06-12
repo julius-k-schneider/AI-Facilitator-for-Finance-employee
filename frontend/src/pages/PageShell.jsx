@@ -1,6 +1,8 @@
 import { Box, Paper, Stack, Text, ThemeIcon, Title } from '@mantine/core'
+import { useTranslation } from 'react-i18next'
 
 export default function PageShell({ title, description, icon: Icon, children }) {
+  const { t } = useTranslation()
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
       <Stack gap={6} mb="xl">
@@ -35,11 +37,10 @@ export default function PageShell({ title, description, icon: Icon, children }) 
             )}
             <Stack align="center" gap={4}>
               <Text fz="lg" fw={600} c="secondary.9">
-                Demnächst verfügbar
+                {t('pages.comingSoon')}
               </Text>
               <Text c="dimmed" ta="center" maw={420}>
-                Dieser Bereich wird gerade aufgebaut. Schau bald wieder vorbei –
-                hier entstehen neue Inhalte für dein AI-Enablement.
+                {t('pages.comingSoonText')}
               </Text>
             </Stack>
           </Stack>

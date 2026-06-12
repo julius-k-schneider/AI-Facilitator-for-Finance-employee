@@ -7,16 +7,18 @@ import {
 } from '@tabler/icons-react'
 
 // Zentrale Navigations-Definition – wird von Sidebar und Router genutzt.
+// labelKey verweist auf einen i18n-Schlüssel (siehe src/i18n/locales).
 export const NAV_ITEMS = [
-  { value: 'home', label: 'Home', hint: 'Übersicht', icon: IconLayoutDashboard },
-  { value: 'grundlagen', label: 'Grundlagen', hint: 'AI-Basics', icon: IconSchool },
-  { value: 'bibliothek', label: 'Bibliothek', hint: 'Materialien', icon: IconBooks },
-  { value: 'leaderboard', label: 'Leaderboard', hint: 'Ranglisten', icon: IconTrophy },
+  { value: 'home', labelKey: 'nav.home', icon: IconLayoutDashboard },
+  { value: 'grundlagen', labelKey: 'nav.grundlagen', icon: IconSchool },
+  { value: 'bibliothek', labelKey: 'nav.bibliothek', icon: IconBooks },
+  { value: 'leaderboard', labelKey: 'nav.leaderboard', icon: IconTrophy },
 ]
 
 // Profil ist nicht Teil der Hauptnavigation, sondern über die User-Box erreichbar.
-export const PROFILE_ITEM = { value: 'profile', label: 'Profile', hint: 'Dein Konto', icon: IconUserCircle }
+export const PROFILE_ITEM = { value: 'profile', labelKey: 'nav.profile', icon: IconUserCircle }
 
-export const NAV_LABELS = Object.fromEntries(
-  [...NAV_ITEMS, PROFILE_ITEM].map((item) => [item.value, item.label]),
+// value -> i18n-Schlüssel, z. B. für die Topbar-Überschrift.
+export const NAV_LABEL_KEYS = Object.fromEntries(
+  [...NAV_ITEMS, PROFILE_ITEM].map((item) => [item.value, item.labelKey]),
 )
