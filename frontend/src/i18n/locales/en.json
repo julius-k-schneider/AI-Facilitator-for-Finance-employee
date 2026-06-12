@@ -1,0 +1,94 @@
+{
+  "app": {
+    "checkingAuth": "Checking authentication…",
+    "greeting": "Hi, {{name}} 👋",
+    "genericError": "Something went wrong"
+  },
+  "language": {
+    "current": "English",
+    "switchAria": "Switch language to German"
+  },
+  "nav": {
+    "home": "Home",
+    "grundlagen": "Basics",
+    "bibliothek": "Library",
+    "leaderboard": "Leaderboard",
+    "profile": "Profile"
+  },
+  "roles": {
+    "controller": "Controller",
+    "accountant": "Accountant"
+  },
+  "sidebar": {
+    "subtitle": "AI FACILITATOR",
+    "tooltipProfile": "Profile",
+    "tooltipLogout": "Logout"
+  },
+  "login": {
+    "platform": "AI ENABLEMENT PLATFORM",
+    "heroTitle": "Build the AI skills of tomorrow.",
+    "heroSubtitle": "{{tagline}}. Learn, apply and grow – right in your day-to-day work in finance.",
+    "highlights": [
+      "Role-specific AI learning paths",
+      "Hands-on missions with real finance cases",
+      "Progress, points & team leaderboards"
+    ],
+    "footer": "© Lufthansa Group · Internal enablement program",
+    "welcomeBack": "Welcome back",
+    "createAccount": "Create account",
+    "loginSubtitle": "Sign in to continue your learning journey.",
+    "registerSubtitle": "Get started with your AI enablement in seconds.",
+    "tabLogin": "Login",
+    "tabRegister": "Register",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "role": "Role",
+    "email": "Email",
+    "password": "Password",
+    "submitLogin": "Sign in",
+    "submitRegister": "Register",
+    "placeholderFirstName": "John",
+    "placeholderLastName": "Doe",
+    "placeholderEmail": "john.doe@lufthansa.com"
+  },
+  "home": {
+    "badge": "AI ENABLEMENT",
+    "title": "Welcome back, {{name}}.",
+    "fallbackName": "colleague",
+    "subtitle": "Build the AI skills of tomorrow – step by step, with real cases from your day-to-day work in finance.",
+    "ctaContinue": "Continue learning",
+    "ctaMissions": "View missions",
+    "stats": {
+      "points": "Points",
+      "streak": "Daily streak",
+      "rank": "Team rank"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "fieldName": "Name",
+    "fieldEmail": "Email",
+    "fieldUser": "Username",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "errorChange": "Password could not be changed",
+    "successChange": "Password updated successfully"
+  },
+  "pages": {
+    "comingSoon": "Coming soon",
+    "comingSoonText": "This area is currently being built. Check back soon – new content for your AI enablement is on the way.",
+    "grundlagen": {
+      "title": "Basics",
+      "description": "The most important AI basics for your day-to-day work in finance"
+    },
+    "bibliothek": {
+      "title": "Library",
+      "description": "Materials, templates and links for reference"
+    },
+    "leaderboard": {
+      "title": "Leaderboard",
+      "description": "Compare your points with your colleagues"
+    }
+  }
+}

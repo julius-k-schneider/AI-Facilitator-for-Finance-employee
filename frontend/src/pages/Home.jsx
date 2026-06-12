@@ -4,7 +4,6 @@ import {
   Button,
   Group,
   Paper,
-  Progress,
   SimpleGrid,
   Stack,
   Text,
@@ -15,41 +14,26 @@ import {
   IconArrowRight,
   IconBolt,
   IconFlame,
-  IconRoute,
   IconSparkles,
-  IconTargetArrow,
   IconTrophy,
 } from '@tabler/icons-react'
+import { useTranslation } from 'react-i18next'
 
 const STATS = [
-  { label: 'Punkte', value: '1.240', icon: IconBolt, color: 'brand' },
-  { label: 'Tagesstreak', value: '7', icon: IconFlame, color: 'accent' },
-  { label: 'Team-Rang', value: '#4', icon: IconTrophy, color: 'secondary' },
-]
-
-const ACTIONS = [
-  {
-    title: 'Setze deinen Learning Path fort',
-    text: 'Modul „Prompting für Finance-Analysen“ wartet auf dich.',
-    icon: IconRoute,
-    cta: 'Weiterlernen',
-  },
-  {
-    title: 'Neue Mission verfügbar',
-    text: 'Erstelle eine automatisierte Reporting-Zusammenfassung mit AI.',
-    icon: IconTargetArrow,
-    cta: 'Mission starten',
-  },
+  { labelKey: 'home.stats.points', value: '1.240', icon: IconBolt, color: 'brand' },
+  { labelKey: 'home.stats.streak', value: '7', icon: IconFlame, color: 'accent' },
+  { labelKey: 'home.stats.rank', value: '#4', icon: IconTrophy, color: 'secondary' },
 ]
 
 function StatCard({ stat }) {
+  const { t } = useTranslation()
   const Icon = stat.icon
   return (
     <Paper withBorder radius="lg" p="lg" bg="white">
       <Group justify="space-between" align="flex-start">
         <Stack gap={2}>
           <Text fz="sm" c="dimmed" fw={500}>
-            {stat.label}
+            {t(stat.labelKey)}
           </Text>
           <Text fz={30} fw={700} c="secondary.9" lh={1} ff="var(--font-display)">
             {stat.value}
@@ -64,6 +48,7 @@ function StatCard({ stat }) {
 }
 
 export default function Home({ user }) {
+  const { t } = useTranslation()
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
       {/* Hero */}
@@ -99,14 +84,13 @@ export default function Home({ user }) {
             leftSection={<IconSparkles size={14} />}
             style={{ background: 'rgba(var(--gold-rgb),0.16)', color: 'var(--gold-soft)' }}
           >
-            AI ENABLEMENT
+            {t('home.badge')}
           </Badge>
           <Title order={1} fz={{ base: 32, md: 44 }} fw={600} lh={1.1}>
-            Willkommen zurück, {user?.first_name || 'Kollege'}.
+            {t('home.title', { name: user?.first_name || t('home.fallbackName') })}
           </Title>
           <Text fz={{ base: 17, md: 20 }} c="rgba(255,255,255,0.78)" lh={1.5}>
-            Baue die AI-Skills von morgen – Schritt für Schritt, mit echten
-            Cases aus deinem Finance-Alltag.
+            {t('home.subtitle')}
           </Text>
           <Group gap="md" mt={4}>
             <Button
@@ -116,10 +100,10 @@ export default function Home({ user }) {
               fw={700}
               rightSection={<IconArrowRight size={18} />}
             >
-              Weiterlernen
+              {t('home.ctaContinue')}
             </Button>
             <Button size="md" variant="default" color="gray">
-              Missionen ansehen
+              {t('home.ctaMissions')}
             </Button>
           </Group>
         </Stack>

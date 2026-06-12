@@ -13,21 +13,17 @@ import {
   Title,
 } from '@mantine/core'
 import { IconArrowRight, IconSparkles } from '@tabler/icons-react'
+import { useTranslation } from 'react-i18next'
 import { branding } from '../branding'
 
-const HIGHLIGHTS = [
-  'Rollenspezifische AI-Lernpfade',
-  'Praxis-Missionen mit echten Finance-Cases',
-  'Fortschritt, Punkte & Team-Ranglisten',
-]
-
-const ROLE_OPTIONS = [
-  { value: 'controller', label: 'Controller' },
-  { value: 'accountant', label: 'Accountant' },
-]
-
 export default function LoginScreen({ mode, onModeChange, form, onFieldChange, onSubmit, message }) {
+  const { t } = useTranslation()
   const isLogin = mode === 'login'
+  const highlights = t('login.highlights', { returnObjects: true })
+  const roleOptions = [
+    { value: 'controller', label: t('roles.controller') },
+    { value: 'accountant', label: t('roles.accountant') },
+  ]
 
   return (
     <Box
@@ -94,20 +90,19 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
             <Group gap={8} c="var(--gold)">
               <IconSparkles size={18} />
               <Text fz={13} fw={600} style={{ letterSpacing: '0.16em' }}>
-                AI ENABLEMENT PLATFORM
+                {t('login.platform')}
               </Text>
             </Group>
             <Title order={1} fz={46} fw={600} lh={1.08} className="fade-up" style={{ animationDelay: '0.05s' }}>
-              Baue die AI-Skills von morgen.
+              {t('login.heroTitle')}
             </Title>
             <Text fz={18} c="rgba(255,255,255,0.72)" lh={1.5} className="fade-up" style={{ animationDelay: '0.12s' }}>
-              {branding.tagline}. Lernen, anwenden und wachsen – direkt in deinem
-              Arbeitsalltag im Finance-Bereich.
+              {t('login.heroSubtitle', { tagline: branding.tagline })}
             </Text>
           </Stack>
 
           <Stack gap="sm" className="fade-up" style={{ animationDelay: '0.2s' }}>
-            {HIGHLIGHTS.map((item) => (
+            {highlights.map((item) => (
               <Group key={item} gap={12} wrap="nowrap">
                 <Box
                   style={{
@@ -127,7 +122,7 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
         </Stack>
 
         <Text fz={13} c="rgba(255,255,255,0.4)" style={{ position: 'relative' }}>
-          © Lufthansa Group · Internes Enablement-Programm
+          {t('login.footer')}
         </Text>
       </Box>
 
@@ -153,12 +148,10 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
           />
 
           <Title order={2} fz={30} c="secondary.9" mb={6}>
-            {isLogin ? 'Willkommen zurück' : 'Konto erstellen'}
+            {isLogin ? t('login.welcomeBack') : t('login.createAccount')}
           </Title>
           <Text c="dimmed" mb="xl">
-            {isLogin
-              ? 'Melde dich an, um deine Lernreise fortzusetzen.'
-              : 'Starte in wenigen Sekunden mit deinem AI-Enablement.'}
+            {isLogin ? t('login.loginSubtitle') : t('login.registerSubtitle')}
           </Text>
 
           <SegmentedControl
@@ -168,8 +161,8 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
             value={mode}
             onChange={onModeChange}
             data={[
-              { value: 'login', label: 'Login' },
-              { value: 'register', label: 'Registrieren' },
+              { value: 'login', label: t('login.tabLogin') },
+              { value: 'register', label: t('login.tabRegister') },
             ]}
             mb="xl"
           />
@@ -179,14 +172,14 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
               {!isLogin && (
                 <Group grow gap="md">
                   <TextInput
-                    label="Vorname"
-                    placeholder="Max"
+                    label={t('login.firstName')}
+                    placeholder={t('login.placeholderFirstName')}
                     value={form.first_name}
                     onChange={onFieldChange('first_name')}
                   />
                   <TextInput
-                    label="Nachname"
-                    placeholder="Mustermann"
+                    label={t('login.lastName')}
+                    placeholder={t('login.placeholderLastName')}
                     value={form.last_name}
                     onChange={onFieldChange('last_name')}
                   />
@@ -194,8 +187,8 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
               )}
               {!isLogin && (
                 <Select
-                  label="Rolle"
-                  data={ROLE_OPTIONS}
+                  label={t('login.role')}
+                  data={roleOptions}
                   value={form.role}
                   onChange={(value) => onFieldChange('role')({ target: { value: value ?? '' } })}
                   allowDeselect={false}
@@ -203,14 +196,14 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
                 />
               )}
               <TextInput
-                label="E-Mail"
+                label={t('login.email')}
                 type="email"
-                placeholder="max.mustermann@lufthansa.com"
+                placeholder={t('login.placeholderEmail')}
                 value={form.email}
                 onChange={onFieldChange('email')}
               />
               <PasswordInput
-                label="Passwort"
+                label={t('login.password')}
                 placeholder="••••••••"
                 value={form.password}
                 onChange={onFieldChange('password')}
@@ -223,7 +216,7 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
                 mt="xs"
                 rightSection={<IconArrowRight size={18} />}
               >
-                {isLogin ? 'Anmelden' : 'Registrieren'}
+                {isLogin ? t('login.submitLogin') : t('login.submitRegister')}
               </Button>
             </Stack>
           </form>
