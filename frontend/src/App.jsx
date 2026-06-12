@@ -38,10 +38,10 @@ const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '' }
 
 function App() {
   const [user, setUser] = useState({
-  first_name: 'Ivan',
-  last_name: 'Kamal',
-  username: 'ivan',
-  email: 'ivan@test.de'
+  first_name: 'Test',
+  last_name: 'User',
+  username: 'testuser',
+  email: 'testuser@test.de'
 })
   const [status, setStatus] = useState('loading')
   const [page, setPage] = useState('Home')
