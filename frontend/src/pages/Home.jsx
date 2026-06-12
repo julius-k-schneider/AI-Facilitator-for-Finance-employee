@@ -132,55 +132,6 @@ export default function Home({ user }) {
         ))}
       </SimpleGrid>
 
-      {/* Fortschritt + Aktionen */}
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-        <Paper withBorder radius="lg" p="xl" bg="white">
-          <Group justify="space-between" mb="md">
-            <Text fw={600} fz="lg" c="secondary.9">
-              Dein Wochenziel
-            </Text>
-            <Text fz="sm" c="dimmed">
-              3 / 5 Module
-            </Text>
-          </Group>
-          <Progress value={60} color="brand" size="lg" radius="xl" mb="lg" />
-          <Text c="dimmed" fz="sm">
-            Noch 2 Module bis zu deinem nächsten Badge. Bleib dran – du bist auf
-            einem starken Streak!
-          </Text>
-        </Paper>
-
-        <Stack gap="lg">
-          {ACTIONS.map((action) => {
-            const Icon = action.icon
-            return (
-              <Paper key={action.title} withBorder radius="lg" p="lg" bg="white">
-                <Group wrap="nowrap" align="flex-start" gap="md">
-                  <ThemeIcon size={46} radius="md" variant="light" color="brand">
-                    <Icon size={24} stroke={1.7} />
-                  </ThemeIcon>
-                  <Box style={{ flex: 1 }}>
-                    <Text fw={600} c="secondary.9">
-                      {action.title}
-                    </Text>
-                    <Text fz="sm" c="dimmed" mt={2}>
-                      {action.text}
-                    </Text>
-                  </Box>
-                  <Button
-                    variant="subtle"
-                    color="brand"
-                    size="compact-sm"
-                    rightSection={<IconArrowRight size={15} />}
-                  >
-                    {action.cta}
-                  </Button>
-                </Group>
-              </Paper>
-            )
-          })}
-        </Stack>
-      </SimpleGrid>
     </Box>
   )
 }

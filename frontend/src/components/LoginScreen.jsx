@@ -6,6 +6,7 @@ import {
   Image,
   PasswordInput,
   SegmentedControl,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -18,6 +19,11 @@ const HIGHLIGHTS = [
   'Rollenspezifische AI-Lernpfade',
   'Praxis-Missionen mit echten Finance-Cases',
   'Fortschritt, Punkte & Team-Ranglisten',
+]
+
+const ROLE_OPTIONS = [
+  { value: 'controller', label: 'Controller' },
+  { value: 'accountant', label: 'Accountant' },
 ]
 
 export default function LoginScreen({ mode, onModeChange, form, onFieldChange, onSubmit, message }) {
@@ -185,6 +191,16 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
                     onChange={onFieldChange('last_name')}
                   />
                 </Group>
+              )}
+              {!isLogin && (
+                <Select
+                  label="Rolle"
+                  data={ROLE_OPTIONS}
+                  value={form.role}
+                  onChange={(value) => onFieldChange('role')({ target: { value: value ?? '' } })}
+                  allowDeselect={false}
+                  checkIconPosition="right"
+                />
               )}
               <TextInput
                 label="E-Mail"
