@@ -24,14 +24,6 @@ import Leaderboard from './pages/Leaderboard'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
-const PAGES = {
-  profile: (user) => <Profile user={user} />,
-  grundlagen: () => <Grundlagen />,
-  bibliothek: () => <Bibliothek />,
-  leaderboard: () => <Leaderboard />,
-  home: (user) => <Home user={user} />,
-}
-
 const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '', role: 'accountant' }
 
 function App() {
@@ -43,7 +35,9 @@ function App() {
   username: 'testuser',
   email: 'testuser@test.de',
   role: 'controller',
-  role_display: 'Controller'
+  role_display: 'Controller',
+  onboarding_completed: false,
+  onboarding_progress: [],
 })
   const [status, setStatus] = useState('loading')
   const [page, setPage] = useState('Home')
@@ -148,6 +142,22 @@ function App() {
     )
   }
 
+  const renderPage = () => {
+    switch (page) {
+      case 'profile':
+        return <Profile user={user} />
+      case 'grundlagen':
+        // Onboarding lebt in den Grundlagen: von hier aus startbar inkl. Fortschritt.
+        return <Grundlagen user={user} onUserUpdate={setUser} apiBase={API_BASE} />
+      case 'bibliothek':
+        return <Bibliothek />
+      case 'leaderboard':
+        return <Leaderboard />
+      default:
+        return <Home user={user} onNavigate={navigate} />
+    }
+  }
+
   return (
     <AppShell
       layout="alt"
@@ -200,7 +210,7 @@ function App() {
         </Box>
 
         <Box key={page} className="fade-up">
-          {(PAGES[page] || PAGES.home)(user)}
+          {renderPage()}
         </Box>
       </AppShell.Main>
     </AppShell>

@@ -24,5 +24,13 @@ class Profile(models.Model):
         default=ROLE_ACCOUNTANT,
     )
 
+    # Onboarding muss abgeschlossen sein, bevor die Daily Challenges
+    # freigeschaltet werden. Der Content ist im Frontend hardcoded; hier wird
+    # nur der Zustand persistiert.
+    onboarding_completed = models.BooleanField(default=False)
+    onboarding_completed_at = models.DateTimeField(null=True, blank=True)
+    # Liste bereits abgeschlossener Kapitel-IDs (für Wiederaufnahme des Flows).
+    onboarding_progress = models.JSONField(default=list, blank=True)
+
     def __str__(self):
         return f'{self.user.username} ({self.get_role_display()})'
