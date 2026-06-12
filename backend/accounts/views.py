@@ -5,8 +5,12 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from .models import Profile
+
 
 User = get_user_model()
+
+VALID_ROLES = {choice for choice, _ in Profile.ROLE_CHOICES}
 
 
 def parse_json(request):
@@ -17,11 +21,15 @@ def parse_json(request):
 
 
 def user_payload(user):
+    # Bestandsnutzer haben evtl. noch kein Profil – bei Bedarf anlegen.
+    profile, _ = Profile.objects.get_or_create(user=user)
     return {
         'username': user.username,
         'email': user.email,
         'first_name': user.first_name,
         'last_name': user.last_name,
+        'role': profile.role,
+        'role_display': profile.get_role_display(),
     }
 
 
@@ -75,9 +83,14 @@ def register_view(request):
     last_name = data.get('last_name', '').strip()
     # Der Username wird aus der E-Mail abgeleitet (E-Mail ist die Login-Kennung).
     username = (data.get('username') or email).strip()
+    # Rolle ist optional; ungültige Werte fallen auf den Default zurück.
+    role = (data.get('role') or '').strip()
 
     if not all([username, password, email, first_name, last_name]):
         return JsonResponse({'error': 'all fields required'}, status=400)
+
+    if role and role not in VALID_ROLES:
+        return JsonResponse({'error': 'invalid role'}, status=400)
 
     if User.objects.filter(username=username).exists() or User.objects.filter(email__iexact=email).exists():
         return JsonResponse({'error': 'account already exists'}, status=400)
@@ -89,6 +102,7 @@ def register_view(request):
         first_name=first_name,
         last_name=last_name,
     )
+    Profile.objects.create(user=user, **({'role': role} if role else {}))
     login(request, user)
     return JsonResponse({'authenticated': True, 'user': user_payload(user)}, status=201)
 

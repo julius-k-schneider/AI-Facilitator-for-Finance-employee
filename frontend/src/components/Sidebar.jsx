@@ -1,5 +1,5 @@
-import { Avatar, Box, Image, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core'
-import { IconLogout } from '@tabler/icons-react'
+import { Avatar, Box, Group, Image, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core'
+import { IconLogout, IconSettings } from '@tabler/icons-react'
 import { branding } from '../branding'
 import { NAV_ITEMS } from '../nav'
 
@@ -7,6 +7,36 @@ function initials(user) {
   const a = user?.first_name?.[0] || user?.username?.[0] || '?'
   const b = user?.last_name?.[0] || ''
   return `${a}${b}`.toUpperCase()
+}
+
+const ROLE_LABELS = {
+  controller: 'Controller',
+  accountant: 'Accountant',
+}
+
+function roleLabel(user) {
+  return user?.role_display || ROLE_LABELS[user?.role] || ''
+}
+
+// Gemeinsames Styling für die kleinen Icon-Buttons in der User-Box.
+const iconButtonStyle = {
+  display: 'grid',
+  placeItems: 'center',
+  width: 34,
+  height: 34,
+  borderRadius: 10,
+  color: 'rgba(255,255,255,0.7)',
+  transition: 'background 160ms ease, color 160ms ease',
+}
+
+const iconButtonHover = (e) => {
+  e.currentTarget.style.background = 'rgba(255,255,255,0.12)'
+  e.currentTarget.style.color = '#fff'
+}
+
+const iconButtonReset = (e) => {
+  e.currentTarget.style.background = 'transparent'
+  e.currentTarget.style.color = 'rgba(255,255,255,0.7)'
 }
 
 function NavLink({ item, active, onClick }) {
@@ -138,35 +168,48 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
             <Text c="white" fz={14} fw={600} truncate>
               {user?.first_name ? `${user.first_name} ${user.last_name}` : user?.username}
             </Text>
-            <Text c="rgba(255,255,255,0.5)" fz={12} truncate>
-              {user?.email}
-            </Text>
+            {roleLabel(user) && (
+              <Box
+                mt={6}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '2px 9px',
+                  borderRadius: 999,
+                  background: 'rgba(var(--gold-rgb),0.16)',
+                  border: '1px solid rgba(var(--gold-rgb),0.35)',
+                }}
+              >
+                <Text c="var(--gold)" fz={11} fw={600} style={{ letterSpacing: '0.04em' }}>
+                  {roleLabel(user)}
+                </Text>
+              </Box>
+            )}
           </Box>
-          <Tooltip label="Logout" position="top" withArrow>
-            <UnstyledButton
-              onClick={onLogout}
-              aria-label="Logout"
-              style={{
-                display: 'grid',
-                placeItems: 'center',
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                color: 'rgba(255,255,255,0.7)',
-                transition: 'background 160ms ease, color 160ms ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.12)'
-                e.currentTarget.style.color = '#fff'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
-                e.currentTarget.style.color = 'rgba(255,255,255,0.7)'
-              }}
-            >
-              <IconLogout size={19} stroke={1.8} />
-            </UnstyledButton>
-          </Tooltip>
+          <Group gap={6} wrap="nowrap">
+            <Tooltip label="Profil" position="top" withArrow>
+              <UnstyledButton
+                onClick={() => onNavigate('profile')}
+                aria-label="Profil"
+                style={iconButtonStyle}
+                onMouseEnter={iconButtonHover}
+                onMouseLeave={iconButtonReset}
+              >
+                <IconSettings size={19} stroke={1.8} />
+              </UnstyledButton>
+            </Tooltip>
+            <Tooltip label="Logout" position="top" withArrow>
+              <UnstyledButton
+                onClick={onLogout}
+                aria-label="Logout"
+                style={iconButtonStyle}
+                onMouseEnter={iconButtonHover}
+                onMouseLeave={iconButtonReset}
+              >
+                <IconLogout size={19} stroke={1.8} />
+              </UnstyledButton>
+            </Tooltip>
+          </Group>
         </Box>
       </Box>
     </Box>

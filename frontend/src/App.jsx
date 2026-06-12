@@ -16,32 +16,30 @@ import LoginScreen from './components/LoginScreen'
 import { NAV_LABELS } from './nav'
 import Home from './pages/Home'
 import Profile from './pages/Profile'
-import LearningPath from './pages/LearningPath'
-import Missions from './pages/Missions'
-import Progress from './pages/Progress'
+import Grundlagen from './pages/Grundlagen'
+import Bibliothek from './pages/Bibliothek'
 import Leaderboard from './pages/Leaderboard'
-import Resources from './pages/Resources'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
 const PAGES = {
   profile: (user) => <Profile user={user} />,
-  'learning-path': () => <LearningPath />,
-  missions: () => <Missions />,
-  progress: () => <Progress />,
+  grundlagen: () => <Grundlagen />,
+  bibliothek: () => <Bibliothek />,
   leaderboard: () => <Leaderboard />,
-  resources: () => <Resources />,
   home: (user) => <Home user={user} />,
 }
 
-const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '' }
+const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '', role: 'accountant' }
 
 function App() {
   const [user, setUser] = useState({
   first_name: 'Test',
   last_name: 'User',
   username: 'testuser',
-  email: 'testuser@test.de'
+  email: 'testuser@test.de',
+  role: 'controller',
+  role_display: 'Controller'
 })
   const [status, setStatus] = useState('loading')
   const [page, setPage] = useState('Home')
@@ -75,6 +73,7 @@ function App() {
     if (mode === 'register') {
       body.first_name = form.first_name
       body.last_name = form.last_name
+      body.role = form.role
     }
 
     const response = await fetch(`${API_BASE}/api/auth/${path}/`, {
