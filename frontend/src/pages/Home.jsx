@@ -14,6 +14,7 @@ import {
   IconArrowRight,
   IconBolt,
   IconFlame,
+  IconLock,
   IconSparkles,
   IconTrophy,
 } from '@tabler/icons-react'
@@ -47,67 +48,38 @@ function StatCard({ stat }) {
   )
 }
 
-export default function Home({ user }) {
+export default function Home({ user, onNavigate }) {
   const { t } = useTranslation()
+  const onboardingDone = Boolean(user?.onboarding_completed)
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
-      {/* Hero */}
-      <Paper
-        radius="xl"
-        p={{ base: 'xl', md: 44 }}
-        mb="xl"
-        style={{
-          position: 'relative',
-          overflow: 'hidden',
-          background:
-            'linear-gradient(135deg, var(--mantine-color-secondary-7) 0%, var(--mantine-color-secondary-6) 55%, var(--mantine-color-brand-7) 135%)',
-          color: '#fff',
-        }}
-      >
-        <Box
-          style={{
-            position: 'absolute',
-            top: '-30%',
-            right: '-6%',
-            width: 360,
-            height: 360,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(var(--gold-rgb),0.22) 0%, rgba(var(--gold-rgb),0) 68%)',
-          }}
-        />
-        <Stack gap="lg" style={{ position: 'relative', maxWidth: 640 }}>
-          <Badge
-            variant="light"
-            color="yellow"
-            size="lg"
-            radius="sm"
-            leftSection={<IconSparkles size={14} />}
-            style={{ background: 'rgba(var(--gold-rgb),0.16)', color: 'var(--gold-soft)' }}
-          >
-            {t('home.badge')}
-          </Badge>
-          <Title order={1} fz={{ base: 32, md: 44 }} fw={600} lh={1.1}>
-            {t('home.title', { name: user?.first_name || t('home.fallbackName') })}
-          </Title>
-          <Text fz={{ base: 17, md: 20 }} c="rgba(255,255,255,0.78)" lh={1.5}>
-            {t('home.subtitle')}
-          </Text>
-          <Group gap="md" mt={4}>
+      {/* Hinweis: Daily Challenges erst nach abgeschlossenem Onboarding */}
+      {!onboardingDone && (
+        <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} mb="xl" bg="white">
+          <Group justify="space-between" align="center" wrap="wrap" gap="md">
+            <Group gap="md" wrap="nowrap" align="flex-start">
+              <ThemeIcon size={44} radius="md" variant="light" color="accent">
+                <IconLock size={22} stroke={1.7} />
+              </ThemeIcon>
+              <Box>
+                <Text fw={700} c="secondary.9">
+                  {t('home.locked.title')}
+                </Text>
+                <Text fz="sm" c="dimmed" maw={520}>
+                  {t('home.locked.text')}
+                </Text>
+              </Box>
+            </Group>
             <Button
-              size="md"
-              variant="white"
-              c="secondary.9"
-              fw={700}
+              color="brand"
               rightSection={<IconArrowRight size={18} />}
+              onClick={() => onNavigate?.('grundlagen')}
             >
-              {t('home.ctaContinue')}
-            </Button>
-            <Button size="md" variant="default" color="gray">
-              {t('home.ctaMissions')}
+              {t('home.locked.cta')}
             </Button>
           </Group>
-        </Stack>
-      </Paper>
+        </Paper>
+      )}
 
       {/* Stats */}
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg" mb="xl">

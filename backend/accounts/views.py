@@ -2,6 +2,7 @@ import json
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -30,6 +31,13 @@ def user_payload(user):
         'last_name': user.last_name,
         'role': profile.role,
         'role_display': profile.get_role_display(),
+        'onboarding_completed': profile.onboarding_completed,
+        'onboarding_completed_at': (
+            profile.onboarding_completed_at.isoformat()
+            if profile.onboarding_completed_at
+            else None
+        ),
+        'onboarding_progress': profile.onboarding_progress or [],
     }
 
 
@@ -126,3 +134,41 @@ def change_password_view(request):
     request.user.set_password(new_password)
     request.user.save()
     return JsonResponse({'ok': True})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def onboarding_progress_view(request):
+    """Markiert ein Onboarding-Kapitel als abgeschlossen (idempotent)."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    data = parse_json(request)
+    chapter = (data.get('chapter') or '').strip()
+    if not chapter:
+        return JsonResponse({'error': 'chapter required'}, status=400)
+
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+    progress = list(profile.onboarding_progress or [])
+    if chapter not in progress:
+        progress.append(chapter)
+        profile.onboarding_progress = progress
+        profile.save(update_fields=['onboarding_progress'])
+
+    return JsonResponse({'user': user_payload(request.user)})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def onboarding_complete_view(request):
+    """Schließt das Onboarding ab und schaltet damit die Daily Challenges frei."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+    if not profile.onboarding_completed:
+        profile.onboarding_completed = True
+        profile.onboarding_completed_at = timezone.now()
+        profile.save(update_fields=['onboarding_completed', 'onboarding_completed_at'])
+
+    return JsonResponse({'user': user_payload(request.user)})
