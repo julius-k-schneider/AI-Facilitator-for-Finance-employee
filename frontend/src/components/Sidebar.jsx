@@ -3,6 +3,7 @@ import { IconLogout, IconSettings } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { branding } from '../branding'
 import { NAV_ITEMS } from '../nav'
+import { hasPermission } from '../auth/permissions'
 
 function initials(user) {
   const a = user?.first_name?.[0] || user?.username?.[0] || '?'
@@ -76,7 +77,7 @@ function NavLink({ item, active, onClick }) {
       />
       <Icon size={21} stroke={1.8} color={active ? branding.colors.accent : 'currentColor'} />
       <span style={{ fontSize: 15, fontWeight: active ? 600 : 500, letterSpacing: '-0.01em' }}>
-        {t(item.labelKey)}
+        {t(item.labelKey, { defaultValue: item.label })}
       </span>
     </UnstyledButton>
   )
@@ -84,6 +85,11 @@ function NavLink({ item, active, onClick }) {
 
 export default function Sidebar({ page, onNavigate, user, onLogout }) {
   const { t } = useTranslation()
+  const visibleItems = NAV_ITEMS.filter(
+    (item) =>
+      (!item.permission || hasPermission(user, item.permission)) &&
+      (!item.requiresOnboarding || user?.onboarding_completed),
+  )
   return (
     <Box
       style={{
@@ -137,7 +143,7 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
 
       {/* Navigation */}
       <Stack gap={4} px="md" style={{ flex: 1 }}>
-        {NAV_ITEMS.map((item) => (
+        {visibleItems.map((item) => (
           <NavLink
             key={item.value}
             item={item}
