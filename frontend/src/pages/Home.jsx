@@ -14,6 +14,7 @@ import {
   IconArrowRight,
   IconBolt,
   IconChecklist,
+  IconLock,
   IconSparkles,
   IconTargetArrow,
   IconTrophy,
@@ -123,6 +124,22 @@ export default function Home({ user, navigate }) {
 
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
+      {!user?.onboarding_completed && (
+        <Paper withBorder radius="lg" p="xl" mb="xl" bg="white">
+          <Group justify="space-between" align="center" wrap="wrap" gap="md">
+            <Group gap="md" wrap="nowrap">
+              <ThemeIcon size={44} radius="md" variant="light" color="accent">
+                <IconLock size={22} />
+              </ThemeIcon>
+              <Box>
+                <Text fw={700}>Onboarding abschließen</Text>
+                <Text fz="sm" c="dimmed">Schließe zuerst die Grundlagen ab, um Missionen freizuschalten.</Text>
+              </Box>
+            </Group>
+            <Button color="brand" onClick={() => navigate('grundlagen')}>Zu den Grundlagen</Button>
+          </Group>
+        </Paper>
+      )}
       <Paper
         radius="xl"
         p={{ base: 'xl', md: 44 }}
@@ -171,9 +188,8 @@ export default function Home({ user, navigate }) {
               c="secondary.9"
               fw={700}
               rightSection={<IconArrowRight size={18} />}
-              onClick={() =>
-                navigate('missions', nextMission ? { startMissionId: nextMission.id } : {})
-              }
+              disabled={!user?.onboarding_completed}
+              onClick={() => navigate('missions', nextMission ? { startMissionId: nextMission.id } : {})}
             >
               {nextMission ? 'Naechste Mission starten' : 'Missions ansehen'}
             </Button>
@@ -199,7 +215,7 @@ export default function Home({ user, navigate }) {
       <DashboardSection title="Next Mission">
         <NextMissionCard
           mission={nextMission}
-          onStart={() => navigate('missions', { startMissionId: nextMission?.id })}
+          onStart={() => user?.onboarding_completed && navigate('missions', { startMissionId: nextMission?.id })}
         />
       </DashboardSection>
     </Box>

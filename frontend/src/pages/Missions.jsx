@@ -163,8 +163,8 @@ function PromptQualityQuiz({ mission, userId, progress, onDone, onBack }) {
   const score = Math.round((correctCount / PROMPT_QUESTIONS.length) * mission.maxPoints)
   const canSubmit = answeredCount === PROMPT_QUESTIONS.length
 
-  const submit = () => {
-    const nextProgress = completeMission(userId, mission.id, score)
+  const submit = async () => {
+    const nextProgress = await completeMission(userId, mission.id, score)
     onDone({ score, correctCount, total: PROMPT_QUESTIONS.length, progress: nextProgress })
   }
 
@@ -213,8 +213,8 @@ function ComplianceChallenge({ mission, userId, progress, onDone, onBack }) {
   const score = Math.round((correctCount / COMPLIANCE_SCENARIOS.length) * mission.maxPoints)
   const canSubmit = answeredCount === COMPLIANCE_SCENARIOS.length
 
-  const submit = () => {
-    const nextProgress = completeMission(userId, mission.id, score)
+  const submit = async () => {
+    const nextProgress = await completeMission(userId, mission.id, score)
     onDone({ score, correctCount, total: COMPLIANCE_SCENARIOS.length, progress: nextProgress })
   }
 

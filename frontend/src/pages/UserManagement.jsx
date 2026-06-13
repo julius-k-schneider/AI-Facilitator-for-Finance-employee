@@ -18,7 +18,6 @@ import {
   Title,
 } from '@mantine/core'
 import { IconSearch, IconShield, IconTrash, IconUserCog, IconUsers } from '@tabler/icons-react'
-import { deleteUserProgress, getUserProgress } from '../services/progressService'
 import { getUserId } from '../services/progressService'
 import { ROLE_LABELS, ROLES, getAvailableRoles } from '../auth/permissions'
 import { deleteUser, getAllRegisteredUsers, updateUserRole } from '../services/userService'
@@ -126,7 +125,6 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
 
     try {
       await deleteUser(deleteTarget.id)
-      deleteUserProgress(deleteTarget.id)
       setUsers((current) => current.filter((user) => user.id !== deleteTarget.id))
       setDeleteTarget(null)
       setMessage({ type: 'success', text: 'Nutzer wurde gelöscht.' })
@@ -225,7 +223,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
             <Table.Tbody>
               {filteredUsers.map((user) => {
                 const userId = getUserId(user)
-                const progress = getUserProgress(userId)
+                const progress = user.progress || {}
                 const lastAdmin = isLastAdmin(users, user.id)
                 const isCurrent = userId === currentUserId
 
@@ -277,11 +275,13 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
                     </Table.Td>
                     <Table.Td>
                       <Text fw={800} c="secondary.9" ff="var(--font-display)">
-                        {progress.totalPoints}
+                        {progress.total_points ?? progress.totalPoints ?? 0}
                       </Text>
                     </Table.Td>
                     <Table.Td>
-                      <Text c="secondary.9">{progress.completedMissions.length}</Text>
+                      <Text c="secondary.9">
+                        {progress.completed_mission_count ?? progress.completedMissionCount ?? 0}
+                      </Text>
                     </Table.Td>
                     <Table.Td>
                       <Button
@@ -314,8 +314,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
             Soll der Account {deleteTarget ? displayName(deleteTarget) : ''} wirklich gelöscht werden?
           </Text>
           <Text fz="sm" c="dimmed">
-            Der Nutzer verschwindet aus Nutzerverwaltung und Leaderboard. Lokale Progress-Daten
-            werden in diesem Browser ebenfalls entfernt.
+            Der Nutzer und sein gespeicherter Fortschritt werden aus der Datenbank entfernt.
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDeleteTarget(null)}>

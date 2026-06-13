@@ -11,4 +11,9 @@ urlpatterns = [
     path('users/<int:user_id>/', views.delete_user_view, name='delete_user'),
     path('register/', views.register_view, name='register'),
     path('change-password/', views.change_password_view, name='change_password'),
+    path('onboarding/progress/', views.onboarding_progress_view, name='onboarding_progress'),
+    path('onboarding/complete/', views.onboarding_complete_view, name='onboarding_complete'),
+    path('progress/', views.progress_view, name='progress'),
+    path('progress/complete/', views.complete_mission_view, name='complete_mission'),
+    path('leaderboard/', views.leaderboard_view, name='leaderboard'),
 ]

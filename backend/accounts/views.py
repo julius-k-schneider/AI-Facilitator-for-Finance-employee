@@ -3,14 +3,19 @@ import os
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import UserProfile
+from .models import Profile
 
 
 User = get_user_model()
-VALID_ROLES = {choice[0] for choice in UserProfile.ROLE_CHOICES}
+VALID_ROLES = {choice for choice, _ in Profile.ROLE_CHOICES}
+MISSION_MAX_POINTS = {
+    'prompt-quality-quiz': 90,
+    'compliance-check-challenge': 120,
+}
 
 
 def parse_json(request):
@@ -25,29 +30,45 @@ def should_seed_admin(user):
     if configured_email:
         return user.email.lower() == configured_email
 
-    # MVP bootstrap: if no admin exists yet, the lowest-id existing account becomes admin.
-    # Later deployments can set INITIAL_ADMIN_EMAIL to make this explicit.
-    has_admin = UserProfile.objects.filter(role=UserProfile.ROLE_ADMIN).exists()
+    has_admin = Profile.objects.filter(role=Profile.ROLE_ADMIN).exists()
     first_user = User.objects.order_by('id').first()
     return not has_admin and first_user is not None and first_user.id == user.id
 
 
 def ensure_profile(user):
-    profile, created = UserProfile.objects.get_or_create(user=user)
+    profile, created = Profile.objects.get_or_create(user=user)
     if created and should_seed_admin(user):
-        profile.role = UserProfile.ROLE_ADMIN
+        profile.role = Profile.ROLE_ADMIN
         profile.save(update_fields=['role'])
     return profile
 
 
 def is_admin(user):
-    if not user.is_authenticated:
-        return False
-    return ensure_profile(user).role == UserProfile.ROLE_ADMIN
+    return user.is_authenticated and ensure_profile(user).role == Profile.ROLE_ADMIN
 
 
 def admin_count():
-    return UserProfile.objects.filter(role=UserProfile.ROLE_ADMIN).count()
+    return Profile.objects.filter(role=Profile.ROLE_ADMIN).count()
+
+
+def level_for_points(points):
+    if points >= 180:
+        return 'Advanced'
+    if points >= 90:
+        return 'Practitioner'
+    return 'Starter'
+
+
+def progress_payload(profile):
+    scores = profile.mission_scores or {}
+    return {
+        'mission_scores': scores,
+        'completed_missions': [mission_id for mission_id, score in scores.items() if int(score) > 0],
+        'completed_mission_count': profile.completed_mission_count,
+        'total_points': profile.total_points,
+        'level': level_for_points(profile.total_points),
+        'updated_at': profile.progress_updated_at.isoformat() if profile.progress_updated_at else None,
+    }
 
 
 def user_payload(user):
@@ -59,6 +80,11 @@ def user_payload(user):
         'first_name': user.first_name,
         'last_name': user.last_name,
         'role': profile.role,
+        'role_display': profile.get_role_display(),
+        'onboarding_completed': profile.onboarding_completed,
+        'onboarding_completed_at': profile.onboarding_completed_at.isoformat() if profile.onboarding_completed_at else None,
+        'onboarding_progress': profile.onboarding_progress or [],
+        'progress': progress_payload(profile),
     }
 
 
@@ -66,14 +92,11 @@ def user_payload(user):
 @csrf_exempt
 def login_view(request):
     data = parse_json(request)
-    # Die Kennung kann eine E-Mail (bevorzugt) oder ein Username sein.
     identifier = (data.get('email') or data.get('username') or '').strip()
     password = data.get('password', '')
-
     if not identifier or not password:
         return JsonResponse({'error': 'email and password required'}, status=400)
 
-    # Falls eine E-Mail angegeben wurde, den zugehörigen Username auflösen.
     if '@' in identifier:
         match = User.objects.filter(email__iexact=identifier).first()
         if match is not None:
@@ -98,7 +121,6 @@ def logout_view(request):
 def user_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({'authenticated': False})
-
     return JsonResponse({'authenticated': True, 'user': user_payload(request.user)})
 
 
@@ -106,7 +128,6 @@ def user_view(request):
 def users_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'authentication required'}, status=401)
-
     users = User.objects.order_by('first_name', 'last_name', 'email', 'username')
     return JsonResponse({'users': [user_payload(user) for user in users]})
 
@@ -117,8 +138,7 @@ def update_user_role_view(request, user_id):
     if not is_admin(request.user):
         return JsonResponse({'error': 'permission denied'}, status=403)
 
-    data = parse_json(request)
-    role = data.get('role')
+    role = parse_json(request).get('role')
     if role not in VALID_ROLES:
         return JsonResponse({'error': 'invalid role'}, status=400)
 
@@ -127,7 +147,7 @@ def update_user_role_view(request, user_id):
         return JsonResponse({'error': 'user not found'}, status=404)
 
     profile = ensure_profile(target)
-    if profile.role == UserProfile.ROLE_ADMIN and role != UserProfile.ROLE_ADMIN and admin_count() <= 1:
+    if profile.role == Profile.ROLE_ADMIN and role != Profile.ROLE_ADMIN and admin_count() <= 1:
         return JsonResponse({'error': 'last admin cannot be downgraded'}, status=400)
 
     profile.role = role
@@ -144,12 +164,11 @@ def delete_user_view(request, user_id):
     target = User.objects.filter(id=user_id).first()
     if target is None:
         return JsonResponse({'error': 'user not found'}, status=404)
-
     if target.id == request.user.id:
         return JsonResponse({'error': 'current user cannot be deleted'}, status=400)
 
     profile = ensure_profile(target)
-    if profile.role == UserProfile.ROLE_ADMIN and admin_count() <= 1:
+    if profile.role == Profile.ROLE_ADMIN and admin_count() <= 1:
         return JsonResponse({'error': 'last admin cannot be deleted'}, status=400)
 
     target.delete()
@@ -164,12 +183,13 @@ def register_view(request):
     email = data.get('email', '').strip()
     first_name = data.get('first_name', '').strip()
     last_name = data.get('last_name', '').strip()
-    # Der Username wird aus der E-Mail abgeleitet (E-Mail ist die Login-Kennung).
     username = (data.get('username') or email).strip()
+    role = (data.get('role') or '').strip()
 
     if not all([username, password, email, first_name, last_name]):
         return JsonResponse({'error': 'all fields required'}, status=400)
-
+    if role and role not in VALID_ROLES:
+        return JsonResponse({'error': 'invalid role'}, status=400)
     if User.objects.filter(username=username).exists() or User.objects.filter(email__iexact=email).exists():
         return JsonResponse({'error': 'account already exists'}, status=400)
 
@@ -180,6 +200,10 @@ def register_view(request):
         first_name=first_name,
         last_name=last_name,
     )
+    profile = Profile.objects.create(user=user, **({'role': role} if role else {}))
+    if should_seed_admin(user):
+        profile.role = Profile.ROLE_ADMIN
+        profile.save(update_fields=['role'])
     login(request, user)
     return JsonResponse({'authenticated': True, 'user': user_payload(user)}, status=201)
 
@@ -193,13 +217,104 @@ def change_password_view(request):
     data = parse_json(request)
     old_password = data.get('old_password', '')
     new_password = data.get('new_password', '')
-
     if not old_password or not new_password:
         return JsonResponse({'error': 'both passwords required'}, status=400)
-
     if not request.user.check_password(old_password):
         return JsonResponse({'error': 'current password is incorrect'}, status=400)
 
     request.user.set_password(new_password)
     request.user.save()
     return JsonResponse({'ok': True})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def onboarding_progress_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    chapter = (parse_json(request).get('chapter') or '').strip()
+    if not chapter:
+        return JsonResponse({'error': 'chapter required'}, status=400)
+
+    profile = ensure_profile(request.user)
+    progress = list(profile.onboarding_progress or [])
+    if chapter not in progress:
+        progress.append(chapter)
+        profile.onboarding_progress = progress
+        profile.save(update_fields=['onboarding_progress'])
+    return JsonResponse({'user': user_payload(request.user)})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def onboarding_complete_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    profile = ensure_profile(request.user)
+    if not profile.onboarding_completed:
+        profile.onboarding_completed = True
+        profile.onboarding_completed_at = timezone.now()
+        profile.save(update_fields=['onboarding_completed', 'onboarding_completed_at'])
+    return JsonResponse({'user': user_payload(request.user)})
+
+
+@require_http_methods(['GET'])
+def progress_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    return JsonResponse({'progress': progress_payload(ensure_profile(request.user))})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def complete_mission_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    data = parse_json(request)
+    mission_id = (data.get('mission_id') or '').strip()
+    if mission_id not in MISSION_MAX_POINTS:
+        return JsonResponse({'error': 'unknown mission'}, status=400)
+    try:
+        score = int(data.get('score', 0))
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'invalid score'}, status=400)
+
+    profile = ensure_profile(request.user)
+    scores = dict(profile.mission_scores or {})
+    safe_score = max(0, min(score, MISSION_MAX_POINTS[mission_id]))
+    scores[mission_id] = max(int(scores.get(mission_id, 0)), safe_score)
+    profile.mission_scores = scores
+    profile.progress_updated_at = timezone.now()
+    profile.save(update_fields=['mission_scores', 'progress_updated_at'])
+    return JsonResponse({'progress': progress_payload(profile)})
+
+
+@require_http_methods(['GET'])
+def leaderboard_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    entries = []
+    users = User.objects.select_related('profile').order_by('first_name', 'last_name', 'username')
+    for user in users:
+        profile = ensure_profile(user)
+        name = f'{user.first_name} {user.last_name}'.strip() or user.username
+        progress = progress_payload(profile)
+        entries.append({
+            'user_id': user.id,
+            'name': name,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'total_points': progress['total_points'],
+            'completed_missions': progress['completed_mission_count'],
+            'level': progress['level'],
+        })
+
+    entries.sort(key=lambda entry: (-entry['total_points'], -entry['completed_missions'], entry['name'].lower()))
+    for index, entry in enumerate(entries, start=1):
+        entry['rank'] = index
+    return JsonResponse({'entries': entries})

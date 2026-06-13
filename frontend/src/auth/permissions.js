@@ -1,11 +1,15 @@
 export const ROLES = {
   USER: 'user',
+  CONTROLLER: 'controller',
+  ACCOUNTANT: 'accountant',
   CONTENT_CREATOR: 'content_creator',
   ADMIN: 'admin',
 }
 
 export const ROLE_LABELS = {
   [ROLES.USER]: 'User',
+  [ROLES.CONTROLLER]: 'Controller',
+  [ROLES.ACCOUNTANT]: 'Accountant',
   [ROLES.CONTENT_CREATOR]: 'Content Creator',
   [ROLES.ADMIN]: 'Admin',
 }
@@ -20,6 +24,8 @@ export const PERMISSIONS = {
 
 export const ROLE_PERMISSIONS = {
   [ROLES.USER]: [PERMISSIONS.PLAY_MISSIONS],
+  [ROLES.CONTROLLER]: [PERMISSIONS.PLAY_MISSIONS],
+  [ROLES.ACCOUNTANT]: [PERMISSIONS.PLAY_MISSIONS],
   [ROLES.CONTENT_CREATOR]: [PERMISSIONS.PLAY_MISSIONS, PERMISSIONS.CREATE_CONTENT],
   [ROLES.ADMIN]: [
     PERMISSIONS.PLAY_MISSIONS,
