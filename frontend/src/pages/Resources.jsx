@@ -73,8 +73,16 @@ const RESOURCES = [
   },
 ]
 
+
 function ResourceCard({ title, description, category, color, icon: Icon, url, resourceId, userId }) {
   const [read, setRead] = useState(() => hasReadResource(userId, resourceId))
+
+  useEffect(() => {
+    const handler = () => setRead(hasReadResource(userId, resourceId))
+    window.addEventListener('ai-facilitator-progress-updated', handler)
+    return () => window.removeEventListener('ai-facilitator-progress-updated', handler)
+  }, [userId, resourceId])
+
 
   const handleRead = () => {
     markResourceRead(userId, resourceId)
@@ -116,6 +124,7 @@ function ResourceCard({ title, description, category, color, icon: Icon, url, re
 
 export default function Resources({ user }) {
   const userId = user?.id || user?.email || user?.username || ''
+  console.log('Resources userId:', userId)
   return (
     <PageShell title="Ressourcen" icon={IconBooks}>
       <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }}>

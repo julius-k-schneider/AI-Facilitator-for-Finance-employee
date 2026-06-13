@@ -21,8 +21,7 @@ import {
   IconTargetArrow,
   IconTrophy,
 } from '@tabler/icons-react'
-import { MISSIONS, getMissionById, LERNCHECKS } from '../data/missions'
-import LerncheckHalluzinationen from './lerncheck/LerncheckHalluzinationen'
+import { MISSIONS, getMissionById } from '../data/missions'
 import { useUserProgress } from '../hooks/useUserProgress'
 import { completeMission } from '../services/progressService'
 
@@ -370,7 +369,6 @@ function MissionResult({ mission, result, navigate, onBack, onReplay }) {
 export default function Missions({ user, navigate, startMissionId }) {
   const { userId, progress } = useUserProgress(user)
   const [activeMissionId, setActiveMissionId] = useState(startMissionId || null)
-  const [activeLerncheckId, setActiveLerncheckId] = useState(null)
   const [result, setResult] = useState(null)
 
   const mission = useMemo(() => getMissionById(activeMissionId), [activeMissionId])
@@ -421,16 +419,6 @@ export default function Missions({ user, navigate, startMissionId }) {
     )
   }
 
-  if (activeLerncheckId === 'lerncheck-halluzinationen') {
-    return (
-      <LerncheckHalluzinationen
-        userId={userId}
-        progress={progress}
-        onBack={() => setActiveLerncheckId(null)}
-      />
-    )
-  }
-
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
       <Stack gap={6} mb="xl">
@@ -445,21 +433,6 @@ export default function Missions({ user, navigate, startMissionId }) {
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg" mb="xl">
         {MISSIONS.map((item) => (
           <MissionCard key={item.id} mission={item} progress={progress} onStart={startMission} />
-        ))}
-      </SimpleGrid>
-
-      <Stack gap={6} mb="lg">
-        <Title order={2} fz={{ base: 22, md: 28 }} c="secondary.9">
-          Lerncheck
-        </Title>
-        <Text fz="lg" c="dimmed" maw={680}>
-          Lies einen Text und beantworte Fragen dazu — lerne und sammle Punkte.
-        </Text>
-      </Stack>
-
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-        {LERNCHECKS.map((item) => (
-          <MissionCard key={item.id} mission={item} progress={progress} onStart={setActiveLerncheckId} />
         ))}
       </SimpleGrid>
     </Box>

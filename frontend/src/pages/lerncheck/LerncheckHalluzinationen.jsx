@@ -48,24 +48,9 @@ function TextReader({ lerncheck, onStartQuiz }) {
             {lerncheck.title}
           </Title>
           <Text c="rgba(255,255,255,0.78)">
-            {lerncheck.description}
+            Du hast den Artikel gelesen — jetzt teste dein Wissen!
           </Text>
         </Stack>
-      </Paper>
-
-      <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} bg="white" mb="lg">
-        <Group gap="sm" mb="md">
-          <ThemeIcon size={32} radius="md" variant="light" color="brand">
-            <IconBook size={18} />
-          </ThemeIcon>
-          <Text fw={700} c="secondary.9" fz="lg">
-            Lerntext
-          </Text>
-        </Group>
-        <Divider mb="md" />
-        <Text c="secondary.9" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
-          {lerncheck.text.replace(/##|###|\*\*/g, '').trim()}
-        </Text>
       </Paper>
 
       <Button
@@ -74,7 +59,7 @@ function TextReader({ lerncheck, onStartQuiz }) {
         rightSection={<IconArrowRight size={18} />}
         onClick={onStartQuiz}
       >
-        Zum Quiz
+        Quiz starten
       </Button>
     </Box>
   )

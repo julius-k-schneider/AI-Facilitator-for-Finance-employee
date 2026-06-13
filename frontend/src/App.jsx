@@ -29,7 +29,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
 const PAGES = {
   profile: ({ user }) => <Profile user={user} />,
-  'learning-path': () => <LearningPath />,
+  'learning-path': ({ user }) => <LearningPath user={user} />,
   missions: ({ user, navigate, startMissionId }) => (
     <Missions user={user} navigate={navigate} startMissionId={startMissionId} />
   ),
@@ -40,7 +40,7 @@ const PAGES = {
       <UserManagement currentUser={user} onCurrentUserUpdate={setUser} />
     </RequirePermission>
   ),
-  resources: () => <Resources />,
+  resources: ({ user }) => <Resources user={user} />,
   home: ({ user, navigate }) => <Home user={user} navigate={navigate} />,
 }
 
