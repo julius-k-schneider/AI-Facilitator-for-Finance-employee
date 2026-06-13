@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react'
+import { markResourceRead, hasReadResource } from '../services/progressService'
 import {
   Badge,
   Box,
@@ -71,7 +73,15 @@ const RESOURCES = [
   },
 ]
 
-function ResourceCard({ title, description, category, color, icon: Icon, url }) {
+function ResourceCard({ title, description, category, color, icon: Icon, url, resourceId, userId }) {
+  const [read, setRead] = useState(() => hasReadResource(userId, resourceId))
+
+  const handleRead = () => {
+    markResourceRead(userId, resourceId)
+    setRead(true)
+    window.open(url, '_blank')
+  }
+
   return (
     <Card withBorder radius="lg" p="lg" bg="white" h="100%">
       <Stack gap="sm" h="100%">
@@ -89,15 +99,23 @@ function ResourceCard({ title, description, category, color, icon: Icon, url }) 
         <Text fz="sm" c="dimmed" style={{ flex: 1 }}>
           {description}
         </Text>
-        <Anchor href={url} target="_blank" fz="sm" fw={600} c={color}>
-          Mehr lesen →
-        </Anchor>
+        <Group justify="space-between" align="center">
+          <Anchor onClick={handleRead} fz="sm" fw={600} c={color} style={{ cursor: 'pointer' }}>
+            Mehr lesen →
+          </Anchor>
+          {read && (
+            <Badge size="sm" color="green" variant="light">
+              ✓ Gelesen
+            </Badge>
+          )}
+        </Group>
       </Stack>
     </Card>
   )
 }
 
-export default function Resources() {
+export default function Resources({ user }) {
+  const userId = user?.id || user?.email || user?.username || ''
   return (
     <PageShell title="Ressourcen" icon={IconBooks}>
       <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }}>
@@ -111,7 +129,7 @@ export default function Resources() {
         </Stack>
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
           {RESOURCES.map((resource) => (
-            <ResourceCard key={resource.title} {...resource} />
+            <ResourceCard key={resource.title} {...resource} resourceId={resource.title} userId={userId} />
           ))}
         </SimpleGrid>
       </Box>

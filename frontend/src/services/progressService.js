@@ -118,7 +118,7 @@ export function getLeaderboard(users) {
       return a.name.localeCompare(b.name)
     })
     .map((entry, index) => ({ ...entry, rank: index + 1 }))
-
+}
 export function markResourceRead(userId, resourceId) {
   if (!userId || !resourceId) return
   const store = readStore()
@@ -138,4 +138,3 @@ export function hasReadResource(userId, resourceId) {
   return (current.readResources || []).includes(resourceId)
 }
 
-  }
