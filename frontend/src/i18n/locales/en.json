@@ -124,7 +124,28 @@
     },
     "leaderboard": {
       "title": "Leaderboard",
-      "description": "Compare your points with your colleagues"
+      "description": "Compare your points with your colleagues",
+      "stats": {
+        "rank": "Your rank",
+        "points": "Your points",
+        "streak": "Current streak"
+      },
+      "days": "days",
+      "topPerformers": "Top performers",
+      "podiumTitle": "Top of the leaderboard",
+      "fullRanking": "Full ranking",
+      "rankingHint": "Current employee challenge standings",
+      "participants": "{{count}} participants",
+      "rank": "Rank",
+      "employee": "Employee",
+      "points": "Points",
+      "streak": "Streak",
+      "challenges": "Challenges",
+      "streakDays": "{{count}} days",
+      "you": "You",
+      "rankLabel": "Rank #{{rank}}",
+      "emptyTitle": "No leaderboard data yet",
+      "emptyText": "Results will appear here once data for the employee challenge is available."
     }
   }
 }
