@@ -1,0 +1,151 @@
+{
+  "app": {
+    "checkingAuth": "Checking authentication…",
+    "greeting": "Hi, {{name}} 👋",
+    "genericError": "Something went wrong"
+  },
+  "language": {
+    "current": "English",
+    "switchAria": "Switch language to German"
+  },
+  "nav": {
+    "home": "Home",
+    "grundlagen": "Basics",
+    "bibliothek": "Library",
+    "leaderboard": "Leaderboard",
+    "profile": "Profile"
+  },
+  "roles": {
+    "controller": "Controller",
+    "accountant": "Accountant"
+  },
+  "sidebar": {
+    "subtitle": "AI FACILITATOR",
+    "tooltipProfile": "Profile",
+    "tooltipLogout": "Logout"
+  },
+  "login": {
+    "platform": "AI ENABLEMENT PLATFORM",
+    "heroTitle": "Build the AI skills of tomorrow.",
+    "heroSubtitle": "{{tagline}}. Learn, apply and grow – right in your day-to-day work in finance.",
+    "highlights": [
+      "Role-specific AI learning paths",
+      "Hands-on missions with real finance cases",
+      "Progress, points & team leaderboards"
+    ],
+    "footer": "© Lufthansa Group · Internal enablement program",
+    "welcomeBack": "Welcome back",
+    "createAccount": "Create account",
+    "loginSubtitle": "Sign in to continue your learning journey.",
+    "registerSubtitle": "Get started with your AI enablement in seconds.",
+    "tabLogin": "Login",
+    "tabRegister": "Register",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "role": "Role",
+    "email": "Email",
+    "password": "Password",
+    "submitLogin": "Sign in",
+    "submitRegister": "Register",
+    "placeholderFirstName": "John",
+    "placeholderLastName": "Doe",
+    "placeholderEmail": "john.doe@lufthansa.com"
+  },
+  "home": {
+    "badge": "AI ENABLEMENT",
+    "title": "Welcome back, {{name}}.",
+    "fallbackName": "colleague",
+    "subtitle": "Build the AI skills of tomorrow – step by step, with real cases from your day-to-day work in finance.",
+    "ctaContinue": "Continue learning",
+    "ctaMissions": "View missions",
+    "locked": {
+      "title": "Daily challenges still locked",
+      "text": "The daily challenges start as soon as you have completed the onboarding in Basics.",
+      "cta": "Go to Basics"
+    },
+    "stats": {
+      "points": "Points",
+      "streak": "Daily streak",
+      "rank": "Team rank"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "fieldName": "Name",
+    "fieldEmail": "Email",
+    "fieldUser": "Username",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "errorChange": "Password could not be changed",
+    "successChange": "Password updated successfully"
+  },
+  "onboarding": {
+    "badge": "ONBOARDING",
+    "hubTitle": "Onboarding",
+    "hubSubtitle": "Complete all chapters and the final quiz to unlock the daily challenges.",
+    "completedBadge": "Completed",
+    "overviewProgress": "{{done}} of {{total}} steps",
+    "start": "Start onboarding",
+    "continue": "Continue",
+    "review": "Review again",
+    "backToOverview": "Overview",
+    "title": "Welcome aboard",
+    "stepOf": "Step {{current}} of {{total}}",
+    "chapterProgress": "Chapter {{current}} of {{total}}",
+    "questionProgress": "Question {{current}} of {{total}}",
+    "startQuiz": "Start quiz",
+    "checkAnswer": "Check answer",
+    "correct": "Correct!",
+    "wrong": "Not quite",
+    "explanation": "Explanation",
+    "next": "Continue",
+    "toFinal": "To the final quiz",
+    "showResult": "Show result",
+    "retry": "Try again",
+    "quizPassed": "Passed!",
+    "quizFailed": "Not passed yet",
+    "score": "{{correct}} of {{total}} correct",
+    "finalTitle": "Final quiz",
+    "finalHeading": "Last step: final quiz",
+    "finalSubtitle": "Answer the following questions to complete your onboarding and unlock the daily challenges.",
+    "finish": "Complete onboarding"
+  },
+  "pages": {
+    "comingSoon": "Coming soon",
+    "comingSoonText": "This area is currently being built. Check back soon – new content for your AI enablement is on the way.",
+    "grundlagen": {
+      "title": "Basics",
+      "description": "The most important AI basics for your day-to-day work in finance"
+    },
+    "bibliothek": {
+      "title": "Library",
+      "description": "Materials, templates and links for reference"
+    },
+    "leaderboard": {
+      "title": "Leaderboard",
+      "description": "Compare your points with your colleagues",
+      "stats": {
+        "rank": "Your rank",
+        "points": "Your points",
+        "streak": "Current streak"
+      },
+      "days": "days",
+      "topPerformers": "Top performers",
+      "podiumTitle": "Top of the leaderboard",
+      "fullRanking": "Full ranking",
+      "rankingHint": "Current employee challenge standings",
+      "participants": "{{count}} participants",
+      "rank": "Rank",
+      "employee": "Employee",
+      "points": "Points",
+      "streak": "Streak",
+      "challenges": "Challenges",
+      "streakDays": "{{count}} days",
+      "you": "You",
+      "rankLabel": "Rank #{{rank}}",
+      "emptyTitle": "No leaderboard data yet",
+      "emptyText": "Results will appear here once data for the employee challenge is available."
+    }
+  }
+}

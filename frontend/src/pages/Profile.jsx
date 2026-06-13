@@ -14,6 +14,7 @@ import {
   Title,
 } from '@mantine/core'
 import { IconLock } from '@tabler/icons-react'
+import { useTranslation } from 'react-i18next'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
@@ -31,6 +32,7 @@ function Field({ label, value }) {
 }
 
 function Profile({ user }) {
+  const { t } = useTranslation()
   const [passwordMessage, setPasswordMessage] = useState(null)
   const [passwordForm, setPasswordForm] = useState({ old_password: '', new_password: '' })
 
@@ -46,11 +48,11 @@ function Profile({ user }) {
 
     const data = await response.json()
     if (!response.ok) {
-      setPasswordMessage({ type: 'error', text: data.error || 'Passwort konnte nicht geändert werden' })
+      setPasswordMessage({ type: 'error', text: data.error || t('profile.errorChange') })
       return
     }
 
-    setPasswordMessage({ type: 'success', text: 'Passwort erfolgreich aktualisiert' })
+    setPasswordMessage({ type: 'success', text: t('profile.successChange') })
     setPasswordForm({ old_password: '', new_password: '' })
   }
 
@@ -59,7 +61,7 @@ function Profile({ user }) {
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={900}>
       <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9" mb="xl">
-        Profil
+        {t('profile.title')}
       </Title>
 
       <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} mb="lg" bg="white">
@@ -83,9 +85,9 @@ function Profile({ user }) {
         <Divider mb="xl" />
 
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xl">
-          <Field label="Name" value={fullName} />
-          <Field label="E-Mail" value={user.email} />
-          <Field label="Benutzer" value={user.username} />
+          <Field label={t('profile.fieldName')} value={fullName} />
+          <Field label={t('profile.fieldEmail')} value={user.email} />
+          <Field label={t('profile.fieldUser')} value={user.username} />
         </SimpleGrid>
       </Paper>
 
@@ -93,27 +95,27 @@ function Profile({ user }) {
         <Group gap="sm" mb="lg">
           <IconLock size={20} stroke={1.8} color="var(--blue)" />
           <Title order={3} fz="lg" c="secondary.9">
-            Passwort ändern
+            {t('profile.changePassword')}
           </Title>
         </Group>
         <form onSubmit={handlePasswordChange}>
           <Stack gap="md" maw={420}>
             <PasswordInput
-              label="Aktuelles Passwort"
+              label={t('profile.currentPassword')}
               value={passwordForm.old_password}
               onChange={(event) =>
                 setPasswordForm((current) => ({ ...current, old_password: event.target.value }))
               }
             />
             <PasswordInput
-              label="Neues Passwort"
+              label={t('profile.newPassword')}
               value={passwordForm.new_password}
               onChange={(event) =>
                 setPasswordForm((current) => ({ ...current, new_password: event.target.value }))
               }
             />
             <Button type="submit" color="brand" mt="xs" w="fit-content">
-              Passwort ändern
+              {t('profile.changePassword')}
             </Button>
             {passwordMessage && (
               <Alert

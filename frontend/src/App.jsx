@@ -10,100 +10,43 @@ import {
   Text,
   Title,
 } from '@mantine/core'
-import { IconShieldLock } from '@tabler/icons-react'
 import { useDisclosure } from '@mantine/hooks'
+import { useTranslation } from 'react-i18next'
+import { IconLanguage } from '@tabler/icons-react'
 import Sidebar from './components/Sidebar'
 import LoginScreen from './components/LoginScreen'
-import { NAV_LABELS } from './nav'
-import { PERMISSIONS, hasPermission } from './auth/permissions'
+import { NAV_LABEL_KEYS } from './nav'
 import Home from './pages/Home'
 import Profile from './pages/Profile'
-import LearningPath from './pages/LearningPath'
-import Missions from './pages/Missions'
-import Progress from './pages/Progress'
+import Grundlagen from './pages/Grundlagen'
+import Bibliothek from './pages/Bibliothek'
 import Leaderboard from './pages/Leaderboard'
-import Resources from './pages/Resources'
-import UserManagement from './pages/UserManagement'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
-const PAGES = {
-  profile: ({ user }) => <Profile user={user} />,
-  'learning-path': () => <LearningPath />,
-  missions: ({ user, navigate, startMissionId }) => (
-    <Missions user={user} navigate={navigate} startMissionId={startMissionId} />
-  ),
-  progress: () => <Progress />,
-  leaderboard: ({ user }) => <Leaderboard user={user} />,
-  'user-management': ({ user, setUser }) => (
-    <RequirePermission user={user} permission={PERMISSIONS.MANAGE_USERS}>
-      <UserManagement currentUser={user} onCurrentUserUpdate={setUser} />
-    </RequirePermission>
-  ),
-  resources: () => <Resources />,
-  home: ({ user, navigate }) => <Home user={user} navigate={navigate} />,
-}
-
-function AccessDenied() {
-  return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={860}>
-      <Box
-        bg="white"
-        p={{ base: 'xl', md: 40 }}
-        style={{
-          border: '1px solid var(--line)',
-          borderRadius: 18,
-        }}
-      >
-        <Group gap="md" align="flex-start">
-          <Box
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 14,
-              display: 'grid',
-              placeItems: 'center',
-              background: 'var(--mantine-color-brand-0)',
-              color: 'var(--mantine-color-brand-7)',
-            }}
-          >
-            <IconShieldLock size={25} stroke={1.7} />
-          </Box>
-          <Box>
-            <Title order={1} fz={{ base: 26, md: 32 }} c="secondary.9">
-              Kein Zugriff
-            </Title>
-            <Text c="dimmed" mt={6}>
-              Du hast keine Berechtigung, diese Seite zu öffnen.
-            </Text>
-          </Box>
-        </Group>
-      </Box>
-    </Box>
-  )
-}
-
-function RequirePermission({ user, permission, children }) {
-  if (!hasPermission(user, permission)) {
-    return <AccessDenied />
-  }
-
-  return children
-}
-
-const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '' }
+const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '', role: 'accountant' }
 
 function App() {
-  const [user, setUser] = useState(null)
+  const { t, i18n } = useTranslation()
+  const toggleLanguage = () => i18n.changeLanguage(i18n.language === 'de' ? 'en' : 'de')
+  const [user, setUser] = useState({
+  first_name: 'Test',
+  last_name: 'User',
+  username: 'testuser',
+  email: 'testuser@test.de',
+  role: 'controller',
+  role_display: 'Controller',
+  onboarding_completed: false,
+  onboarding_progress: [],
+})
   const [status, setStatus] = useState('loading')
-  const [page, setPage] = useState('home')
-  const [pageRenderKey, setPageRenderKey] = useState(0)
-  const [startMissionId, setStartMissionId] = useState(null)
+  const [page, setPage] = useState('Home')
   const [mode, setMode] = useState('login')
   const [message, setMessage] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [mobileOpened, { toggle: toggleMobile, close: closeMobile }] = useDisclosure(false)
 
+  
   useEffect(() => {
     fetch(`${API_BASE}/api/auth/user/`, { credentials: 'include' })
       .then((response) => response.ok && response.json())
@@ -128,6 +71,7 @@ function App() {
     if (mode === 'register') {
       body.first_name = form.first_name
       body.last_name = form.last_name
+      body.role = form.role
     }
 
     const response = await fetch(`${API_BASE}/api/auth/${path}/`, {
@@ -139,7 +83,7 @@ function App() {
 
     const data = await response.json()
     if (!response.ok) {
-      setMessage(data.error || 'Etwas ist schiefgelaufen')
+      setMessage(data.error || t('app.genericError'))
       return null
     }
     return data
@@ -166,9 +110,7 @@ function App() {
     setForm(EMPTY_FORM)
   }
 
-  const navigate = (value, options = {}) => {
-    setStartMissionId(options.startMissionId || null)
-    setPageRenderKey((current) => current + 1)
+  const navigate = (value) => {
     setPage(value)
     closeMobile()
   }
@@ -178,7 +120,7 @@ function App() {
       <Center mih="100vh">
         <Group gap="sm">
           <Loader color="brand" size="sm" />
-          <Text c="dimmed">Authentifizierung wird geprüft…</Text>
+          <Text c="dimmed">{t('app.checkingAuth')}</Text>
         </Group>
       </Center>
     )
@@ -198,6 +140,22 @@ function App() {
         message={message}
       />
     )
+  }
+
+  const renderPage = () => {
+    switch (page) {
+      case 'profile':
+        return <Profile user={user} />
+      case 'grundlagen':
+        // Onboarding lebt in den Grundlagen: von hier aus startbar inkl. Fortschritt.
+        return <Grundlagen user={user} onUserUpdate={setUser} apiBase={API_BASE} />
+      case 'bibliothek':
+        return <Bibliothek />
+      case 'leaderboard':
+        return <Leaderboard />
+      default:
+        return <Home user={user} onNavigate={navigate} />
+    }
   }
 
   return (
@@ -231,25 +189,28 @@ function App() {
             <Burger opened={mobileOpened} onClick={toggleMobile} hiddenFrom="sm" size="sm" />
             <Box>
               <Text fz={11} fw={700} c="brand.6" style={{ letterSpacing: '0.12em' }}>
-                {NAV_LABELS[page]?.toUpperCase()}
+                {NAV_LABEL_KEYS[page] ? t(NAV_LABEL_KEYS[page]).toUpperCase() : ''}
               </Text>
               <Title order={3} fz={18} c="secondary.9" fw={600}>
-                Hallo, {user.first_name || user.username} 👋
+                {t('app.greeting', { name: user.first_name || user.username })}
               </Title>
             </Box>
           </Group>
-          <Button variant="subtle" color="secondary" size="sm" radius="md">
-            Deutsch
+          <Button
+            variant="subtle"
+            color="secondary"
+            size="sm"
+            radius="md"
+            onClick={toggleLanguage}
+            aria-label={t('language.switchAria')}
+            leftSection={<IconLanguage size={16} />}
+          >
+            {t('language.current')}
           </Button>
         </Box>
 
-        <Box key={`${page}-${pageRenderKey}-${startMissionId || 'overview'}`} className="fade-up">
-          {(PAGES[page] || PAGES.home)({
-            user,
-            setUser,
-            navigate,
-            startMissionId,
-          })}
+        <Box key={page} className="fade-up">
+          {renderPage()}
         </Box>
       </AppShell.Main>
     </AppShell>

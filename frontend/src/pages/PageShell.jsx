@@ -1,8 +1,10 @@
 import { Box, Paper, Stack, Text, ThemeIcon, Title } from '@mantine/core'
+import { useTranslation } from 'react-i18next'
 
-export default function PageShell({ title, description, icon: Icon, children }) {
+export default function PageShell({ title, description, icon: Icon, children, maxWidth = 1180 }) {
+  const { t } = useTranslation()
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
+    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={maxWidth}>
       <Stack gap={6} mb="xl">
         <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9">
           {title}
@@ -35,10 +37,10 @@ export default function PageShell({ title, description, icon: Icon, children }) 
             )}
             <Stack align="center" gap={4}>
               <Text fz="lg" fw={600} c="secondary.9">
-                Coming later
+                {t('pages.comingSoon')}
               </Text>
               <Text c="dimmed" ta="center" maw={420}>
-                Diese Seite wird später ergänzt.
+                {t('pages.comingSoonText')}
               </Text>
             </Stack>
           </Stack>

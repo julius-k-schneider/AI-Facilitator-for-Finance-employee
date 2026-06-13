@@ -101,14 +101,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 # DATABASE_URL example: postgres://app:app@localhost:5432/app
-DATABASE_URL = os.environ["DATABASE_URL"]
 
 DATABASES = {
     "default": dj_database_url.config(
-        default=DATABASE_URL,
+        default=os.environ["DATABASE_URL"],
         conn_max_age=600,
         conn_health_checks=True,
-        ssl_require=not DEBUG and not DATABASE_URL.startswith("sqlite"),
+        ssl_require=not DEBUG,
     )
 }
 

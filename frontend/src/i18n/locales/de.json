@@ -1,0 +1,151 @@
+{
+  "app": {
+    "checkingAuth": "Authentifizierung wird geprüft…",
+    "greeting": "Hallo, {{name}} 👋",
+    "genericError": "Etwas ist schiefgelaufen"
+  },
+  "language": {
+    "current": "Deutsch",
+    "switchAria": "Sprache auf Englisch umschalten"
+  },
+  "nav": {
+    "home": "Home",
+    "grundlagen": "Grundlagen",
+    "bibliothek": "Bibliothek",
+    "leaderboard": "Rangliste",
+    "profile": "Profil"
+  },
+  "roles": {
+    "controller": "Controller",
+    "accountant": "Accountant"
+  },
+  "sidebar": {
+    "subtitle": "AI FACILITATOR",
+    "tooltipProfile": "Profil",
+    "tooltipLogout": "Logout"
+  },
+  "login": {
+    "platform": "AI ENABLEMENT PLATFORM",
+    "heroTitle": "Baue die AI-Skills von morgen.",
+    "heroSubtitle": "{{tagline}}. Lernen, anwenden und wachsen – direkt in deinem Arbeitsalltag im Finance-Bereich.",
+    "highlights": [
+      "Rollenspezifische AI-Lernpfade",
+      "Praxis-Missionen mit echten Finance-Cases",
+      "Fortschritt, Punkte & Team-Ranglisten"
+    ],
+    "footer": "© Lufthansa Group · Internes Enablement-Programm",
+    "welcomeBack": "Willkommen zurück",
+    "createAccount": "Konto erstellen",
+    "loginSubtitle": "Melde dich an, um deine Lernreise fortzusetzen.",
+    "registerSubtitle": "Starte in wenigen Sekunden mit deinem AI-Enablement.",
+    "tabLogin": "Login",
+    "tabRegister": "Registrieren",
+    "firstName": "Vorname",
+    "lastName": "Nachname",
+    "role": "Rolle",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "submitLogin": "Anmelden",
+    "submitRegister": "Registrieren",
+    "placeholderFirstName": "Max",
+    "placeholderLastName": "Mustermann",
+    "placeholderEmail": "max.mustermann@lufthansa.com"
+  },
+  "home": {
+    "badge": "AI ENABLEMENT",
+    "title": "Willkommen zurück, {{name}}.",
+    "fallbackName": "Kollege",
+    "subtitle": "Baue die AI-Skills von morgen – Schritt für Schritt, mit echten Cases aus deinem Finance-Alltag.",
+    "ctaContinue": "Weiterlernen",
+    "ctaMissions": "Missionen ansehen",
+    "locked": {
+      "title": "Daily Challenges noch gesperrt",
+      "text": "Die Daily Challenges starten, sobald du das Onboarding in den Grundlagen abgeschlossen hast.",
+      "cta": "Zu den Grundlagen"
+    },
+    "stats": {
+      "points": "Punkte",
+      "streak": "Tagesstreak",
+      "rank": "Team-Rang"
+    }
+  },
+  "profile": {
+    "title": "Profil",
+    "fieldName": "Name",
+    "fieldEmail": "E-Mail",
+    "fieldUser": "Benutzer",
+    "changePassword": "Passwort ändern",
+    "currentPassword": "Aktuelles Passwort",
+    "newPassword": "Neues Passwort",
+    "errorChange": "Passwort konnte nicht geändert werden",
+    "successChange": "Passwort erfolgreich aktualisiert"
+  },
+  "onboarding": {
+    "badge": "ONBOARDING",
+    "hubTitle": "Onboarding",
+    "hubSubtitle": "Schließe alle Kapitel und das Abschluss-Quiz ab, um die Daily Challenges freizuschalten.",
+    "completedBadge": "Abgeschlossen",
+    "overviewProgress": "{{done}} von {{total}} Schritten",
+    "start": "Onboarding starten",
+    "continue": "Fortsetzen",
+    "review": "Erneut ansehen",
+    "backToOverview": "Übersicht",
+    "title": "Willkommen an Bord",
+    "stepOf": "Schritt {{current}} von {{total}}",
+    "chapterProgress": "Kapitel {{current}} von {{total}}",
+    "questionProgress": "Frage {{current}} von {{total}}",
+    "startQuiz": "Quiz starten",
+    "checkAnswer": "Antwort prüfen",
+    "correct": "Richtig!",
+    "wrong": "Leider falsch",
+    "explanation": "Erklärung",
+    "next": "Weiter",
+    "toFinal": "Zum Abschluss-Quiz",
+    "showResult": "Ergebnis anzeigen",
+    "retry": "Erneut versuchen",
+    "quizPassed": "Bestanden!",
+    "quizFailed": "Noch nicht bestanden",
+    "score": "{{correct}} von {{total}} richtig",
+    "finalTitle": "Abschluss-Quiz",
+    "finalHeading": "Letzter Schritt: Abschluss-Quiz",
+    "finalSubtitle": "Beantworte die folgenden Fragen, um dein Onboarding abzuschließen und die Daily Challenges freizuschalten.",
+    "finish": "Onboarding abschließen"
+  },
+  "pages": {
+    "comingSoon": "Demnächst verfügbar",
+    "comingSoonText": "Dieser Bereich wird gerade aufgebaut. Schau bald wieder vorbei – hier entstehen neue Inhalte für dein AI-Enablement.",
+    "grundlagen": {
+      "title": "Grundlagen",
+      "description": "Die wichtigsten AI-Basics für deinen Finance-Alltag"
+    },
+    "bibliothek": {
+      "title": "Bibliothek",
+      "description": "Materialien, Vorlagen und Links zum Nachschlagen"
+    },
+    "leaderboard": {
+      "title": "Rangliste",
+      "description": "Vergleiche deine Punkte mit deinen Kollegen",
+      "stats": {
+        "rank": "Dein Rang",
+        "points": "Deine Punkte",
+        "streak": "Aktuelle Streak"
+      },
+      "days": "Tage",
+      "topPerformers": "Top Performer",
+      "podiumTitle": "Spitze der Rangliste",
+      "fullRanking": "Vollständige Rangliste",
+      "rankingHint": "Aktueller Stand der Mitarbeiter-Challenge",
+      "participants": "{{count}} Teilnehmer",
+      "rank": "Rang",
+      "employee": "Mitarbeiter",
+      "points": "Punkte",
+      "streak": "Streak",
+      "challenges": "Challenges",
+      "streakDays": "{{count}} Tage",
+      "you": "Du",
+      "rankLabel": "Rang #{{rank}}",
+      "emptyTitle": "Noch keine Ranglistendaten",
+      "emptyText": "Sobald Ergebnisse für die Mitarbeiter-Challenge vorliegen, werden sie hier angezeigt."
+    }
+  }
+}
