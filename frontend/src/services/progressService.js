@@ -118,4 +118,24 @@ export function getLeaderboard(users) {
       return a.name.localeCompare(b.name)
     })
     .map((entry, index) => ({ ...entry, rank: index + 1 }))
+
+export function markResourceRead(userId, resourceId) {
+  if (!userId || !resourceId) return
+  const store = readStore()
+  const current = store[userId] || {}
+  const readResources = current.readResources || []
+  if (!readResources.includes(resourceId)) {
+    readResources.push(resourceId)
+  }
+  store[userId] = { ...current, readResources }
+  writeStore(store)
 }
+
+export function hasReadResource(userId, resourceId) {
+  if (!userId || !resourceId) return false
+  const store = readStore()
+  const current = store[userId] || {}
+  return (current.readResources || []).includes(resourceId)
+}
+
+  }

@@ -19,6 +19,22 @@ export const MISSIONS = [
   },
 ]
 
+export const LERNCHECKS = [
+  {
+    id: 'lerncheck-halluzinationen',
+    title: 'Lerncheck: Halluzinationen erkennen',
+    description: 'Lies den Text und beantworte die Fragen zum Thema AI-Halluzinationen.',
+    category: 'AI Grundlagen',
+    difficulty: 'Medium',
+    estimatedTime: '8 Min.',
+    maxPoints: 100,
+  },
+]
+
 export function getMissionById(missionId) {
   return MISSIONS.find((mission) => mission.id === missionId)
+}
+
+export function getLerncheckById(lerncheckId) {
+  return LERNCHECKS.find((lerncheck) => lerncheck.id === lerncheckId)
 }
