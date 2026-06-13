@@ -1,5 +1,4 @@
 import {
-  Badge,
   Box,
   Button,
   Group,
@@ -8,14 +7,12 @@ import {
   Stack,
   Text,
   ThemeIcon,
-  Title,
 } from '@mantine/core'
 import {
   IconArrowRight,
   IconBolt,
   IconFlame,
   IconLock,
-  IconSparkles,
   IconTrophy,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'

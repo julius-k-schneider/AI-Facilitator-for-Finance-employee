@@ -124,7 +124,28 @@
     },
     "leaderboard": {
       "title": "Rangliste",
-      "description": "Vergleiche deine Punkte mit deinen Kollegen"
+      "description": "Vergleiche deine Punkte mit deinen Kollegen",
+      "stats": {
+        "rank": "Dein Rang",
+        "points": "Deine Punkte",
+        "streak": "Aktuelle Streak"
+      },
+      "days": "Tage",
+      "topPerformers": "Top Performer",
+      "podiumTitle": "Spitze der Rangliste",
+      "fullRanking": "Vollständige Rangliste",
+      "rankingHint": "Aktueller Stand der Mitarbeiter-Challenge",
+      "participants": "{{count}} Teilnehmer",
+      "rank": "Rang",
+      "employee": "Mitarbeiter",
+      "points": "Punkte",
+      "streak": "Streak",
+      "challenges": "Challenges",
+      "streakDays": "{{count}} Tage",
+      "you": "Du",
+      "rankLabel": "Rang #{{rank}}",
+      "emptyTitle": "Noch keine Ranglistendaten",
+      "emptyText": "Sobald Ergebnisse für die Mitarbeiter-Challenge vorliegen, werden sie hier angezeigt."
     }
   }
 }
