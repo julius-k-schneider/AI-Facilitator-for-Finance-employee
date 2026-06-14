@@ -46,3 +46,27 @@ export const createMission = (payload) => request('/api/auth/missions/schedule/'
 export const deleteMission = (missionId) => request(`/api/auth/missions/${missionId}/`, {
   method: 'DELETE',
 })
+
+export const updateMission = (missionId, payload) => request(`/api/auth/missions/${missionId}/`, {
+  method: 'PATCH',
+  body: JSON.stringify(payload),
+})
+
+export const getReviewMissions = () => request('/api/auth/missions/review/')
+
+export const generateNextWeekMissions = (force = false) => request('/api/auth/missions/generate-next-week/', {
+  method: 'POST',
+  body: JSON.stringify({ force }),
+})
+
+export const approveMission = (missionId) => request(`/api/auth/missions/${missionId}/approve/`, {
+  method: 'POST',
+})
+
+export const regenerateMission = (missionId) => request(`/api/auth/missions/${missionId}/regenerate/`, {
+  method: 'POST',
+})
+
+export const rejectMission = (missionId) => request(`/api/auth/missions/${missionId}/reject/`, {
+  method: 'POST',
+})

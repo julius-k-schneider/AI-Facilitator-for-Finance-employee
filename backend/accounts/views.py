@@ -10,6 +10,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .models import Mission, MissionAttempt, Profile
+from .services.ai_mission_generator import (
+    AiMissionGenerationError,
+    generate_next_week,
+    regenerate_review_mission,
+)
 
 
 User = get_user_model()
@@ -84,6 +89,14 @@ def translated(value, language):
     return value.get(language) or value.get('de') or value.get('en') or ''
 
 
+def correct_indices(content):
+    indices = content.get('correct_indices')
+    if isinstance(indices, list):
+        return indices
+    index = content.get('correct_index')
+    return [index] if isinstance(index, int) else []
+
+
 def mission_payload(mission, user, language='de', include_content=True):
     attempt = mission.attempts.filter(user=user).first()
     content = mission.content or {}
@@ -97,11 +110,14 @@ def mission_payload(mission, user, language='de', include_content=True):
         'completed': attempt is not None,
         'score': attempt.score if attempt else None,
     }
-    if include_content and mission.mission_type == Mission.TYPE_SINGLE_CHOICE:
+    if include_content and mission.mission_type in Mission.CHOICE_TYPES:
         payload['content'] = {
             'question': translated(content.get('question', {}), language),
             'options': [translated(option, language) for option in content.get('options', [])],
+            'multiple': mission.mission_type == Mission.TYPE_MULTIPLE_CHOICE,
         }
+        if attempt is not None:
+            payload['content']['feedback'] = translated(content.get('feedback', {}), language)
     return payload
 
 
@@ -121,10 +137,15 @@ def mission_schedule_payload(mission, user):
             {'de': translated(option, 'de'), 'en': translated(option, 'en')}
             for option in content.get('options', [])
         ],
-        'correct_index': content.get('correct_index'),
+        'correct_indices': correct_indices(content),
         'max_points': mission.max_points,
+        'status': mission.status,
+        'generated_by_ai': mission.generated_by_ai,
+        'feedback_de': translated(content.get('feedback', {}), 'de'),
+        'feedback_en': translated(content.get('feedback', {}), 'en'),
         'created_by': mission.created_by_id,
-        'can_delete': is_admin(user) or mission.created_by_id == user.id,
+        'can_delete': can_create_missions(user),
+        'can_edit': can_create_missions(user),
         'has_attempts': mission.attempts.exists(),
     }
 
@@ -134,6 +155,64 @@ def parse_iso_date(value):
         return date.fromisoformat(value)
     except (TypeError, ValueError):
         return None
+
+
+def validate_choice_mission_data(data, allow_past_date=False):
+    scheduled_date = parse_iso_date(data.get('scheduled_date'))
+    mission_type = data.get('type')
+    allowed_types = {
+        Mission.TYPE_SINGLE_CHOICE,
+        Mission.TYPE_MULTIPLE_CHOICE,
+        Mission.TYPE_PROMPT_SELECTION,
+    }
+    if not scheduled_date or (not allow_past_date and scheduled_date < timezone.localdate()):
+        return None, 'scheduled date must be today or later'
+    if mission_type not in allowed_types:
+        return None, 'unsupported mission type'
+
+    required_text = (
+        'title_de', 'title_en', 'description_de', 'description_en', 'question_de', 'question_en',
+    )
+    if any(not str(data.get(field, '')).strip() for field in required_text):
+        return None, 'all bilingual text fields are required'
+    options = data.get('options') or []
+    if len(options) < 2 or any(not option.get('de', '').strip() or not option.get('en', '').strip() for option in options):
+        return None, 'at least two bilingual options are required'
+    raw_correct_indices = data.get('correct_indices')
+    if raw_correct_indices is None and data.get('correct_index') is not None:
+        raw_correct_indices = [data.get('correct_index')]
+    try:
+        selected_correct_indices = sorted({int(index) for index in (raw_correct_indices or [])})
+        max_points = int(data.get('max_points', 100))
+    except (TypeError, ValueError):
+        return None, 'invalid correct answer or points'
+    if (
+        not selected_correct_indices
+        or any(index < 0 or index >= len(options) for index in selected_correct_indices)
+        or max_points < 1
+        or max_points > 1000
+    ):
+        return None, 'invalid correct answer or points'
+    if mission_type != Mission.TYPE_MULTIPLE_CHOICE and len(selected_correct_indices) != 1:
+        return None, 'this mission type requires exactly one correct answer'
+    return {
+        'mission_type': mission_type,
+        'scheduled_date': scheduled_date,
+        'title_de': data['title_de'].strip(),
+        'title_en': data['title_en'].strip(),
+        'description_de': data['description_de'].strip(),
+        'description_en': data['description_en'].strip(),
+        'content': {
+            'question': {'de': data['question_de'].strip(), 'en': data['question_en'].strip()},
+            'options': [{'de': option['de'].strip(), 'en': option['en'].strip()} for option in options],
+            'correct_indices': selected_correct_indices,
+            'feedback': {
+                'de': str(data.get('feedback_de', '')).strip(),
+                'en': str(data.get('feedback_en', '')).strip(),
+            },
+        },
+        'max_points': max_points,
+    }, None
 
 
 def user_payload(user):
@@ -339,31 +418,41 @@ def complete_mission_view(request):
         return JsonResponse({'error': 'authentication required'}, status=401)
 
     data = parse_json(request)
-    mission = Mission.objects.filter(id=data.get('mission_id'), scheduled_date=timezone.localdate()).first()
+    mission = Mission.objects.filter(
+        id=data.get('mission_id'),
+        scheduled_date=timezone.localdate(),
+        status=Mission.STATUS_PUBLISHED,
+    ).first()
     if mission is None:
         return JsonResponse({'error': 'mission not available today'}, status=404)
     if MissionAttempt.objects.filter(user=request.user, mission=mission).exists():
         return JsonResponse({'error': 'mission already completed'}, status=409)
 
-    if mission.mission_type != Mission.TYPE_SINGLE_CHOICE:
+    if mission.mission_type not in Mission.CHOICE_TYPES:
         return JsonResponse({'error': 'unsupported mission type'}, status=400)
-
-    try:
-        selected_index = int(data.get('answer'))
-    except (TypeError, ValueError):
-        return JsonResponse({'error': 'answer required'}, status=400)
 
     content = mission.content or {}
     options = content.get('options', [])
-    if selected_index < 0 or selected_index >= len(options):
+    try:
+        if mission.mission_type == Mission.TYPE_MULTIPLE_CHOICE:
+            raw_answers = data.get('answer')
+            if not isinstance(raw_answers, list):
+                raise ValueError
+            selected_indices = sorted({int(index) for index in raw_answers})
+        else:
+            selected_indices = [int(data.get('answer'))]
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'answer required'}, status=400)
+    if not selected_indices or any(index < 0 or index >= len(options) for index in selected_indices):
         return JsonResponse({'error': 'invalid answer'}, status=400)
 
-    score = mission.max_points if selected_index == content.get('correct_index') else 0
+    expected_indices = sorted(correct_indices(content))
+    score = mission.max_points if selected_indices == expected_indices else 0
     try:
         attempt = MissionAttempt.objects.create(
             user=request.user,
             mission=mission,
-            answer={'selected_index': selected_index},
+            answer={'selected_indices': selected_indices},
             score=score,
         )
     except IntegrityError:
@@ -386,7 +475,10 @@ def daily_missions_view(request):
 
     language = request.GET.get('lang', 'de')
     today = timezone.localdate()
-    missions = Mission.objects.filter(scheduled_date=today).prefetch_related('attempts')[:2]
+    missions = Mission.objects.filter(
+        scheduled_date=today,
+        status=Mission.STATUS_PUBLISHED,
+    ).prefetch_related('attempts')[:2]
     return JsonResponse({
         'date': today.isoformat(),
         'missions': [mission_payload(mission, request.user, language) for mission in missions],
@@ -405,7 +497,9 @@ def mission_schedule_view(request):
         date_to = parse_iso_date(request.GET.get('to'))
         if not date_from or not date_to or date_to < date_from:
             return JsonResponse({'error': 'valid date range required'}, status=400)
-        missions = Mission.objects.filter(scheduled_date__range=(date_from, date_to)).prefetch_related('attempts')
+        missions = Mission.objects.filter(
+            scheduled_date__range=(date_from, date_to),
+        ).exclude(status=Mission.STATUS_REJECTED).prefetch_related('attempts')
         dates = {}
         scheduled_missions = {}
         for mission in missions:
@@ -414,52 +508,25 @@ def mission_schedule_view(request):
             scheduled_missions.setdefault(key, []).append(mission_schedule_payload(mission, request.user))
         return JsonResponse({'dates': dates, 'missions': scheduled_missions})
 
-    data = parse_json(request)
-    scheduled_date = parse_iso_date(data.get('scheduled_date'))
-    mission_type = data.get('type')
-    if not scheduled_date or scheduled_date < timezone.localdate():
-        return JsonResponse({'error': 'scheduled date must be today or later'}, status=400)
-    if mission_type != Mission.TYPE_SINGLE_CHOICE:
-        return JsonResponse({'error': 'unsupported mission type'}, status=400)
-
-    required_text = ('title_de', 'title_en', 'question_de', 'question_en')
-    if any(not str(data.get(field, '')).strip() for field in required_text):
-        return JsonResponse({'error': 'all bilingual text fields are required'}, status=400)
-
-    options = data.get('options') or []
-    if len(options) < 2 or any(not option.get('de', '').strip() or not option.get('en', '').strip() for option in options):
-        return JsonResponse({'error': 'at least two bilingual options are required'}, status=400)
-    try:
-        correct_index = int(data.get('correct_index'))
-        max_points = int(data.get('max_points', 100))
-    except (TypeError, ValueError):
-        return JsonResponse({'error': 'invalid correct answer or points'}, status=400)
-    if correct_index < 0 or correct_index >= len(options) or max_points < 1 or max_points > 1000:
-        return JsonResponse({'error': 'invalid correct answer or points'}, status=400)
+    values, validation_error = validate_choice_mission_data(parse_json(request))
+    if validation_error:
+        return JsonResponse({'error': validation_error}, status=400)
 
     with transaction.atomic():
-        existing = Mission.objects.select_for_update().filter(scheduled_date=scheduled_date)
+        existing = Mission.objects.select_for_update().filter(
+            scheduled_date=values['scheduled_date'],
+        ).exclude(status=Mission.STATUS_REJECTED)
         if existing.count() >= 2:
             return JsonResponse({'error': 'this date already has two missions'}, status=409)
         mission = Mission.objects.create(
-            mission_type=mission_type,
-            scheduled_date=scheduled_date,
-            title_de=data['title_de'].strip(),
-            title_en=data['title_en'].strip(),
-            description_de=str(data.get('description_de', '')).strip(),
-            description_en=str(data.get('description_en', '')).strip(),
-            content={
-                'question': {'de': data['question_de'].strip(), 'en': data['question_en'].strip()},
-                'options': [{'de': option['de'].strip(), 'en': option['en'].strip()} for option in options],
-                'correct_index': correct_index,
-            },
-            max_points=max_points,
+            status=Mission.STATUS_PUBLISHED,
             created_by=request.user,
+            **values,
         )
     return JsonResponse({'mission': mission_payload(mission, request.user)}, status=201)
 
 
-@require_http_methods(['DELETE'])
+@require_http_methods(['PATCH', 'DELETE'])
 @csrf_exempt
 def mission_detail_view(request, mission_id):
     if not can_create_missions(request.user):
@@ -468,12 +535,104 @@ def mission_detail_view(request, mission_id):
     mission = Mission.objects.filter(id=mission_id).first()
     if mission is None:
         return JsonResponse({'error': 'mission not found'}, status=404)
-    if not is_admin(request.user) and mission.created_by_id != request.user.id:
-        return JsonResponse({'error': 'permission denied'}, status=403)
+    if request.method == 'PATCH':
+        if mission.attempts.exists():
+            return JsonResponse({'error': 'completed missions cannot be edited'}, status=409)
+        values, validation_error = validate_choice_mission_data(parse_json(request), allow_past_date=True)
+        if validation_error:
+            return JsonResponse({'error': validation_error}, status=400)
+        with transaction.atomic():
+            date_missions = Mission.objects.select_for_update().filter(
+                scheduled_date=values['scheduled_date'],
+            ).exclude(id=mission.id).exclude(status=Mission.STATUS_REJECTED)
+            if date_missions.count() >= 2:
+                return JsonResponse({'error': 'this date already has two missions'}, status=409)
+            for field, value in values.items():
+                setattr(mission, field, value)
+            mission.save()
+        return JsonResponse({'mission': mission_schedule_payload(mission, request.user)})
     if mission.attempts.exists():
         return JsonResponse({'error': 'completed missions cannot be deleted'}, status=409)
 
     mission.delete()
+    return JsonResponse({'ok': True})
+
+
+@require_http_methods(['GET'])
+def mission_review_view(request):
+    if not can_create_missions(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    missions = Mission.objects.filter(status=Mission.STATUS_REVIEW).prefetch_related('attempts')
+    return JsonResponse({'missions': [mission_schedule_payload(mission, request.user) for mission in missions]})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def generate_next_week_missions_view(request):
+    if not can_create_missions(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    force = bool(parse_json(request).get('force', False))
+    try:
+        missions, week_start, week_end = generate_next_week(request.user, force=force)
+    except AiMissionGenerationError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=503)
+    return JsonResponse({
+        'created_count': len(missions),
+        'week_start': week_start.isoformat(),
+        'week_end': week_end.isoformat(),
+        'missions': [mission_schedule_payload(mission, request.user) for mission in missions],
+    })
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def approve_mission_view(request, mission_id):
+    if not can_create_missions(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    with transaction.atomic():
+        mission = Mission.objects.select_for_update().filter(id=mission_id, status=Mission.STATUS_REVIEW).first()
+        if mission is None:
+            return JsonResponse({'error': 'review mission not found'}, status=404)
+        published_count = Mission.objects.filter(
+            scheduled_date=mission.scheduled_date,
+            status=Mission.STATUS_PUBLISHED,
+        ).count()
+        if published_count >= 2:
+            return JsonResponse({'error': 'this date already has two published missions'}, status=409)
+        mission.status = Mission.STATUS_PUBLISHED
+        mission.reviewed_by = request.user
+        mission.reviewed_at = timezone.now()
+        mission.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+    return JsonResponse({'mission': mission_schedule_payload(mission, request.user)})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def regenerate_mission_view(request, mission_id):
+    if not can_create_missions(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    mission = Mission.objects.filter(id=mission_id).first()
+    if mission is None:
+        return JsonResponse({'error': 'mission not found'}, status=404)
+    try:
+        mission = regenerate_review_mission(mission, request.user)
+    except AiMissionGenerationError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=503)
+    return JsonResponse({'mission': mission_schedule_payload(mission, request.user)})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def reject_mission_view(request, mission_id):
+    if not can_create_missions(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    mission = Mission.objects.filter(id=mission_id, status=Mission.STATUS_REVIEW).first()
+    if mission is None:
+        return JsonResponse({'error': 'review mission not found'}, status=404)
+    mission.status = Mission.STATUS_REJECTED
+    mission.reviewed_by = request.user
+    mission.reviewed_at = timezone.now()
+    mission.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
     return JsonResponse({'ok': True})
 
 

@@ -17,6 +17,11 @@ urlpatterns = [
     path('progress/complete/', views.complete_mission_view, name='complete_mission'),
     path('missions/today/', views.daily_missions_view, name='daily_missions'),
     path('missions/schedule/', views.mission_schedule_view, name='mission_schedule'),
+    path('missions/review/', views.mission_review_view, name='mission_review'),
+    path('missions/generate-next-week/', views.generate_next_week_missions_view, name='generate_next_week_missions'),
+    path('missions/<int:mission_id>/approve/', views.approve_mission_view, name='approve_mission'),
+    path('missions/<int:mission_id>/regenerate/', views.regenerate_mission_view, name='regenerate_mission'),
+    path('missions/<int:mission_id>/reject/', views.reject_mission_view, name='reject_mission'),
     path('missions/<int:mission_id>/', views.mission_detail_view, name='mission_detail'),
     path('leaderboard/', views.leaderboard_view, name='leaderboard'),
 ]

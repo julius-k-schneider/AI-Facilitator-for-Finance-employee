@@ -43,8 +43,29 @@ class Profile(models.Model):
 
 class Mission(models.Model):
     TYPE_SINGLE_CHOICE = 'single_choice'
+    TYPE_MULTIPLE_CHOICE = 'multiple_choice'
+    TYPE_COMPLIANCE_DECISION = 'compliance_decision'
+    TYPE_PROMPT_SELECTION = 'prompt_selection'
     TYPE_CHOICES = [
         (TYPE_SINGLE_CHOICE, 'Single Choice'),
+        (TYPE_MULTIPLE_CHOICE, 'Multiple Choice'),
+        (TYPE_COMPLIANCE_DECISION, 'Compliance Decision'),
+        (TYPE_PROMPT_SELECTION, 'Prompt Selection'),
+    ]
+    CHOICE_TYPES = {
+        TYPE_SINGLE_CHOICE,
+        TYPE_MULTIPLE_CHOICE,
+        TYPE_COMPLIANCE_DECISION,
+        TYPE_PROMPT_SELECTION,
+    }
+
+    STATUS_REVIEW = 'review'
+    STATUS_PUBLISHED = 'published'
+    STATUS_REJECTED = 'rejected'
+    STATUS_CHOICES = [
+        (STATUS_REVIEW, 'Review'),
+        (STATUS_PUBLISHED, 'Published'),
+        (STATUS_REJECTED, 'Rejected'),
     ]
 
     mission_type = models.CharField(max_length=32, choices=TYPE_CHOICES)
@@ -55,12 +76,23 @@ class Mission(models.Model):
     description_en = models.TextField(blank=True)
     content = models.JSONField(default=dict)
     max_points = models.PositiveIntegerField(default=100)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PUBLISHED, db_index=True)
+    generated_by_ai = models.BooleanField(default=False)
+    generation_batch_id = models.UUIDField(null=True, blank=True, db_index=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name='created_missions',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_missions',
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ('scheduled_date', 'created_at', 'id')

@@ -76,7 +76,32 @@ Run any `manage.py` command inside the container:
 docker compose exec web python manage.py makemigrations
 docker compose exec web python manage.py migrate
 docker compose exec web python manage.py shell
+docker compose exec web python manage.py generate_weekly_missions
 ```
+
+### AI mission review workflow
+
+Weekly mission generation runs only in Django. Configure the Uni API in
+`backend/.env`; never place these values in Vite or frontend environment files:
+
+```env
+KICONNECT_API_KEY=your-key
+KICONNECT_BASE_URL=https://chat.kiconnect.nrw/api/v1
+KICONNECT_MODEL=your-model
+KICONNECT_CHAT_COMPLETIONS_PATH=/chat/completions
+```
+
+Generate review proposals for the next calendar week with:
+
+```bash
+docker compose exec web python manage.py generate_weekly_missions
+# Replace existing AI review drafts, while preserving published missions:
+docker compose exec web python manage.py generate_weekly_missions --force
+```
+
+The command requires at least one user with the `content_creator` or `admin`
+role. Generated missions remain in review until a content creator approves them
+on the Missions page.
 
 ## Alternative: native venv (no Docker for the app)
 
@@ -106,6 +131,9 @@ via `python-dotenv`):
 | `DEBUG`         | Debug mode                     | `True`                                  |
 | `ALLOWED_HOSTS` | Comma-separated allowed hosts  | `localhost,127.0.0.1`                   |
 | `DATABASE_URL`  | Postgres connection string     | `postgres://app:app@localhost:5432/app` |
+| `KICONNECT_API_KEY` | Server-side Uni API key | no default |
+| `KICONNECT_BASE_URL` | Uni API base URL | `https://chat.kiconnect.nrw/api/v1` |
+| `KICONNECT_MODEL` | Model used for mission generation | no default |
 
 Generate a production `SECRET_KEY`:
 

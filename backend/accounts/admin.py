@@ -13,8 +13,8 @@ class ProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Mission)
 class MissionAdmin(admin.ModelAdmin):
-    list_display = ('title_de', 'mission_type', 'scheduled_date', 'max_points', 'created_by')
-    list_filter = ('mission_type', 'scheduled_date')
+    list_display = ('title_de', 'mission_type', 'scheduled_date', 'status', 'generated_by_ai', 'max_points', 'created_by')
+    list_filter = ('status', 'generated_by_ai', 'mission_type', 'scheduled_date')
     search_fields = ('title_de', 'title_en')
 
 
