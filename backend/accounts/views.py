@@ -568,6 +568,53 @@ def mission_review_view(request):
 
 @require_http_methods(['POST'])
 @csrf_exempt
+def approve_all_review_missions_view(request):
+    if not can_create_missions(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    with transaction.atomic():
+        review_missions = list(
+            Mission.objects.select_for_update().filter(status=Mission.STATUS_REVIEW)
+        )
+        review_counts = {}
+        for mission in review_missions:
+            review_counts[mission.scheduled_date] = review_counts.get(mission.scheduled_date, 0) + 1
+        for scheduled_date, review_count in review_counts.items():
+            published_count = Mission.objects.filter(
+                scheduled_date=scheduled_date,
+                status=Mission.STATUS_PUBLISHED,
+            ).count()
+            if published_count + review_count > 2:
+                return JsonResponse({
+                    'error': f'{scheduled_date.isoformat()} would have more than two published missions',
+                }, status=409)
+        reviewed_at = timezone.now()
+        mission_ids = [mission.id for mission in review_missions]
+        Mission.objects.filter(id__in=mission_ids).update(
+            status=Mission.STATUS_PUBLISHED,
+            reviewed_by=request.user,
+            reviewed_at=reviewed_at,
+        )
+    return JsonResponse({'approved_count': len(review_missions)})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def reject_all_review_missions_view(request):
+    if not can_create_missions(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    with transaction.atomic():
+        review_missions = Mission.objects.select_for_update().filter(status=Mission.STATUS_REVIEW)
+        rejected_count = review_missions.count()
+        review_missions.update(
+            status=Mission.STATUS_REJECTED,
+            reviewed_by=request.user,
+            reviewed_at=timezone.now(),
+        )
+    return JsonResponse({'rejected_count': rejected_count})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
 def generate_next_week_missions_view(request):
     if not can_create_missions(request.user):
         return JsonResponse({'error': 'permission denied'}, status=403)

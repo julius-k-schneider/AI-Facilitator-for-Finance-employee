@@ -10,8 +10,9 @@ import {
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import {
-  approveMission, createMission, deleteMission, generateNextWeekMissions, getDailyMissions,
+  approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, getDailyMissions,
   getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, submitMission, updateMission,
+  rejectAllReviewMissions,
 } from '../services/missionService'
 import './Missions.css'
 
@@ -399,6 +400,24 @@ function MissionReview({ enabled, onPublished }) {
     }
   }
 
+  const runBulkAction = async (action) => {
+    if (action === 'reject' && !window.confirm(t('missions.review.rejectAllConfirm', { count: missions.length }))) return
+    setActiveAction(`${action}-all`)
+    setError('')
+    setMessage('')
+    try {
+      const data = action === 'approve' ? await approveAllReviewMissions() : await rejectAllReviewMissions()
+      const count = action === 'approve' ? data.approved_count : data.rejected_count
+      setMessage(t(`missions.review.${action}AllSuccess`, { count }))
+      await loadReview()
+      if (action === 'approve') onPublished()
+    } catch (nextError) {
+      setError(nextError.message)
+    } finally {
+      setActiveAction('')
+    }
+  }
+
   if (!enabled) return null
   return (
     <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} bg="white" mt="xl">
@@ -411,9 +430,15 @@ function MissionReview({ enabled, onPublished }) {
               <Text c="dimmed" fz="sm" mt={3}>{t('missions.review.description')}</Text>
             </Box>
           </Group>
-          <Button color="brand" leftSection={<IconSparkles size={17} />} loading={generating} onClick={generate}>
-            {t('missions.review.generate')}
-          </Button>
+          <Stack gap="xs" align="stretch">
+            <Button color="brand" leftSection={<IconSparkles size={17} />} loading={generating} onClick={generate}>
+              {t('missions.review.generate')}
+            </Button>
+            <Group gap="xs" grow>
+              <Button color="green" variant="light" leftSection={<IconCheck size={16} />} disabled={missions.length === 0} loading={activeAction === 'approve-all'} onClick={() => runBulkAction('approve')}>{t('missions.review.approveAll')}</Button>
+              <Button color="red" variant="light" leftSection={<IconX size={16} />} disabled={missions.length === 0} loading={activeAction === 'reject-all'} onClick={() => runBulkAction('reject')}>{t('missions.review.rejectAll')}</Button>
+            </Group>
+          </Stack>
         </Group>
         {error && <Alert color="red">{error}</Alert>}
         {message && <Alert color="green">{message}</Alert>}

@@ -19,15 +19,41 @@ class AiMissionGenerationError(RuntimeError):
     pass
 
 
-SYSTEM_PROMPT = """You create short daily learning missions for finance employees.
-Return valid JSON only, without markdown or commentary. Every mission must be bilingual in German and English,
-take 3-8 minutes and train practical AI competence in a finance context. Single-answer types must have exactly one
-unambiguous correct answer. Multiple-choice missions may have one, several, or all answer options as correct.
-Never use or invent personal, confidential, Lufthansa-internal, SAP, customer, or employee data. Do not present legal
-or compliance advice as guaranteed truth. Only use these automatically scored types: multiple_choice,
-compliance_decision, prompt_selection. Include concise bilingual feedback explaining the correct answer.
-Descriptions must be short, natural summaries of the specific mission topic. Do not mention the expected duration,
-do not explain that the learner must choose or determine an answer, and do not reuse a generic description template."""
+SYSTEM_PROMPT = """You create approachable daily AI learning missions for employees in a finance organization.
+
+Target learner:
+- An experienced accountant or controller who prepares monthly, quarterly, and year-end reports, handles correction
+  bookings and accruals, and works with operational finance data.
+- The learner may be older, has solid finance expertise, but little or no practical AI experience.
+- The goal is confidence and immediate benefit in daily work, not technical AI specialization.
+
+Difficulty and learning design:
+- Keep every mission beginner-friendly to lower-intermediate. A finance professional without AI training must be able
+  to solve it from the question and common workplace judgment alone.
+- Create a small, actionable learning nugget that takes 3-8 minutes and feels useful rather than academic.
+- Use plain business language. Explain unavoidable AI terms in the question or feedback.
+- Test one clear learning objective at a time. Avoid trick questions, subtle semantic distinctions, and options that
+  are only partially correct unless the mission is explicitly multiple choice.
+- Do not require knowledge of machine-learning algorithms, model architecture, statistics, programming, prompt syntax
+  jargon, legal paragraph numbers, SAP transaction codes, or specialized aviation processes.
+- Prefer practical scenarios such as summarizing a finance report, comparing actuals and plan, drafting a clear prompt,
+  checking an AI output, identifying confidential input, spotting a hallucination, or deciding when human review is
+  required. Use generic fictional figures only when needed.
+- Rotate topics across practical prompting, output verification, data confidentiality, responsible AI use, simple data
+  interpretation, and time-saving finance workflows. Do not over-focus on credit decisions or advanced analytics.
+
+Content and safety:
+- Return valid JSON only, without markdown or commentary. Every mission must be bilingual in natural German and English.
+- Never use or invent personal, confidential, Lufthansa-internal, SAP, customer, or employee data.
+- Do not present legal or compliance advice as guaranteed truth. Use broadly accepted German enterprise principles and
+  phrase compliance examples cautiously when company-specific rules could differ.
+- Only use these automatically scored types: multiple_choice, compliance_decision, prompt_selection.
+- Single-answer types must have exactly one unambiguous correct answer. Multiple-choice missions may have one, several,
+  or all answer options as correct.
+- Distractors must be plausible but clearly wrong at the intended beginner level.
+- Include concise bilingual feedback that teaches a reusable rule and explains why the selected answer set is correct.
+- Descriptions must be one short, natural sentence summarizing the specific topic. Do not mention the expected duration,
+  do not say that the learner must choose or determine an answer, and do not reuse a generic description template."""
 
 
 def next_calendar_week(reference_date=None):
@@ -47,6 +73,9 @@ Use 10-50 points per mission and 2-6 answer options. Return this exact structure
 For multiple_choice, correct_option_indices must contain one to all option indices. For compliance_decision and
 prompt_selection it must contain exactly one index. Include a meaningful mix of multiple-choice missions with one
 correct answer and with several correct answers.
+Across the requested schedule, favor broadly useful beginner topics and vary the scenarios. At least half of the
+missions should focus on practical everyday AI usage such as prompting, checking outputs, confidentiality, or human
+review. Use advanced finance or AI terminology only when the term is explained within the mission.
 Use only the dates and counts in the requested schedule."""
 
 

@@ -6,7 +6,13 @@ from django.test import TestCase
 from django.utils import timezone
 
 from .models import Mission, MissionAttempt, Profile
-from .services.ai_mission_generator import AiMissionGenerationError, generate_next_week, next_calendar_week
+from .services.ai_mission_generator import (
+    AiMissionGenerationError,
+    SYSTEM_PROMPT,
+    build_user_prompt,
+    generate_next_week,
+    next_calendar_week,
+)
 from .services.mission_validation import MissionValidationError, validate_generated_payload
 
 
@@ -222,6 +228,8 @@ class AccountsApiTests(TestCase):
 
         self.client.force_login(player)
         self.assertEqual(self.client.get('/api/auth/missions/review/', secure=True).status_code, 403)
+        self.assertEqual(self.client.post('/api/auth/missions/review/approve-all/', secure=True).status_code, 403)
+        self.assertEqual(self.client.post('/api/auth/missions/review/reject-all/', secure=True).status_code, 403)
         self.assertEqual(self.client.post(f'/api/auth/missions/{mission.id}/approve/', secure=True).status_code, 403)
         self.assertEqual(self.client.post('/api/auth/missions/generate-next-week/', secure=True).status_code, 403)
 
@@ -246,6 +254,45 @@ class AccountsApiTests(TestCase):
         self.assertEqual(approved.status, Mission.STATUS_PUBLISHED)
         self.assertEqual(approved.reviewed_by, creator)
         self.assertEqual(rejected.status, Mission.STATUS_REJECTED)
+
+    def test_creator_can_approve_and_reject_all_review_missions(self):
+        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
+        first = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
+        second = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
+        Mission.objects.filter(id__in=[first.id, second.id]).update(status=Mission.STATUS_REVIEW)
+        self.client.force_login(creator)
+
+        approved = self.client.post('/api/auth/missions/review/approve-all/', secure=True)
+        self.assertEqual(approved.status_code, 200)
+        self.assertEqual(approved.json()['approved_count'], 2)
+        self.assertEqual(
+            Mission.objects.filter(id__in=[first.id, second.id], status=Mission.STATUS_PUBLISHED).count(),
+            2,
+        )
+
+        third = self.create_mission(creator, timezone.localdate() + timedelta(days=2))
+        third.status = Mission.STATUS_REVIEW
+        third.save(update_fields=['status'])
+        rejected = self.client.post('/api/auth/missions/review/reject-all/', secure=True)
+        self.assertEqual(rejected.status_code, 200)
+        self.assertEqual(rejected.json()['rejected_count'], 1)
+        third.refresh_from_db()
+        self.assertEqual(third.status, Mission.STATUS_REJECTED)
+
+    def test_approve_all_is_atomic_when_a_day_would_exceed_two_missions(self):
+        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
+        scheduled_date = timezone.localdate() + timedelta(days=1)
+        published = self.create_mission(creator, scheduled_date)
+        first_review = self.create_mission(creator, scheduled_date)
+        second_review = self.create_mission(creator, scheduled_date)
+        Mission.objects.filter(id__in=[first_review.id, second_review.id]).update(status=Mission.STATUS_REVIEW)
+        self.client.force_login(creator)
+
+        response = self.client.post('/api/auth/missions/review/approve-all/', secure=True)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(Mission.objects.filter(status=Mission.STATUS_REVIEW).count(), 2)
+        published.refresh_from_db()
+        self.assertEqual(published.status, Mission.STATUS_PUBLISHED)
 
     @patch('accounts.views.generate_next_week')
     def test_creator_can_trigger_generation(self, generate_mock):
@@ -305,6 +352,15 @@ class AiMissionServiceTests(TestCase):
         payload['missions'][0]['content']['correct_option_index'] = 9
         with self.assertRaises(MissionValidationError):
             validate_generated_payload(payload, {start: 1})
+
+    def test_prompt_targets_accessible_everyday_finance_ai_learning(self):
+        start, _ = next_calendar_week()
+        prompt = build_user_prompt({start: 2})
+        self.assertIn('little or no practical AI experience', SYSTEM_PROMPT)
+        self.assertIn('beginner-friendly', SYSTEM_PROMPT)
+        self.assertIn('monthly, quarterly, and year-end reports', SYSTEM_PROMPT)
+        self.assertIn('Do not require knowledge of machine-learning algorithms', SYSTEM_PROMPT)
+        self.assertIn('practical everyday AI usage', prompt)
 
     def test_validator_accepts_multiple_correct_answers_only_for_multiple_choice(self):
         start, _ = next_calendar_week()

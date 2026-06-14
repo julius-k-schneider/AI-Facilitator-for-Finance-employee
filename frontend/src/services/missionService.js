@@ -54,6 +54,14 @@ export const updateMission = (missionId, payload) => request(`/api/auth/missions
 
 export const getReviewMissions = () => request('/api/auth/missions/review/')
 
+export const approveAllReviewMissions = () => request('/api/auth/missions/review/approve-all/', {
+  method: 'POST',
+})
+
+export const rejectAllReviewMissions = () => request('/api/auth/missions/review/reject-all/', {
+  method: 'POST',
+})
+
 export const generateNextWeekMissions = (force = false) => request('/api/auth/missions/generate-next-week/', {
   method: 'POST',
   body: JSON.stringify({ force }),
