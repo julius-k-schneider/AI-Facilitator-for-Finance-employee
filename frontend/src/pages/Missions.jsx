@@ -118,7 +118,7 @@ function MissionRunner({ mission, onBack, onCompleted }) {
   }
 
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={900}>
+    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Button variant="subtle" color="secondary" leftSection={<IconArrowLeft size={17} />} onClick={onBack} mb="lg">{t('missions.back')}</Button>
       <Paper withBorder radius="lg" p={{ base: 'xl', md: 40 }} bg="white">
         <Stack gap="xl">
@@ -258,8 +258,15 @@ function Creator({ opened, onClose, onCreated }) {
   }
 
   return (
-    <Modal opened={opened} onClose={onClose} title={editingId ? t('missions.creator.editTitle') : t('missions.creator.title')} size="xl" centered>
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={editingId ? t('missions.creator.editTitle') : t('missions.creator.title')}
+      size="calc(80vw)"
+      centered
+      classNames={{ content: 'mission-manager-modal', body: 'mission-manager-body' }}
+    >
+      <div className="mission-manager-grid">
         <Stack gap="md">
           {editingId && <Group justify="space-between"><Badge variant="light" color="brand">{t('missions.creator.editing')}</Badge><Button variant="subtle" size="xs" onClick={resetForm}>{t('missions.creator.cancelEdit')}</Button></Group>}
           <Select label={t('missions.creator.type')} value={form.type} data={[
@@ -303,7 +310,7 @@ function Creator({ opened, onClose, onCreated }) {
             </Paper>)}
           </Stack>}
         </Stack>
-      </SimpleGrid>
+      </div>
       <Modal opened={Boolean(preview)} onClose={() => { setPreview(null); setShowPreviewSolution(false) }} title={t('missions.creator.previewTitle')} size="lg" centered>
         {preview && <Stack gap="md">
           <Switch checked={showPreviewSolution} onChange={(event) => setShowPreviewSolution(event.currentTarget.checked)} label={t('missions.creator.showSolution')} />
@@ -484,7 +491,7 @@ export default function Missions() {
   if (activeMission) return <MissionRunner mission={activeMission} onBack={() => { setActiveMission(null); load() }} onCompleted={(completed) => setMissions((current) => current.map((mission) => mission.id === completed.id ? completed : mission))} />
 
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
+    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Group justify="space-between" align="flex-start" mb="xl">
         <Box><Badge variant="light" color="brand" mb="sm">{t('missions.badge')}</Badge><Title order={1} fz={{ base: 28, md: 34 }}>{t('missions.title')}</Title><Text c="dimmed" fz="lg" mt={4}>{t('missions.description')}</Text></Box>
         {canCreate && <Button color="brand" leftSection={<IconPlus size={18} />} onClick={() => setCreatorOpen(true)}>{t('missions.creator.button')}</Button>}

@@ -95,7 +95,7 @@ export default function Home({ user, navigate }) {
   }, [currentUserId])
 
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
+    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Stack gap={4} mb="xl">
         <Badge variant="light" color="brand" w="fit-content">{t('home.badge')}</Badge>
         <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9">

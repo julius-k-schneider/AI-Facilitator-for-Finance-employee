@@ -20,7 +20,7 @@ const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '', rol
 
 function AccessDenied() {
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={860}>
+    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Box bg="white" p={{ base: 'xl', md: 40 }} style={{ border: '1px solid var(--line)', borderRadius: 18 }}>
         <Group gap="md"><IconShieldLock size={28} /><Box><Title order={1}>Kein Zugriff</Title><Text c="dimmed">Du hast keine Berechtigung für diese Seite.</Text></Box></Group>
       </Box>

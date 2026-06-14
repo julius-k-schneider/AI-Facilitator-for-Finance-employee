@@ -59,7 +59,7 @@ function Profile({ user }) {
   const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim()
 
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={900}>
+    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9" mb="xl">
         {t('profile.title')}
       </Title>

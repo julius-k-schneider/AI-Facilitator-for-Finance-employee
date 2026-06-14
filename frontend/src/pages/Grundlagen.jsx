@@ -106,7 +106,7 @@ export default function Grundlagen({ user, onUserUpdate, apiBase }) {
       : t('onboarding.start')
 
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={820}>
+    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Stack gap={6} mb="xl">
         <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9">
           {t('pages.grundlagen.title')}

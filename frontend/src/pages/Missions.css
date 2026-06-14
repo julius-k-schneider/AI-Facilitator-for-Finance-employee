@@ -3,3 +3,39 @@
 .mission-calendar-day:hover, .mission-calendar-day.is-selected { border-color: var(--blue); background: rgba(var(--blue-rgb), 0.06); }
 .mission-calendar-count { padding: 1px 6px; border-radius: 999px; background: var(--mantine-color-brand-0); color: var(--mantine-color-brand-8); font-size: 10px; font-weight: 700; }
 .mission-calendar-count.is-full { background: var(--mantine-color-green-0); color: var(--mantine-color-green-8); }
+
+.mission-manager-modal {
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 48px);
+}
+
+.mission-manager-body {
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.mission-manager-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(420px, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+@media (max-width: 75em) {
+  .mission-manager-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 48em) {
+  .mission-manager-modal {
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .mission-manager-body {
+    max-height: calc(100vh - 88px);
+    padding: 16px;
+  }
+}

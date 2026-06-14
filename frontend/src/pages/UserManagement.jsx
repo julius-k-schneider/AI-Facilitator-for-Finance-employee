@@ -134,7 +134,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
   }
 
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
+    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Paper
         radius="xl"
         p={{ base: 'xl', md: 38 }}

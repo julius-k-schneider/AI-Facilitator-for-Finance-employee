@@ -178,7 +178,7 @@ export default function Leaderboard({ user }) {
   }))
 
   return (
-    <PageShell title={t('pages.leaderboard.title')} description={t('pages.leaderboard.description')} icon={IconTrophy} maxWidth={1320}>
+    <PageShell title={t('pages.leaderboard.title')} description={t('pages.leaderboard.description')} icon={IconTrophy}>
       {loading ? (
         <Paper withBorder radius="lg" p="xl"><Group justify="center"><Loader size="sm" /><Text c="dimmed">Leaderboard wird geladen...</Text></Group></Paper>
       ) : error ? (

@@ -1,11 +1,11 @@
 import { Box, Paper, Stack, Text, ThemeIcon, Title } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 
-export default function PageShell({ title, description, icon: Icon, children, maxWidth = 1180 }) {
+export default function PageShell({ title, description, icon: Icon, children }) {
   const { t } = useTranslation()
 
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={maxWidth}>
+    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Stack gap={6} mb="xl">
         <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9">
           {title}
