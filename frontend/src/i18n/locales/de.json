@@ -67,8 +67,19 @@
     },
     "stats": {
       "points": "Punkte",
+      "missions": "Abgeschlossene Missionen",
       "streak": "Tagesstreak",
       "rank": "Team-Rang"
+    },
+    "actions": {
+      "onboardingTitle": "Grundlagen abschließen",
+      "onboardingText": "Bearbeite das Onboarding, um Missionen und Punkte freizuschalten.",
+      "openMissions": "Mission öffnen",
+      "missionsCompleteTitle": "Alle Missionen abgeschlossen",
+      "missionsCompleteText": "Du hast alle aktuell verfügbaren Missionen erfolgreich bearbeitet.",
+      "libraryTitle": "Bibliothek",
+      "libraryText": "Öffne Materialien, Vorlagen und Links zum Nachschlagen.",
+      "openLibrary": "Bibliothek öffnen"
     }
   },
   "profile": {
@@ -130,6 +141,7 @@
       "stats": {
         "rank": "Dein Rang",
         "points": "Deine Punkte",
+        "missions": "Abgeschlossene Missionen",
         "streak": "Aktuelle Streak"
       },
       "days": "Tage",
@@ -143,6 +155,8 @@
       "points": "Punkte",
       "streak": "Streak",
       "challenges": "Challenges",
+      "missions": "Missionen",
+      "level": "Level",
       "streakDays": "{{count}} Tage",
       "you": "Du",
       "rankLabel": "Rang #{{rank}}",

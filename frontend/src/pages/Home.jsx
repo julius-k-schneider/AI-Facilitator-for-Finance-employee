@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   Badge,
   Box,
@@ -13,211 +14,142 @@ import {
 import {
   IconArrowRight,
   IconBolt,
+  IconBooks,
   IconChecklist,
   IconLock,
-  IconSparkles,
   IconTargetArrow,
   IconTrophy,
 } from '@tabler/icons-react'
-import { MISSIONS } from '../data/missions'
+import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
-import { getLevel } from '../services/progressService'
+import { PROGRESS_EVENT, getUserId } from '../services/progressService'
 
-function displayName(user) {
-  const fullName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
-  return fullName || user?.username || user?.email || 'Kollege'
-}
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
-function StatCard({ label, value, icon: Icon, color = 'brand' }) {
+function StatCard({ label, value, icon: Icon, color }) {
   return (
     <Paper withBorder radius="lg" p="lg" bg="white">
       <Group justify="space-between" align="flex-start">
         <Stack gap={2}>
-          <Text fz="sm" c="dimmed" fw={500}>
-            {label}
-          </Text>
-          <Text fz={30} fw={700} c="secondary.9" lh={1} ff="var(--font-display)">
-            {value}
-          </Text>
+          <Text fz="sm" c="dimmed" fw={500}>{label}</Text>
+          <Text fz={30} fw={700} c="secondary.9" lh={1} ff="var(--font-display)">{value}</Text>
         </Stack>
-        <ThemeIcon size={44} radius="md" variant="light" color={color}>
-          <Icon size={23} stroke={1.7} />
-        </ThemeIcon>
+        <ThemeIcon size={44} radius="md" variant="light" color={color}><Icon size={23} /></ThemeIcon>
       </Group>
     </Paper>
   )
 }
 
-function DashboardSection({ title, children }) {
-  return (
-    <Stack gap="md">
-      <Title order={2} fz={22} c="secondary.9">
-        {title}
-      </Title>
-      {children}
-    </Stack>
-  )
-}
-
-function NextMissionCard({ mission, onStart }) {
-  if (!mission) {
-    return (
-      <Paper withBorder radius="lg" p="xl" bg="white">
-        <Group gap="md" align="flex-start">
-          <ThemeIcon size={48} radius="md" variant="light" color="accent">
-            <IconTrophy size={25} stroke={1.7} />
-          </ThemeIcon>
-          <Stack gap={6} style={{ flex: 1 }}>
-            <Text fw={700} c="secondary.9">
-              Alle Missions abgeschlossen
-            </Text>
-            <Text fz="sm" c="dimmed">
-              Du hast die aktuell verfuegbaren Finance-Missions abgeschlossen. Neue Missions
-              koennen spaeter ueber die zentrale Registry ergaenzt werden.
-            </Text>
-          </Stack>
-        </Group>
-      </Paper>
-    )
-  }
-
+function ActionCard({ icon: Icon, title, text, action, onClick, color = 'brand', disabled = false }) {
   return (
     <Paper withBorder radius="lg" p="xl" bg="white">
-      <Group align="flex-start" justify="space-between" gap="lg">
-        <Group gap="md" align="flex-start" wrap="nowrap" style={{ flex: 1 }}>
-          <ThemeIcon size={48} radius="md" variant="light" color="brand">
-            <IconTargetArrow size={25} stroke={1.7} />
-          </ThemeIcon>
-          <Stack gap={8} style={{ flex: 1 }}>
-            <Group gap="xs">
-              <Badge color="brand" variant="light">
-                {mission.category}
-              </Badge>
-              <Badge color="secondary" variant="light">
-                {mission.difficulty}
-              </Badge>
-            </Group>
-            <Box>
-              <Text fw={700} c="secondary.9" fz="lg">
-                {mission.title}
-              </Text>
-              <Text fz="sm" c="dimmed" mt={3}>
-                {mission.description}
-              </Text>
-            </Box>
-            <Text fz="sm" c="dimmed">
-              {mission.estimatedTime} · bis zu {mission.maxPoints} Punkte
-            </Text>
-          </Stack>
+      <Stack gap="lg" h="100%" justify="space-between">
+        <Group gap="md" wrap="nowrap" align="flex-start">
+          <ThemeIcon size={48} radius="md" variant="light" color={color}><Icon size={25} /></ThemeIcon>
+          <Box>
+            <Text fw={700} fz="lg" c="secondary.9">{title}</Text>
+            <Text fz="sm" c="dimmed" mt={4}>{text}</Text>
+          </Box>
         </Group>
-        <Button color="brand" rightSection={<IconArrowRight size={17} />} onClick={onStart}>
-          Mission starten
+        <Button
+          variant="light"
+          color={color}
+          rightSection={<IconArrowRight size={17} />}
+          onClick={onClick}
+          disabled={disabled}
+          w="fit-content"
+        >
+          {action}
         </Button>
-      </Group>
+      </Stack>
     </Paper>
   )
 }
 
 export default function Home({ user, navigate }) {
+  const { t } = useTranslation()
   const { progress, nextMission } = useUserProgress(user)
-  const level = getLevel(progress.totalPoints)
+  const [rank, setRank] = useState(null)
+  const onboardingDone = Boolean(user?.onboarding_completed)
+  const currentUserId = getUserId(user)
+
+  useEffect(() => {
+    let active = true
+    const loadRank = () => {
+      fetch(`${API_BASE}/api/auth/leaderboard/`, { credentials: 'include' })
+        .then((response) => response.ok ? response.json() : Promise.reject())
+        .then((data) => {
+          if (!active) return
+          const entry = (data.entries || []).find((item) => String(item.user_id) === currentUserId)
+          setRank(entry?.rank ?? null)
+        })
+        .catch(() => active && setRank(null))
+    }
+
+    loadRank()
+    window.addEventListener(PROGRESS_EVENT, loadRank)
+    return () => {
+      active = false
+      window.removeEventListener(PROGRESS_EVENT, loadRank)
+    }
+  }, [currentUserId])
+
+  const missionTitle = nextMission?.title || t('home.actions.missionsCompleteTitle')
+  const missionText = nextMission?.description || t('home.actions.missionsCompleteText')
 
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
-      {!user?.onboarding_completed && (
-        <Paper withBorder radius="lg" p="xl" mb="xl" bg="white">
+      <Stack gap={4} mb="xl">
+        <Badge variant="light" color="brand" w="fit-content">{t('home.badge')}</Badge>
+        <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9">
+          {t('home.title', { name: user?.first_name || user?.username || t('home.fallbackName') })}
+        </Title>
+        <Text fz="lg" c="dimmed" maw={700}>{t('home.subtitle')}</Text>
+      </Stack>
+
+      {!onboardingDone && (
+        <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} mb="xl" bg="white">
           <Group justify="space-between" align="center" wrap="wrap" gap="md">
-            <Group gap="md" wrap="nowrap">
-              <ThemeIcon size={44} radius="md" variant="light" color="accent">
-                <IconLock size={22} />
-              </ThemeIcon>
+            <Group gap="md" wrap="nowrap" align="flex-start">
+              <ThemeIcon size={44} radius="md" variant="light" color="accent"><IconLock size={22} /></ThemeIcon>
               <Box>
-                <Text fw={700}>Onboarding abschließen</Text>
-                <Text fz="sm" c="dimmed">Schließe zuerst die Grundlagen ab, um Missionen freizuschalten.</Text>
+                <Text fw={700} c="secondary.9">{t('home.locked.title')}</Text>
+                <Text fz="sm" c="dimmed" maw={520}>{t('home.locked.text')}</Text>
               </Box>
             </Group>
-            <Button color="brand" onClick={() => navigate('grundlagen')}>Zu den Grundlagen</Button>
+            <Button color="brand" rightSection={<IconArrowRight size={18} />} onClick={() => navigate('grundlagen')}>
+              {t('home.locked.cta')}
+            </Button>
           </Group>
         </Paper>
       )}
-      <Paper
-        radius="xl"
-        p={{ base: 'xl', md: 44 }}
-        mb="xl"
-        style={{
-          position: 'relative',
-          overflow: 'hidden',
-          background:
-            'linear-gradient(135deg, var(--mantine-color-secondary-7) 0%, var(--mantine-color-secondary-6) 55%, var(--mantine-color-brand-7) 135%)',
-          color: '#fff',
-        }}
-      >
-        <Box
-          style={{
-            position: 'absolute',
-            top: '-30%',
-            right: '-6%',
-            width: 360,
-            height: 360,
-            borderRadius: '50%',
-            background:
-              'radial-gradient(circle, rgba(var(--gold-rgb),0.22) 0%, rgba(var(--gold-rgb),0) 68%)',
-          }}
-        />
-        <Stack gap="lg" style={{ position: 'relative', maxWidth: 680 }}>
-          <Badge
-            variant="light"
-            color="yellow"
-            size="lg"
-            radius="sm"
-            leftSection={<IconSparkles size={14} />}
-            style={{ background: 'rgba(var(--gold-rgb),0.16)', color: 'var(--gold-soft)' }}
-          >
-            AI ENABLEMENT
-          </Badge>
-          <Title order={1} fz={{ base: 32, md: 44 }} fw={600} lh={1.1}>
-            Willkommen zurueck, {displayName(user)}.
-          </Title>
-          <Text fz={{ base: 17, md: 20 }} c="rgba(255,255,255,0.78)" lh={1.5}>
-            Trainiere deine AI-Skills mit kurzen Finance-Missions und sammle Punkte.
-          </Text>
-          <Group gap="md" mt={4}>
-            <Button
-              size="md"
-              variant="white"
-              c="secondary.9"
-              fw={700}
-              rightSection={<IconArrowRight size={18} />}
-              disabled={!user?.onboarding_completed}
-              onClick={() => navigate('missions', nextMission ? { startMissionId: nextMission.id } : {})}
-            >
-              {nextMission ? 'Naechste Mission starten' : 'Missions ansehen'}
-            </Button>
-            <Button size="md" variant="default" color="gray" onClick={() => navigate('leaderboard')}>
-              Leaderboard ansehen
-            </Button>
-          </Group>
-        </Stack>
-      </Paper>
 
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg" mb="xl">
-        <StatCard label="Gesamtpunkte" value={progress.totalPoints} icon={IconBolt} color="brand" />
-        <StatCard
-          label="Abgeschlossene Missions"
-          value={progress.completedMissions.length}
-          icon={IconChecklist}
-          color="accent"
-        />
-        <StatCard label="Verfuegbare Missions" value={MISSIONS.length} icon={IconTargetArrow} color="secondary" />
-        <StatCard label="Level" value={level} icon={IconTrophy} color="brand" />
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg" mb="xl">
+        <StatCard label={t('home.stats.points')} value={progress.totalPoints} icon={IconBolt} color="brand" />
+        <StatCard label={t('home.stats.missions')} value={progress.completedMissionCount} icon={IconChecklist} color="accent" />
+        <StatCard label={t('home.stats.rank')} value={rank ? `#${rank}` : '-'} icon={IconTrophy} color="secondary" />
       </SimpleGrid>
 
-      <DashboardSection title="Next Mission">
-        <NextMissionCard
-          mission={nextMission}
-          onStart={() => user?.onboarding_completed && navigate('missions', { startMissionId: nextMission?.id })}
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+        <ActionCard
+          icon={onboardingDone ? IconTargetArrow : IconLock}
+          title={onboardingDone ? missionTitle : t('home.actions.onboardingTitle')}
+          text={onboardingDone ? missionText : t('home.actions.onboardingText')}
+          action={onboardingDone ? t('home.actions.openMissions') : t('home.locked.cta')}
+          onClick={() => onboardingDone
+            ? navigate('missions', nextMission ? { startMissionId: nextMission.id } : {})
+            : navigate('grundlagen')}
+          color={onboardingDone ? 'brand' : 'accent'}
         />
-      </DashboardSection>
+        <ActionCard
+          icon={IconBooks}
+          title={t('home.actions.libraryTitle')}
+          text={t('home.actions.libraryText')}
+          action={t('home.actions.openLibrary')}
+          onClick={() => navigate('bibliothek')}
+          color="secondary"
+        />
+      </SimpleGrid>
     </Box>
   )
 }
