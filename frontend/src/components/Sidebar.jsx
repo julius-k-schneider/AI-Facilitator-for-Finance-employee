@@ -3,7 +3,7 @@ import { IconLogout, IconSettings } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { branding } from '../branding'
 import { NAV_ITEMS } from '../nav'
-import { hasPermission } from '../auth/permissions'
+import { PERMISSIONS, hasPermission } from '../auth/permissions'
 
 function initials(user) {
   const a = user?.first_name?.[0] || user?.username?.[0] || '?'
@@ -88,7 +88,7 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
   const visibleItems = NAV_ITEMS.filter(
     (item) =>
       (!item.permission || hasPermission(user, item.permission)) &&
-      (!item.requiresOnboarding || user?.onboarding_completed),
+      (!item.requiresOnboarding || user?.onboarding_completed || hasPermission(user, PERMISSIONS.CREATE_CONTENT)),
   )
   return (
     <Box

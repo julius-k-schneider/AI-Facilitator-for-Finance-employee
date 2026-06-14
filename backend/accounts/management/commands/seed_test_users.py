@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from accounts.models import Profile
+from accounts.models import Mission, Profile
 
 
 SEED_USERS = [
@@ -47,3 +47,65 @@ class Command(BaseCommand):
             profile.progress_updated_at = timezone.now()
             profile.save()
             self.stdout.write(self.style.SUCCESS(f'Upserted {email}'))
+
+        creator = User.objects.get(username=SEED_USERS[0][0])
+        today = timezone.localdate()
+        missions = [
+                {
+                    'title_de': 'Sicherer Einsatz von AI',
+                    'title_en': 'Safe use of AI',
+                    'description_de': 'Prüfe, welche Daten in ein AI-Tool eingegeben werden dürfen.',
+                    'description_en': 'Check which data may be entered into an AI tool.',
+                    'question': {
+                        'de': 'Welche Daten dürfen in einem öffentlichen AI-Tool verwendet werden?',
+                        'en': 'Which data may be used in a public AI tool?',
+                    },
+                    'options': [
+                        {'de': 'Anonymisierte, nicht vertrauliche Daten', 'en': 'Anonymized, non-confidential data'},
+                        {'de': 'Personenbezogene Gehaltsdaten', 'en': 'Personal salary data'},
+                        {'de': 'Vertrauliche Monatsberichte', 'en': 'Confidential monthly reports'},
+                    ],
+                    'correct_index': 0,
+                    'max_points': 100,
+                },
+                {
+                    'title_de': 'Präzise Finance-Prompts',
+                    'title_en': 'Precise finance prompts',
+                    'description_de': 'Erkenne den Prompt mit dem klarsten Arbeitsauftrag.',
+                    'description_en': 'Identify the prompt with the clearest task.',
+                    'question': {
+                        'de': 'Welcher Prompt ist für eine Abweichungsanalyse am besten geeignet?',
+                        'en': 'Which prompt is best suited for a variance analysis?',
+                    },
+                    'options': [
+                        {'de': 'Analysiere die Zahlen.', 'en': 'Analyze the numbers.'},
+                        {'de': 'Vergleiche Ist und Plan, nenne die fünf größten Abweichungen und mögliche Ursachen.', 'en': 'Compare actuals and plan, list the five largest variances and possible causes.'},
+                        {'de': 'Was ist hier wichtig?', 'en': 'What is important here?'},
+                    ],
+                    'correct_index': 1,
+                    'max_points': 100,
+                },
+        ]
+        for item in missions:
+            mission = Mission.objects.filter(
+                scheduled_date=today,
+                created_by=creator,
+                title_en=item['title_en'],
+            ).first()
+            if mission is None and Mission.objects.filter(scheduled_date=today).count() >= 2:
+                continue
+            if mission is None:
+                mission = Mission(scheduled_date=today, created_by=creator)
+            mission.mission_type = Mission.TYPE_SINGLE_CHOICE
+            mission.title_de = item['title_de']
+            mission.title_en = item['title_en']
+            mission.description_de = item['description_de']
+            mission.description_en = item['description_en']
+            mission.content = {
+                'question': item['question'],
+                'options': item['options'],
+                'correct_index': item['correct_index'],
+            }
+            mission.max_points = item['max_points']
+            mission.save()
+        self.stdout.write(self.style.SUCCESS('Upserted two bilingual missions for today'))

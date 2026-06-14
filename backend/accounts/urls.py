@@ -15,5 +15,8 @@ urlpatterns = [
     path('onboarding/complete/', views.onboarding_complete_view, name='onboarding_complete'),
     path('progress/', views.progress_view, name='progress'),
     path('progress/complete/', views.complete_mission_view, name='complete_mission'),
+    path('missions/today/', views.daily_missions_view, name='daily_missions'),
+    path('missions/schedule/', views.mission_schedule_view, name='mission_schedule'),
+    path('missions/<int:mission_id>/', views.mission_detail_view, name='mission_detail'),
     path('leaderboard/', views.leaderboard_view, name='leaderboard'),
 ]

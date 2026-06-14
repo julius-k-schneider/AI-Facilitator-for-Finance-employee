@@ -68,7 +68,7 @@ function ActionCard({ icon: Icon, title, text, action, onClick, color = 'brand',
 
 export default function Home({ user, navigate }) {
   const { t } = useTranslation()
-  const { progress, nextMission } = useUserProgress(user)
+  const { progress } = useUserProgress(user)
   const [rank, setRank] = useState(null)
   const onboardingDone = Boolean(user?.onboarding_completed)
   const currentUserId = getUserId(user)
@@ -93,9 +93,6 @@ export default function Home({ user, navigate }) {
       window.removeEventListener(PROGRESS_EVENT, loadRank)
     }
   }, [currentUserId])
-
-  const missionTitle = nextMission?.title || t('home.actions.missionsCompleteTitle')
-  const missionText = nextMission?.description || t('home.actions.missionsCompleteText')
 
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={1180}>
@@ -133,12 +130,10 @@ export default function Home({ user, navigate }) {
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
         <ActionCard
           icon={onboardingDone ? IconTargetArrow : IconLock}
-          title={onboardingDone ? missionTitle : t('home.actions.onboardingTitle')}
-          text={onboardingDone ? missionText : t('home.actions.onboardingText')}
+          title={onboardingDone ? t('home.actions.dailyMissionsTitle') : t('home.actions.onboardingTitle')}
+          text={onboardingDone ? t('home.actions.dailyMissionsText') : t('home.actions.onboardingText')}
           action={onboardingDone ? t('home.actions.openMissions') : t('home.locked.cta')}
-          onClick={() => onboardingDone
-            ? navigate('missions', nextMission ? { startMissionId: nextMission.id } : {})
-            : navigate('grundlagen')}
+          onClick={() => onboardingDone ? navigate('missions') : navigate('grundlagen')}
           color={onboardingDone ? 'brand' : 'accent'}
         />
         <ActionCard

@@ -1,5 +1,3 @@
-import { MISSIONS } from '../data/missions'
-
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 export const PROGRESS_EVENT = 'ai-facilitator-progress-updated'
 
@@ -41,20 +39,6 @@ export function getUserId(user) {
 export async function getUserProgress() {
   const data = await request('/api/auth/progress/')
   return normalizeProgress(data.progress)
-}
-
-export async function completeMission(_userId, missionId, score) {
-  const data = await request('/api/auth/progress/complete/', {
-    method: 'POST',
-    body: JSON.stringify({ mission_id: missionId, score }),
-  })
-  const progress = normalizeProgress(data.progress)
-  window.dispatchEvent(new CustomEvent(PROGRESS_EVENT, { detail: progress }))
-  return progress
-}
-
-export function getNextMission(progress) {
-  return MISSIONS.find((mission) => !progress.completedMissions.includes(mission.id)) || null
 }
 
 export function getLevel(totalPoints) {

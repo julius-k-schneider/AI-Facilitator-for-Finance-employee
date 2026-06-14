@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   EMPTY_PROGRESS,
   PROGRESS_EVENT,
-  getNextMission,
   getUserId,
   getUserProgress,
 } from '../services/progressService'
@@ -45,5 +44,5 @@ export function useUserProgress(user) {
     }
   }, [userId])
 
-  return { userId, progress, nextMission: getNextMission(progress), loading, error }
+  return { userId, progress, loading, error }
 }
