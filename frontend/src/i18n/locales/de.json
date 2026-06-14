@@ -67,9 +67,11 @@
     },
     "stats": {
       "points": "Punkte",
+      "weeklyPoints": "Wochenpunkte",
       "missions": "Abgeschlossene Missionen",
       "streak": "Tagesstreak",
-      "rank": "Team-Rang"
+      "rank": "Gesamtrang",
+      "weeklyRank": "Wochenrang"
     },
     "actions": {
       "onboardingTitle": "Grundlagen abschließen",
@@ -96,6 +98,10 @@
     "completedButton": "Abgeschlossen",
     "back": "Zurück zu den Missionen",
     "submit": "Antwort abgeben",
+    "streak": {
+      "current": "Aktuelle Serie",
+      "best": "Bestwert: {{count}}"
+    },
     "status": { "open": "Offen", "completed": "Abgeschlossen" },
     "types": {
       "singleChoice": "Single Choice",
@@ -223,11 +229,23 @@
     "leaderboard": {
       "title": "Rangliste",
       "description": "Vergleiche deine Punkte mit deinen Kollegen",
+      "allTime": "Gesamtwertung",
+      "weekly": "Wochenwertung",
+      "history": "Vergangene Wochen",
+      "currentWeek": "Aktuelle Woche",
+      "archivedWeek": "Archivierte Woche",
+      "historyTitle": "Vergangene Wochenranglisten",
+      "historyText": "Wähle eine abgeschlossene Woche aus, um den damaligen Endstand anzusehen.",
+      "selectWeek": "Kalenderwoche",
+      "selectWeekPlaceholder": "Woche auswählen",
+      "noHistory": "Noch keine abgeschlossenen Wochen gespeichert.",
+      "loadingHistory": "Wochenrangliste wird geladen...",
+      "historyError": "Die historische Rangliste konnte nicht geladen werden.",
       "stats": {
         "rank": "Dein Rang",
         "points": "Deine Punkte",
         "missions": "Abgeschlossene Missionen",
-        "streak": "Aktuelle Streak"
+        "streak": "Beste Serie"
       },
       "days": "Tage",
       "topPerformers": "Top Performer",
@@ -238,7 +256,7 @@
       "rank": "Rang",
       "employee": "Mitarbeiter",
       "points": "Punkte",
-      "streak": "Streak",
+      "streak": "Beste Serie",
       "challenges": "Challenges",
       "missions": "Missionen",
       "level": "Level",

@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import IntegrityError, transaction
@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import Mission, MissionAttempt, Profile
+from .models import Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
 from .services.ai_mission_generator import (
     AiMissionGenerationError,
     generate_next_week,
@@ -62,6 +62,102 @@ def level_for_points(points):
     return 'Starter'
 
 
+def streak_payload(user):
+    today = timezone.localdate()
+    missions_by_date = {}
+    for mission_id, scheduled_date in Mission.objects.filter(
+        status=Mission.STATUS_PUBLISHED,
+        scheduled_date__lte=today,
+    ).values_list('id', 'scheduled_date'):
+        missions_by_date.setdefault(scheduled_date, set()).add(mission_id)
+
+    attempted_ids = set(
+        MissionAttempt.objects.filter(user=user).values_list('mission_id', flat=True)
+    )
+    completed_dates = {
+        scheduled_date
+        for scheduled_date, mission_ids in missions_by_date.items()
+        if len(mission_ids) >= 2 and mission_ids.issubset(attempted_ids)
+    }
+
+    maximum = 0
+    running = 0
+    previous = None
+    for completed_date in sorted(completed_dates):
+        running = running + 1 if previous and completed_date == previous + timedelta(days=1) else 1
+        maximum = max(maximum, running)
+        previous = completed_date
+
+    anchor = today if today in completed_dates else today - timedelta(days=1)
+    current = 0
+    while anchor in completed_dates:
+        current += 1
+        anchor -= timedelta(days=1)
+    return {'current_streak': current, 'max_streak': maximum}
+
+
+def week_bounds(reference_date=None):
+    day = reference_date or timezone.localdate()
+    start = day - timedelta(days=day.weekday())
+    return start, start + timedelta(days=6)
+
+
+def user_identity(user):
+    return {
+        'user_id': user.id,
+        'name': f'{user.first_name} {user.last_name}'.strip() or user.username,
+        'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+    }
+
+
+def rank_entries(entries):
+    entries.sort(key=lambda entry: (-entry['total_points'], -entry['completed_missions'], entry['name'].lower()))
+    for index, entry in enumerate(entries, start=1):
+        entry['rank'] = index
+    return entries
+
+
+def weekly_leaderboard_entries(week_start, week_end):
+    users = User.objects.order_by('first_name', 'last_name', 'username')
+    entries = []
+    for user in users:
+        attempts = MissionAttempt.objects.filter(
+            user=user,
+            completed_at__date__range=(week_start, week_end),
+        )
+        points = sum(attempts.values_list('score', flat=True))
+        completed = attempts.count()
+        entries.append({
+            **user_identity(user),
+            'total_points': points,
+            'completed_missions': completed,
+            'level': level_for_points(points),
+        })
+    return rank_entries(entries)
+
+
+def archive_completed_weeks():
+    current_week_start, _ = week_bounds()
+    earliest_attempt = MissionAttempt.objects.order_by('completed_at').first()
+    if earliest_attempt is None:
+        return
+    attempt_date = timezone.localtime(earliest_attempt.completed_at).date()
+    candidate_start, _ = week_bounds(attempt_date)
+    while candidate_start < current_week_start:
+        candidate_end = candidate_start + timedelta(days=6)
+        if MissionAttempt.objects.filter(completed_at__date__range=(candidate_start, candidate_end)).exists():
+            WeeklyLeaderboardSnapshot.objects.get_or_create(
+                week_start=candidate_start,
+                defaults={
+                    'week_end': candidate_end,
+                    'entries': weekly_leaderboard_entries(candidate_start, candidate_end),
+                },
+            )
+        candidate_start += timedelta(days=7)
+
+
 def progress_payload(profile):
     scores = profile.mission_scores or {}
     attempts = MissionAttempt.objects.filter(user=profile.user)
@@ -69,12 +165,14 @@ def progress_payload(profile):
     completed_attempts = attempts.count()
     legacy_completed = sum(1 for score in scores.values() if int(score) > 0)
     total_points = profile.total_points + attempt_points
+    streaks = streak_payload(profile.user)
     return {
         'mission_scores': scores,
         'completed_missions': [mission_id for mission_id, score in scores.items() if int(score) > 0],
         'completed_mission_count': legacy_completed + completed_attempts,
         'total_points': total_points,
         'level': level_for_points(total_points),
+        **streaks,
         'updated_at': profile.progress_updated_at.isoformat() if profile.progress_updated_at else None,
     }
 
@@ -688,24 +786,45 @@ def leaderboard_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'authentication required'}, status=401)
 
+    archive_completed_weeks()
     entries = []
     users = User.objects.select_related('profile').order_by('first_name', 'last_name', 'username')
     for user in users:
         profile = ensure_profile(user)
-        name = f'{user.first_name} {user.last_name}'.strip() or user.username
         progress = progress_payload(profile)
         entries.append({
-            'user_id': user.id,
-            'name': name,
-            'email': user.email,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
+            **user_identity(user),
             'total_points': progress['total_points'],
             'completed_missions': progress['completed_mission_count'],
             'level': progress['level'],
+            'current_streak': progress['current_streak'],
+            'max_streak': progress['max_streak'],
         })
 
-    entries.sort(key=lambda entry: (-entry['total_points'], -entry['completed_missions'], entry['name'].lower()))
-    for index, entry in enumerate(entries, start=1):
-        entry['rank'] = index
-    return JsonResponse({'entries': entries})
+    current_week_start, current_week_end = week_bounds()
+    history = list(WeeklyLeaderboardSnapshot.objects.values('week_start', 'week_end'))
+    return JsonResponse({
+        'entries': rank_entries(entries),
+        'weekly_entries': weekly_leaderboard_entries(current_week_start, current_week_end),
+        'week_start': current_week_start.isoformat(),
+        'week_end': current_week_end.isoformat(),
+        'history': [
+            {'week_start': item['week_start'].isoformat(), 'week_end': item['week_end'].isoformat()}
+            for item in history
+        ],
+    })
+
+
+@require_http_methods(['GET'])
+def leaderboard_history_view(request, week_start):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    parsed_start = parse_iso_date(week_start)
+    snapshot = WeeklyLeaderboardSnapshot.objects.filter(week_start=parsed_start).first()
+    if snapshot is None:
+        return JsonResponse({'error': 'leaderboard snapshot not found'}, status=404)
+    return JsonResponse({
+        'week_start': snapshot.week_start.isoformat(),
+        'week_end': snapshot.week_end.isoformat(),
+        'entries': snapshot.entries,
+    })

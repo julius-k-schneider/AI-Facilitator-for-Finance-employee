@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Mission, MissionAttempt, Profile
+from .models import Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
 
 
 @admin.register(Profile)
@@ -23,3 +23,9 @@ class MissionAttemptAdmin(admin.ModelAdmin):
     list_display = ('user', 'mission', 'score', 'completed_at')
     list_filter = ('mission__scheduled_date',)
     readonly_fields = ('completed_at',)
+
+
+@admin.register(WeeklyLeaderboardSnapshot)
+class WeeklyLeaderboardSnapshotAdmin(admin.ModelAdmin):
+    list_display = ('week_start', 'week_end', 'created_at')
+    readonly_fields = ('created_at',)

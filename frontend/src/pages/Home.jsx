@@ -15,7 +15,9 @@ import {
   IconArrowRight,
   IconBolt,
   IconBooks,
+  IconCalendarStats,
   IconChecklist,
+  IconFlame,
   IconLock,
   IconTargetArrow,
   IconTrophy,
@@ -69,7 +71,7 @@ function ActionCard({ icon: Icon, title, text, action, onClick, color = 'brand',
 export default function Home({ user, navigate }) {
   const { t } = useTranslation()
   const { progress } = useUserProgress(user)
-  const [rank, setRank] = useState(null)
+  const [leaderboardStats, setLeaderboardStats] = useState({ totalRank: null, weeklyRank: null, weeklyPoints: 0 })
   const onboardingDone = Boolean(user?.onboarding_completed)
   const currentUserId = getUserId(user)
 
@@ -80,10 +82,15 @@ export default function Home({ user, navigate }) {
         .then((response) => response.ok ? response.json() : Promise.reject())
         .then((data) => {
           if (!active) return
-          const entry = (data.entries || []).find((item) => String(item.user_id) === currentUserId)
-          setRank(entry?.rank ?? null)
+          const totalEntry = (data.entries || []).find((item) => String(item.user_id) === currentUserId)
+          const weeklyEntry = (data.weekly_entries || []).find((item) => String(item.user_id) === currentUserId)
+          setLeaderboardStats({
+            totalRank: totalEntry?.rank ?? null,
+            weeklyRank: weeklyEntry?.rank ?? null,
+            weeklyPoints: weeklyEntry?.total_points ?? 0,
+          })
         })
-        .catch(() => active && setRank(null))
+        .catch(() => active && setLeaderboardStats({ totalRank: null, weeklyRank: null, weeklyPoints: 0 }))
     }
 
     loadRank()
@@ -121,10 +128,13 @@ export default function Home({ user, navigate }) {
         </Paper>
       )}
 
-      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg" mb="xl">
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 6 }} spacing="lg" mb="xl">
         <StatCard label={t('home.stats.points')} value={progress.totalPoints} icon={IconBolt} color="brand" />
+        <StatCard label={t('home.stats.weeklyPoints')} value={leaderboardStats.weeklyPoints} icon={IconCalendarStats} color="brand" />
         <StatCard label={t('home.stats.missions')} value={progress.completedMissionCount} icon={IconChecklist} color="accent" />
-        <StatCard label={t('home.stats.rank')} value={rank ? `#${rank}` : '-'} icon={IconTrophy} color="secondary" />
+        <StatCard label={t('home.stats.streak')} value={progress.currentStreak} icon={IconFlame} color="orange" />
+        <StatCard label={t('home.stats.rank')} value={leaderboardStats.totalRank ? `#${leaderboardStats.totalRank}` : '-'} icon={IconTrophy} color="secondary" />
+        <StatCard label={t('home.stats.weeklyRank')} value={leaderboardStats.weeklyRank ? `#${leaderboardStats.weeklyRank}` : '-'} icon={IconTrophy} color="accent" />
       </SimpleGrid>
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">

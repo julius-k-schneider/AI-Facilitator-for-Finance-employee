@@ -147,9 +147,14 @@
 .leaderboard-table__header,
 .leaderboard-row {
   display: grid;
-  grid-template-columns: 64px minmax(220px, 1.5fr) minmax(90px, 0.7fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr);
+  grid-template-columns: 64px minmax(220px, 1.5fr) minmax(90px, 0.7fr) minmax(120px, 0.8fr) minmax(100px, 0.7fr) minmax(120px, 0.8fr);
   align-items: center;
   column-gap: 16px;
+}
+
+.leaderboard-table__header--weekly,
+.leaderboard-table__header--weekly + .leaderboard-table__body .leaderboard-row {
+  grid-template-columns: 64px minmax(220px, 1.5fr) minmax(90px, 0.7fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr);
 }
 
 .leaderboard-table__header {

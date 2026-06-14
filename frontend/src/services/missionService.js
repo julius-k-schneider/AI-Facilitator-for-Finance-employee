@@ -29,6 +29,8 @@ export async function submitMission(missionId, answer) {
     missionScores: progress.mission_scores || {},
     completedMissions: progress.completed_missions || [],
     completedMissionCount: progress.completed_mission_count || 0,
+    currentStreak: progress.current_streak || 0,
+    maxStreak: progress.max_streak || 0,
     totalPoints: progress.total_points || 0,
     level: progress.level || 'Starter',
     updatedAt: progress.updated_at || null,

@@ -6,6 +6,8 @@ export const EMPTY_PROGRESS = {
   completedMissions: [],
   totalPoints: 0,
   completedMissionCount: 0,
+  currentStreak: 0,
+  maxStreak: 0,
   level: 'Starter',
   updatedAt: null,
 }
@@ -16,6 +18,8 @@ function normalizeProgress(progress = {}) {
     completedMissions: progress.completed_missions || progress.completedMissions || [],
     totalPoints: progress.total_points ?? progress.totalPoints ?? 0,
     completedMissionCount: progress.completed_mission_count ?? progress.completedMissionCount ?? 0,
+    currentStreak: progress.current_streak ?? progress.currentStreak ?? 0,
+    maxStreak: progress.max_streak ?? progress.maxStreak ?? 0,
     level: progress.level || 'Starter',
     updatedAt: progress.updated_at || progress.updatedAt || null,
   }

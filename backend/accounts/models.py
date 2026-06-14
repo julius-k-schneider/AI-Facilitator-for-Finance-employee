@@ -120,3 +120,16 @@ class MissionAttempt(models.Model):
 
     def __str__(self):
         return f'{self.user} - {self.mission} ({self.score})'
+
+
+class WeeklyLeaderboardSnapshot(models.Model):
+    week_start = models.DateField(unique=True)
+    week_end = models.DateField()
+    entries = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-week_start',)
+
+    def __str__(self):
+        return f'{self.week_start} - {self.week_end}'

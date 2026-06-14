@@ -6,9 +6,10 @@ import {
 import {
   IconArrowLeft, IconArrowRight, IconCalendar, IconCheck, IconChevronLeft,
   IconChevronRight, IconCircleCheck, IconEdit, IconEye, IconPlus, IconRefresh, IconSparkles,
-  IconTargetArrow, IconTrash, IconTrophy, IconX,
+  IconFlame, IconTargetArrow, IconTrash, IconTrophy, IconX,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
+import { useUserProgress } from '../hooks/useUserProgress'
 import {
   approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, getDailyMissions,
   getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, submitMission, updateMission,
@@ -485,8 +486,9 @@ function MissionReview({ enabled, onPublished }) {
   )
 }
 
-export default function Missions() {
+export default function Missions({ user }) {
   const { t, i18n } = useTranslation()
+  const { progress } = useUserProgress(user)
   const [missions, setMissions] = useState([])
   const [canCreate, setCanCreate] = useState(false)
   const [activeMission, setActiveMission] = useState(null)
@@ -519,7 +521,15 @@ export default function Missions() {
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Group justify="space-between" align="flex-start" mb="xl">
         <Box><Badge variant="light" color="brand" mb="sm">{t('missions.badge')}</Badge><Title order={1} fz={{ base: 28, md: 34 }}>{t('missions.title')}</Title><Text c="dimmed" fz="lg" mt={4}>{t('missions.description')}</Text></Box>
-        {canCreate && <Button color="brand" leftSection={<IconPlus size={18} />} onClick={() => setCreatorOpen(true)}>{t('missions.creator.button')}</Button>}
+        <Group gap="sm">
+          <Paper withBorder radius="md" px="md" py="xs" bg="white">
+            <Group gap="xs" wrap="nowrap">
+              <ThemeIcon color="orange" variant="light" size="sm"><IconFlame size={15} /></ThemeIcon>
+              <Box><Text fz="xs" c="dimmed">{t('missions.streak.current')}</Text><Text fw={700}>{progress.currentStreak} · {t('missions.streak.best', { count: progress.maxStreak })}</Text></Box>
+            </Group>
+          </Paper>
+          {canCreate && <Button color="brand" leftSection={<IconPlus size={18} />} onClick={() => setCreatorOpen(true)}>{t('missions.creator.button')}</Button>}
+        </Group>
       </Group>
       {loading ? <Text c="dimmed">{t('missions.loading')}</Text> : error ? <Alert color="red">{error}</Alert> : missions.length === 0 ? <Paper withBorder radius="lg" p={48} bg="white"><Stack align="center"><ThemeIcon size={58} radius="xl" variant="light"><IconCalendar size={28} /></ThemeIcon><Text fw={700}>{t('missions.emptyTitle')}</Text><Text c="dimmed" ta="center">{t('missions.emptyText')}</Text></Stack></Paper> : <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">{missions.map((mission) => <MissionCard key={mission.id} mission={mission} onOpen={setActiveMission} />)}</SimpleGrid>}
       <MissionReview enabled={canCreate} onPublished={() => load(false)} />

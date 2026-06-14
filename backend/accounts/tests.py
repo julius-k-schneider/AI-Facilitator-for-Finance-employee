@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from .models import Mission, MissionAttempt, Profile
+from .models import Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
 from .services.ai_mission_generator import (
     AiMissionGenerationError,
     SYSTEM_PROMPT,
@@ -317,6 +317,89 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         entry = next(item for item in response.json()['entries'] if item['email'] == 'leader@example.com')
         self.assertEqual(entry['total_points'], 130)
+
+    def test_streak_tracks_complete_days_grace_period_and_personal_best(self):
+        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('player@example.com')
+        today = timezone.localdate()
+
+        def create_day(day, completed):
+            missions = [self.create_mission(creator, day), self.create_mission(creator, day)]
+            if completed:
+                for mission in missions:
+                    MissionAttempt.objects.create(
+                        user=player, mission=mission, answer={'selected_indices': [0]}, score=mission.max_points,
+                    )
+            return missions
+
+        create_day(today - timedelta(days=4), True)
+        create_day(today - timedelta(days=3), True)
+        create_day(today - timedelta(days=2), False)
+        create_day(today - timedelta(days=1), True)
+        today_missions = create_day(today, False)
+        self.client.force_login(player)
+
+        progress = self.client.get('/api/auth/progress/', secure=True).json()['progress']
+        self.assertEqual(progress['current_streak'], 1)
+        self.assertEqual(progress['max_streak'], 2)
+
+        for mission in today_missions:
+            MissionAttempt.objects.create(
+                user=player, mission=mission, answer={'selected_indices': [0]}, score=mission.max_points,
+            )
+        progress = self.client.get('/api/auth/progress/', secure=True).json()['progress']
+        self.assertEqual(progress['current_streak'], 2)
+        self.assertEqual(progress['max_streak'], 2)
+
+        leaderboard = self.client.get('/api/auth/leaderboard/', secure=True).json()['entries']
+        entry = next(item for item in leaderboard if item['email'] == 'player@example.com')
+        self.assertEqual(entry['current_streak'], 2)
+        self.assertEqual(entry['max_streak'], 2)
+
+    def test_weekly_leaderboard_only_counts_attempts_from_current_week(self):
+        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('player@example.com')
+        today = timezone.localdate()
+        week_start = today - timedelta(days=today.weekday())
+        current = self.create_mission(creator, today, points=40)
+        previous = self.create_mission(creator, week_start - timedelta(days=1), points=90)
+        current_attempt = MissionAttempt.objects.create(
+            user=player, mission=current, answer={'selected_indices': [0]}, score=40,
+        )
+        previous_attempt = MissionAttempt.objects.create(
+            user=player, mission=previous, answer={'selected_indices': [0]}, score=90,
+        )
+        MissionAttempt.objects.filter(id=current_attempt.id).update(completed_at=timezone.now())
+        MissionAttempt.objects.filter(id=previous_attempt.id).update(
+            completed_at=timezone.now() - timedelta(days=today.weekday() + 1),
+        )
+        self.client.force_login(player)
+
+        data = self.client.get('/api/auth/leaderboard/', secure=True).json()
+        weekly = next(item for item in data['weekly_entries'] if item['email'] == 'player@example.com')
+        total = next(item for item in data['entries'] if item['email'] == 'player@example.com')
+        self.assertEqual(weekly['total_points'], 40)
+        self.assertEqual(weekly['completed_missions'], 1)
+        self.assertEqual(total['total_points'], 130)
+
+    def test_historical_weekly_leaderboard_can_be_retrieved(self):
+        user = self.create_user('player@example.com')
+        today = timezone.localdate()
+        current_week_start = today - timedelta(days=today.weekday())
+        week_start = current_week_start - timedelta(days=7)
+        entries = [{
+            'rank': 1, 'user_id': user.id, 'name': 'Player', 'email': user.email,
+            'first_name': '', 'last_name': '', 'total_points': 80,
+            'completed_missions': 4, 'level': 'Starter',
+        }]
+        WeeklyLeaderboardSnapshot.objects.create(
+            week_start=week_start, week_end=week_start + timedelta(days=6), entries=entries,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(f'/api/auth/leaderboard/history/{week_start.isoformat()}/', secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['entries'][0]['total_points'], 80)
 
 
 class AiMissionServiceTests(TestCase):

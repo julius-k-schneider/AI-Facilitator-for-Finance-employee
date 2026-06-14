@@ -26,4 +26,5 @@ urlpatterns = [
     path('missions/<int:mission_id>/reject/', views.reject_mission_view, name='reject_mission'),
     path('missions/<int:mission_id>/', views.mission_detail_view, name='mission_detail'),
     path('leaderboard/', views.leaderboard_view, name='leaderboard'),
+    path('leaderboard/history/<str:week_start>/', views.leaderboard_history_view, name='leaderboard_history'),
 ]

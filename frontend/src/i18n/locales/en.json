@@ -67,9 +67,11 @@
     },
     "stats": {
       "points": "Points",
+      "weeklyPoints": "Weekly points",
       "missions": "Completed missions",
       "streak": "Daily streak",
-      "rank": "Team rank"
+      "rank": "Overall rank",
+      "weeklyRank": "Weekly rank"
     },
     "actions": {
       "onboardingTitle": "Complete the basics",
@@ -96,6 +98,10 @@
     "completedButton": "Completed",
     "back": "Back to missions",
     "submit": "Submit answer",
+    "streak": {
+      "current": "Current streak",
+      "best": "Best: {{count}}"
+    },
     "status": { "open": "Open", "completed": "Completed" },
     "types": {
       "singleChoice": "Single choice",
@@ -223,11 +229,23 @@
     "leaderboard": {
       "title": "Leaderboard",
       "description": "Compare your points with your colleagues",
+      "allTime": "All-time ranking",
+      "weekly": "Weekly ranking",
+      "history": "Previous weeks",
+      "currentWeek": "Current week",
+      "archivedWeek": "Archived week",
+      "historyTitle": "Previous weekly leaderboards",
+      "historyText": "Select a completed week to view its final standings.",
+      "selectWeek": "Calendar week",
+      "selectWeekPlaceholder": "Select a week",
+      "noHistory": "No completed weeks have been archived yet.",
+      "loadingHistory": "Loading weekly leaderboard...",
+      "historyError": "The historical leaderboard could not be loaded.",
       "stats": {
         "rank": "Your rank",
         "points": "Your points",
         "missions": "Completed missions",
-        "streak": "Current streak"
+        "streak": "Best streak"
       },
       "days": "days",
       "topPerformers": "Top performers",
@@ -238,7 +256,7 @@
       "rank": "Rank",
       "employee": "Employee",
       "points": "Points",
-      "streak": "Streak",
+      "streak": "Best streak",
       "challenges": "Challenges",
       "missions": "Missions",
       "level": "Level",
