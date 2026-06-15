@@ -241,6 +241,27 @@ class AccountsApiTests(TestCase):
         payload['title_de'] = 'Titel 3'
         self.assertEqual(self.client.post('/api/auth/missions/schedule/', payload, content_type='application/json', secure=True).status_code, 409)
 
+    @patch('accounts.views.send_published_mission_email')
+    def test_published_mission_creation_sends_email_reminder(self, send_email_mock):
+        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
+        self.create_user('player@example.com')
+        payload = {
+            'type': 'single_choice', 'scheduled_date': timezone.localdate().isoformat(),
+            'title_de': 'Titel', 'title_en': 'Title',
+            'description_de': 'Beschreibung', 'description_en': 'Description',
+            'question_de': 'Frage?', 'question_en': 'Question?',
+            'options': [{'de': 'Ja', 'en': 'Yes'}, {'de': 'Nein', 'en': 'No'}],
+            'correct_index': 0, 'max_points': 50,
+        }
+        self.client.force_login(creator)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post('/api/auth/missions/schedule/', payload, content_type='application/json', secure=True)
+
+        self.assertEqual(response.status_code, 201)
+        send_email_mock.assert_called_once()
+        self.assertEqual(send_email_mock.call_args.args[0].title_de, 'Titel')
+
     def test_creator_can_create_supported_types_and_edit_from_calendar(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         self.client.force_login(creator)
@@ -441,6 +462,21 @@ class AccountsApiTests(TestCase):
         self.assertEqual(approved.reviewed_by, creator)
         self.assertEqual(rejected.status, Mission.STATUS_REJECTED)
 
+    @patch('accounts.views.send_published_mission_email')
+    def test_approving_review_mission_sends_email_reminder(self, send_email_mock):
+        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
+        mission = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
+        mission.status = Mission.STATUS_REVIEW
+        mission.save(update_fields=['status'])
+        self.client.force_login(creator)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(f'/api/auth/missions/{mission.id}/approve/', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        send_email_mock.assert_called_once()
+        self.assertEqual(send_email_mock.call_args.args[0].id, mission.id)
+
     def test_creator_can_approve_and_reject_all_review_missions(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         first = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
@@ -464,6 +500,21 @@ class AccountsApiTests(TestCase):
         self.assertEqual(rejected.json()['rejected_count'], 1)
         third.refresh_from_db()
         self.assertEqual(third.status, Mission.STATUS_REJECTED)
+
+    @patch('accounts.views.send_published_mission_emails')
+    def test_approve_all_review_missions_sends_email_reminders(self, send_emails_mock):
+        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
+        first = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
+        second = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
+        Mission.objects.filter(id__in=[first.id, second.id]).update(status=Mission.STATUS_REVIEW)
+        self.client.force_login(creator)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post('/api/auth/missions/review/approve-all/', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        send_emails_mock.assert_called_once()
+        self.assertEqual({mission.id for mission in send_emails_mock.call_args.args[0]}, {first.id, second.id})
 
     def test_review_list_and_bulk_action_are_limited_to_selected_week(self):
         creator = self.create_user('creator-filter@example.com', Profile.ROLE_CONTENT_CREATOR)

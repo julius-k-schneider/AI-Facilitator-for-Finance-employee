@@ -18,6 +18,7 @@ from .services.ai_mission_generator import (
     regenerate_review_mission,
 )
 from .services.ai_chat_challenge import chat_reply, evaluate_final_answers, generate_chat_challenge
+from .services.email_notifications import send_published_mission_email, send_published_mission_emails
 
 
 User = get_user_model()
@@ -795,6 +796,7 @@ def mission_schedule_view(request):
             created_by=request.user,
             **values,
         )
+        transaction.on_commit(lambda: send_published_mission_email(mission))
     return JsonResponse({'mission': mission_payload(mission, request.user)}, status=201)
 
 
@@ -878,6 +880,11 @@ def approve_all_review_missions_view(request):
             reviewed_by=request.user,
             reviewed_at=reviewed_at,
         )
+        for mission in review_missions:
+            mission.status = Mission.STATUS_PUBLISHED
+            mission.reviewed_by = request.user
+            mission.reviewed_at = reviewed_at
+        transaction.on_commit(lambda: send_published_mission_emails(review_missions))
     return JsonResponse({'approved_count': len(review_missions)})
 
 
@@ -1087,6 +1094,7 @@ def approve_mission_view(request, mission_id):
         mission.reviewed_by = request.user
         mission.reviewed_at = timezone.now()
         mission.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+        transaction.on_commit(lambda: send_published_mission_email(mission))
     return JsonResponse({'mission': mission_schedule_payload(mission, request.user)})
 
 
