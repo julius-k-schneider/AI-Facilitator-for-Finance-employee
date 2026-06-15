@@ -98,6 +98,10 @@
     "completedButton": "Abgeschlossen",
     "back": "Zurück zu den Missionen",
     "submit": "Antwort abgeben",
+    "rankingInstruction": "Sortiere die Prompts vom schlechtesten zum besten.",
+    "moveUp": "Nach oben verschieben",
+    "moveDown": "Nach unten verschieben",
+    "trafficLight": { "green": "Grün - erlaubt", "yellow": "Gelb - eingeschränkt", "red": "Rot - nicht erlaubt" },
     "streak": {
       "current": "Aktuelle Serie",
       "best": "Bestwert: {{count}}"
@@ -108,10 +112,13 @@
       "multipleChoice": "Multiple Choice",
       "complianceDecision": "Compliance-Entscheidung",
       "promptSelection": "Prompt-Auswahl"
+      ,"promptRanking": "Prompt Ranking",
+      "complianceTrafficLight": "Compliance-Ampel"
     },
     "result": {
       "correct": "Richtig! Du erhältst {{points}} Punkte.",
-      "wrong": "Die Antwort war leider nicht richtig. Die Mission ist damit abgeschlossen."
+      "wrong": "Die Antwort war leider nicht richtig. Die Mission ist damit abgeschlossen.",
+      "partial": "{{correct}} von {{total}} Aussagen waren richtig. Du erhältst {{points}} Punkte."
     },
     "creator": {
       "button": "Missionen verwalten",
@@ -132,6 +139,9 @@
       "answers": "Antwortmöglichkeiten",
       "addAnswer": "Antwort hinzufügen",
       "correctAnswer": "Richtige Antwort",
+      "statements": "Compliance-Aussagen",
+      "correctColor": "Richtige Ampelfarbe",
+      "rankingSolution": "Korrekte Reihenfolge: schlechtester bis bester Prompt",
       "points": "Punkte",
       "save": "Mission planen",
       "update": "Änderungen speichern",

@@ -6,7 +6,7 @@ import {
 import {
   IconArrowLeft, IconArrowRight, IconCalendar, IconCheck, IconChevronLeft,
   IconChevronRight, IconCircleCheck, IconEdit, IconEye, IconPlus, IconRefresh, IconSparkles,
-  IconFlame, IconTargetArrow, IconTrash, IconTrophy, IconX,
+  IconArrowDown, IconArrowUp, IconFlame, IconTargetArrow, IconTrash, IconTrophy, IconX,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
@@ -22,7 +22,11 @@ const createEmptyForm = () => ({
   description_de: '', description_en: '', question_de: '', question_en: '',
   feedback_de: '', feedback_en: '',
   max_points: 100, correct_indices: [0],
+  correct_order: [0, 1, 2],
   options: [{ de: '', en: '' }, { de: '', en: '' }],
+  statements: Array.from({ length: 3 }, () => ({
+    de: '', en: '', correct_color: 'green', feedback_de: '', feedback_en: '',
+  })),
 })
 
 function isoDate(date) {
@@ -42,6 +46,8 @@ function missionTypeLabel(t, type) {
     multiple_choice: 'multipleChoice',
     compliance_decision: 'complianceDecision',
     prompt_selection: 'promptSelection',
+    prompt_ranking: 'promptRanking',
+    compliance_traffic_light: 'complianceTrafficLight',
   }
   return t(`missions.types.${labels[type] || 'singleChoice'}`)
 }
@@ -60,8 +66,33 @@ function missionToForm(mission) {
     feedback_en: mission.feedback_en || '',
     max_points: mission.max_points,
     correct_indices: mission.correct_indices?.length ? mission.correct_indices : [0],
+    correct_order: mission.correct_order?.length ? mission.correct_order : mission.options.map((_, index) => index),
     options: mission.options.map((option) => ({ ...option })),
+    statements: mission.statements?.length ? mission.statements.map((statement) => ({ ...statement })) : createEmptyForm().statements,
   }
+}
+
+function moveItem(items, index, direction) {
+  const target = index + direction
+  if (target < 0 || target >= items.length) return items
+  const next = [...items]
+  ;[next[index], next[target]] = [next[target], next[index]]
+  return next
+}
+
+function MissionSolutionContent({ mission, language, showSolution = true }) {
+  const { t } = useTranslation()
+  if (mission.type === 'compliance_traffic_light') {
+    return <Stack gap="xs">{mission.statements.map((statement, index) => <Paper key={index} withBorder radius="md" p="sm">
+      <Text fz="sm" fw={600}>{index + 1}. {statement[language]}</Text>
+      {showSolution && <><Badge mt="xs" color={statement.correct_color === 'yellow' ? 'orange' : statement.correct_color}>{t(`missions.trafficLight.${statement.correct_color}`)}</Badge><Text fz="sm" mt="xs">{statement[`feedback_${language}`]}</Text></>}
+    </Paper>)}</Stack>
+  }
+  if (mission.type === 'prompt_ranking') {
+    const order = showSolution ? mission.correct_order : mission.options.map((_, index) => index)
+    return <Stack gap={4}>{order.map((optionIndex, position) => <Text key={optionIndex} fz="sm" c={showSolution ? 'green.8' : undefined} fw={showSolution ? 700 : 400}>{position + 1}. {mission.options[optionIndex]?.[language]}</Text>)}</Stack>
+  }
+  return <Stack gap={4}>{mission.options.map((option, index) => <Text key={index} fz="sm" c={showSolution && mission.correct_indices.includes(index) ? 'green.8' : undefined} fw={showSolution && mission.correct_indices.includes(index) ? 700 : 400}>{index + 1}. {option[language]}</Text>)}</Stack>
 }
 
 function MissionCard({ mission, onOpen }) {
@@ -100,7 +131,12 @@ function MissionCard({ mission, onOpen }) {
 function MissionRunner({ mission, onBack, onCompleted }) {
   const { t } = useTranslation()
   const isMultiple = mission.type === 'multiple_choice'
-  const [answer, setAnswer] = useState(isMultiple ? [] : null)
+  const isRanking = mission.type === 'prompt_ranking'
+  const isTrafficLight = mission.type === 'compliance_traffic_light'
+  const initialAnswer = isMultiple ? [] : isRanking
+    ? mission.content.options.map((_, index) => index)
+    : isTrafficLight ? mission.content.statements.map(() => '') : null
+  const [answer, setAnswer] = useState(initialAnswer)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -110,7 +146,7 @@ function MissionRunner({ mission, onBack, onCompleted }) {
     setError('')
     try {
       const data = await submitMission(mission.id, answer)
-      setResult(data.result)
+      setResult({ ...data.result, feedback: data.mission.content.feedback })
       onCompleted(data.mission)
     } catch (nextError) {
       setError(nextError.message)
@@ -130,7 +166,26 @@ function MissionRunner({ mission, onBack, onCompleted }) {
             <Text c="dimmed" mt={6}>{mission.description}</Text>
           </Box>
           <Text fw={700} fz="lg">{mission.content.question}</Text>
-          {isMultiple ? <Checkbox.Group value={answer.map(String)} onChange={(values) => setAnswer(values.map(Number))}>
+          {isRanking ? <Stack gap="sm">
+              <Text fz="sm" c="dimmed">{t('missions.rankingInstruction')}</Text>
+              {answer.map((optionIndex, position) => <Paper key={optionIndex} withBorder radius="md" p="md">
+                <Group justify="space-between" wrap="nowrap">
+                  <Group wrap="nowrap"><Badge variant="light">{position + 1}</Badge><Text>{mission.content.options[optionIndex]}</Text></Group>
+                  <Group gap={4} wrap="nowrap">
+                    <Button variant="subtle" size="compact-sm" disabled={Boolean(result) || position === 0} aria-label={t('missions.moveUp')} onClick={() => setAnswer((current) => moveItem(current, position, -1))}><IconArrowUp size={17} /></Button>
+                    <Button variant="subtle" size="compact-sm" disabled={Boolean(result) || position === answer.length - 1} aria-label={t('missions.moveDown')} onClick={() => setAnswer((current) => moveItem(current, position, 1))}><IconArrowDown size={17} /></Button>
+                  </Group>
+                </Group>
+              </Paper>)}
+            </Stack> : isTrafficLight ? <Stack gap="md">
+              {mission.content.statements.map((statement, index) => <Paper key={index} withBorder radius="md" p="md">
+                <Stack gap="sm"><Text fw={600}>{index + 1}. {statement}</Text>
+                  <Radio.Group value={answer[index]} onChange={(value) => setAnswer((current) => current.map((item, itemIndex) => itemIndex === index ? value : item))}>
+                    <Group grow>{['green', 'yellow', 'red'].map((color) => <Paper key={color} withBorder radius="md" p="xs"><Radio value={color} color={color === 'yellow' ? 'orange' : color} label={t(`missions.trafficLight.${color}`)} disabled={Boolean(result)} /></Paper>)}</Group>
+                  </Radio.Group>
+                </Stack>
+              </Paper>)}
+            </Stack> : isMultiple ? <Checkbox.Group value={answer.map(String)} onChange={(values) => setAnswer(values.map(Number))}>
               <Stack gap="sm">
                 {mission.content.options.map((option, index) => <Paper key={`${index}-${option}`} withBorder radius="md" p="md"><Checkbox value={String(index)} label={option} disabled={Boolean(result)} /></Paper>)}
               </Stack>
@@ -141,9 +196,13 @@ function MissionRunner({ mission, onBack, onCompleted }) {
             </Radio.Group>}
           {error && <Alert color="red">{error}</Alert>}
           {result && <Alert color={result.correct ? 'green' : 'orange'} icon={result.correct ? <IconTrophy size={20} /> : undefined}>
-            {result.correct ? t('missions.result.correct', { points: result.score }) : t('missions.result.wrong')}
+            {result.correct ? t('missions.result.correct', { points: result.score }) : result.correct_count !== undefined
+              ? t('missions.result.partial', { points: result.score, correct: result.correct_count, total: result.total_count })
+              : t('missions.result.wrong')}
           </Alert>}
-          {!result && <Button color="brand" disabled={isMultiple ? answer.length === 0 : answer === null} loading={submitting} onClick={submit}>{t('missions.submit')}</Button>}
+          {result && isTrafficLight && <Stack gap="xs">{mission.content.statements.map((statement, index) => <Paper key={index} withBorder radius="md" p="sm"><Group gap="xs"><Badge color={result.correct_colors[index] === 'yellow' ? 'orange' : result.correct_colors[index]}>{t(`missions.trafficLight.${result.correct_colors[index]}`)}</Badge><Text fz="sm" fw={600}>{statement}</Text></Group><Text fz="sm" c="dimmed" mt="xs">{result.feedback[index]}</Text></Paper>)}</Stack>}
+          {result && isRanking && <Paper withBorder radius="md" p="md"><Text fw={700} mb="xs">{t('missions.creator.rankingSolution')}</Text>{result.correct_order.map((optionIndex, index) => <Text key={optionIndex} fz="sm">{index + 1}. {mission.content.options[optionIndex]}</Text>)}{result.feedback && <Text fz="sm" c="dimmed" mt="sm">{result.feedback}</Text>}</Paper>}
+          {!result && <Button color="brand" disabled={isMultiple ? answer.length === 0 : isTrafficLight ? answer.some((value) => !value) : answer === null} loading={submitting} onClick={submit}>{t('missions.submit')}</Button>}
         </Stack>
       </Paper>
     </Box>
@@ -205,8 +264,23 @@ function Creator({ opened, onClose, onCreated }) {
     ...current,
     type: value,
     correct_indices: value === 'multiple_choice' ? current.correct_indices : [current.correct_indices[0] ?? 0],
+    options: value === 'prompt_ranking' && current.options.length < 3
+      ? [...current.options, ...Array.from({ length: 3 - current.options.length }, () => ({ de: '', en: '' }))]
+      : current.options,
+    correct_order: value === 'prompt_ranking'
+      ? Array.from({ length: Math.max(3, current.options.length) }, (_, index) => index)
+      : current.correct_order,
   }))
   const setOption = (index, language, value) => setForm((current) => ({ ...current, options: current.options.map((option, optionIndex) => optionIndex === index ? { ...option, [language]: value } : option) }))
+  const addOption = () => setForm((current) => ({
+    ...current,
+    options: [...current.options, { de: '', en: '' }],
+    correct_order: current.type === 'prompt_ranking' ? [...current.correct_order, current.options.length] : current.correct_order,
+  }))
+  const setStatement = (index, field, value) => setForm((current) => ({
+    ...current,
+    statements: current.statements.map((statement, statementIndex) => statementIndex === index ? { ...statement, [field]: value } : statement),
+  }))
   const toggleCorrectOption = (index) => setForm((current) => ({
     ...current,
     correct_indices: current.correct_indices.includes(index)
@@ -275,16 +349,28 @@ function Creator({ opened, onClose, onCreated }) {
             { value: 'single_choice', label: t('missions.types.singleChoice') },
             { value: 'multiple_choice', label: t('missions.types.multipleChoice') },
             { value: 'prompt_selection', label: t('missions.types.promptSelection') },
+            { value: 'prompt_ranking', label: t('missions.types.promptRanking') },
+            { value: 'compliance_traffic_light', label: t('missions.types.complianceTrafficLight') },
           ]} onChange={setType} />
           <TextInput type="date" label={t('missions.creator.date')} value={form.scheduled_date} min={editingId ? undefined : isoDate(new Date())} onChange={(event) => setField('scheduled_date', event.target.value)} />
           <SimpleGrid cols={2}><TextInput label={t('missions.creator.titleDe')} value={form.title_de} onChange={(e) => setField('title_de', e.target.value)} /><TextInput label={t('missions.creator.titleEn')} value={form.title_en} onChange={(e) => setField('title_en', e.target.value)} /></SimpleGrid>
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.descriptionDe')} value={form.description_de} onChange={(e) => setField('description_de', e.target.value)} /><Textarea label={t('missions.creator.descriptionEn')} value={form.description_en} onChange={(e) => setField('description_en', e.target.value)} /></SimpleGrid>
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.questionDe')} value={form.question_de} onChange={(e) => setField('question_de', e.target.value)} /><Textarea label={t('missions.creator.questionEn')} value={form.question_en} onChange={(e) => setField('question_en', e.target.value)} /></SimpleGrid>
-          <SimpleGrid cols={2}><Textarea label={t('missions.creator.feedbackDe')} value={form.feedback_de} onChange={(e) => setField('feedback_de', e.target.value)} /><Textarea label={t('missions.creator.feedbackEn')} value={form.feedback_en} onChange={(e) => setField('feedback_en', e.target.value)} /></SimpleGrid>
-          <Stack gap="sm">
-            <Group justify="space-between"><Text fw={700}>{t('missions.creator.answers')}</Text><Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={() => setForm((current) => ({ ...current, options: [...current.options, { de: '', en: '' }] }))}>{t('missions.creator.addAnswer')}</Button></Group>
-            {form.options.map((option, index) => <Paper key={index} withBorder radius="md" p="sm"><Group align="flex-end" wrap="nowrap">{form.type === 'multiple_choice' ? <Checkbox checked={form.correct_indices.includes(index)} onChange={() => toggleCorrectOption(index)} aria-label={t('missions.creator.correctAnswer')} /> : <Radio checked={form.correct_indices.includes(index)} onChange={() => setField('correct_indices', [index])} aria-label={t('missions.creator.correctAnswer')} />}<TextInput label={`DE ${index + 1}`} value={option.de} onChange={(e) => setOption(index, 'de', e.target.value)} style={{ flex: 1 }} /><TextInput label={`EN ${index + 1}`} value={option.en} onChange={(e) => setOption(index, 'en', e.target.value)} style={{ flex: 1 }} /></Group></Paper>)}
-          </Stack>
+          {form.type !== 'compliance_traffic_light' && <SimpleGrid cols={2}><Textarea label={t('missions.creator.feedbackDe')} value={form.feedback_de} onChange={(e) => setField('feedback_de', e.target.value)} /><Textarea label={t('missions.creator.feedbackEn')} value={form.feedback_en} onChange={(e) => setField('feedback_en', e.target.value)} /></SimpleGrid>}
+          {form.type === 'compliance_traffic_light' ? <Stack gap="sm">
+            <Text fw={700}>{t('missions.creator.statements')}</Text>
+            {form.statements.map((statement, index) => <Paper key={index} withBorder radius="md" p="sm">
+              <Stack gap="sm">
+                <Group grow><TextInput label={`DE ${index + 1}`} value={statement.de} onChange={(e) => setStatement(index, 'de', e.target.value)} /><TextInput label={`EN ${index + 1}`} value={statement.en} onChange={(e) => setStatement(index, 'en', e.target.value)} /></Group>
+                <Select label={t('missions.creator.correctColor')} value={statement.correct_color} data={['green', 'yellow', 'red'].map((color) => ({ value: color, label: t(`missions.trafficLight.${color}`) }))} onChange={(value) => setStatement(index, 'correct_color', value)} />
+                <Group grow><Textarea label={t('missions.creator.feedbackDe')} value={statement.feedback_de} onChange={(e) => setStatement(index, 'feedback_de', e.target.value)} /><Textarea label={t('missions.creator.feedbackEn')} value={statement.feedback_en} onChange={(e) => setStatement(index, 'feedback_en', e.target.value)} /></Group>
+              </Stack>
+            </Paper>)}
+          </Stack> : <Stack gap="sm">
+            <Group justify="space-between"><Text fw={700}>{t('missions.creator.answers')}</Text><Button size="xs" variant="light" leftSection={<IconPlus size={14} />} disabled={form.type === 'prompt_ranking' && form.options.length >= 4} onClick={addOption}>{t('missions.creator.addAnswer')}</Button></Group>
+            {form.options.map((option, index) => <Paper key={index} withBorder radius="md" p="sm"><Group align="flex-end" wrap="nowrap">{form.type === 'prompt_ranking' ? <Badge variant="light">{form.correct_order.indexOf(index) + 1}</Badge> : form.type === 'multiple_choice' ? <Checkbox checked={form.correct_indices.includes(index)} onChange={() => toggleCorrectOption(index)} aria-label={t('missions.creator.correctAnswer')} /> : <Radio checked={form.correct_indices.includes(index)} onChange={() => setField('correct_indices', [index])} aria-label={t('missions.creator.correctAnswer')} />}<TextInput label={`DE ${index + 1}`} value={option.de} onChange={(e) => setOption(index, 'de', e.target.value)} style={{ flex: 1 }} /><TextInput label={`EN ${index + 1}`} value={option.en} onChange={(e) => setOption(index, 'en', e.target.value)} style={{ flex: 1 }} /></Group></Paper>)}
+            {form.type === 'prompt_ranking' && <Stack gap="xs"><Text fw={700}>{t('missions.creator.rankingSolution')}</Text>{form.correct_order.map((optionIndex, position) => <Paper key={optionIndex} withBorder radius="md" p="xs"><Group justify="space-between" wrap="nowrap"><Text fz="sm">{position + 1}. {form.options[optionIndex]?.de || form.options[optionIndex]?.en || `${t('missions.creator.answers')} ${optionIndex + 1}`}</Text><Group gap={4}><Button variant="subtle" size="compact-sm" disabled={position === 0} onClick={() => setField('correct_order', moveItem(form.correct_order, position, -1))}><IconArrowUp size={16} /></Button><Button variant="subtle" size="compact-sm" disabled={position === form.correct_order.length - 1} onClick={() => setField('correct_order', moveItem(form.correct_order, position, 1))}><IconArrowDown size={16} /></Button></Group></Group></Paper>)}</Stack>}
+          </Stack>}
           <NumberInput label={t('missions.creator.points')} min={1} max={1000} value={form.max_points} onChange={(value) => setField('max_points', value)} />
           {error && <Alert color="red">{error}</Alert>}
           <Button color="brand" loading={saving} onClick={save}>{editingId ? t('missions.creator.update') : t('missions.creator.save')}</Button>
@@ -323,8 +409,8 @@ function Creator({ opened, onClose, onCreated }) {
               <Title order={4}>{preview[`title_${language}`]}</Title>
               <Text fz="sm" c="dimmed">{preview[`description_${language}`]}</Text>
               <Text fw={700}>{preview[`question_${language}`]}</Text>
-              {preview.options.map((option, index) => <Text key={index} fz="sm" c={showPreviewSolution && preview.correct_indices.includes(index) ? 'green' : undefined} fw={showPreviewSolution && preview.correct_indices.includes(index) ? 700 : 400}>{index + 1}. {option[language]}</Text>)}
-              {showPreviewSolution && preview[`feedback_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{preview[`feedback_${language}`]}</Text>}
+              <MissionSolutionContent mission={preview} language={language} showSolution={showPreviewSolution} />
+              {showPreviewSolution && preview.type !== 'compliance_traffic_light' && preview[`feedback_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{preview[`feedback_${language}`]}</Text>}
             </Stack>
           </Paper>)}
           </SimpleGrid>
@@ -465,12 +551,8 @@ function MissionReview({ enabled, onPublished }) {
                   <Text fz="xs" fw={700} c="dimmed" tt="uppercase" mb={5}>{label}</Text>
                   <Text fz="sm" c="dimmed" mb="xs">{mission[`description_${language}`]}</Text>
                   <Text fw={700} fz="sm" mb="xs">{mission[`question_${language}`]}</Text>
-                  <Stack gap={4}>
-                    {mission.options.map((option, index) => <Text key={index} fz="sm" c={mission.correct_indices.includes(index) ? 'green.8' : undefined} fw={mission.correct_indices.includes(index) ? 700 : 400}>
-                      {index + 1}. {option[language]}
-                    </Text>)}
-                  </Stack>
-                  <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{mission[`feedback_${language}`]}</Text>
+                  <MissionSolutionContent mission={mission} language={language} />
+                  {mission.type !== 'compliance_traffic_light' && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{mission[`feedback_${language}`]}</Text>}
                 </Box>)}
               </SimpleGrid>
               <Group justify="flex-end">

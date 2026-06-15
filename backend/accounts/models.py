@@ -46,17 +46,23 @@ class Mission(models.Model):
     TYPE_MULTIPLE_CHOICE = 'multiple_choice'
     TYPE_COMPLIANCE_DECISION = 'compliance_decision'
     TYPE_PROMPT_SELECTION = 'prompt_selection'
+    TYPE_PROMPT_RANKING = 'prompt_ranking'
+    TYPE_COMPLIANCE_TRAFFIC_LIGHT = 'compliance_traffic_light'
     TYPE_CHOICES = [
         (TYPE_SINGLE_CHOICE, 'Single Choice'),
         (TYPE_MULTIPLE_CHOICE, 'Multiple Choice'),
         (TYPE_COMPLIANCE_DECISION, 'Compliance Decision'),
         (TYPE_PROMPT_SELECTION, 'Prompt Selection'),
+        (TYPE_PROMPT_RANKING, 'Prompt Ranking'),
+        (TYPE_COMPLIANCE_TRAFFIC_LIGHT, 'Compliance Traffic Light'),
     ]
     CHOICE_TYPES = {
         TYPE_SINGLE_CHOICE,
         TYPE_MULTIPLE_CHOICE,
         TYPE_COMPLIANCE_DECISION,
         TYPE_PROMPT_SELECTION,
+        TYPE_PROMPT_RANKING,
+        TYPE_COMPLIANCE_TRAFFIC_LIGHT,
     }
 
     STATUS_REVIEW = 'review'

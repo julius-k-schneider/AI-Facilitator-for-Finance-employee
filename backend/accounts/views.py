@@ -208,7 +208,23 @@ def mission_payload(mission, user, language='de', include_content=True):
         'completed': attempt is not None,
         'score': attempt.score if attempt else None,
     }
-    if include_content and mission.mission_type in Mission.CHOICE_TYPES:
+    if include_content and mission.mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
+        payload['content'] = {
+            'question': translated(content.get('question', {}), language),
+            'statements': [translated(statement.get('text', {}), language) for statement in content.get('statements', [])],
+        }
+        if attempt is not None:
+            payload['content']['feedback'] = [
+                translated(statement.get('feedback', {}), language) for statement in content.get('statements', [])
+            ]
+    elif include_content and mission.mission_type == Mission.TYPE_PROMPT_RANKING:
+        payload['content'] = {
+            'question': translated(content.get('question', {}), language),
+            'options': [translated(option, language) for option in content.get('options', [])],
+        }
+        if attempt is not None:
+            payload['content']['feedback'] = translated(content.get('feedback', {}), language)
+    elif include_content and mission.mission_type in Mission.CHOICE_TYPES:
         payload['content'] = {
             'question': translated(content.get('question', {}), language),
             'options': [translated(option, language) for option in content.get('options', [])],
@@ -236,6 +252,17 @@ def mission_schedule_payload(mission, user):
             for option in content.get('options', [])
         ],
         'correct_indices': correct_indices(content),
+        'correct_order': content.get('correct_order', []),
+        'statements': [
+            {
+                'de': translated(statement.get('text', {}), 'de'),
+                'en': translated(statement.get('text', {}), 'en'),
+                'correct_color': statement.get('correct_color', ''),
+                'feedback_de': translated(statement.get('feedback', {}), 'de'),
+                'feedback_en': translated(statement.get('feedback', {}), 'en'),
+            }
+            for statement in content.get('statements', [])
+        ],
         'max_points': mission.max_points,
         'status': mission.status,
         'generated_by_ai': mission.generated_by_ai,
@@ -262,6 +289,8 @@ def validate_choice_mission_data(data, allow_past_date=False):
         Mission.TYPE_SINGLE_CHOICE,
         Mission.TYPE_MULTIPLE_CHOICE,
         Mission.TYPE_PROMPT_SELECTION,
+        Mission.TYPE_PROMPT_RANKING,
+        Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT,
     }
     if not scheduled_date or (not allow_past_date and scheduled_date < timezone.localdate()):
         return None, 'scheduled date must be today or later'
@@ -273,9 +302,81 @@ def validate_choice_mission_data(data, allow_past_date=False):
     )
     if any(not str(data.get(field, '')).strip() for field in required_text):
         return None, 'all bilingual text fields are required'
+    if mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
+        statements = data.get('statements') or []
+        colors = {'green', 'yellow', 'red'}
+        if len(statements) != 3 or any(
+            not statement.get('de', '').strip()
+            or not statement.get('en', '').strip()
+            or statement.get('correct_color') not in colors
+            or not statement.get('feedback_de', '').strip()
+            or not statement.get('feedback_en', '').strip()
+            for statement in statements
+        ):
+            return None, 'exactly three bilingual traffic-light statements with feedback are required'
+        try:
+            max_points = int(data.get('max_points', 100))
+        except (TypeError, ValueError):
+            return None, 'invalid points'
+        if max_points < 1 or max_points > 1000:
+            return None, 'invalid points'
+        return {
+            'mission_type': mission_type,
+            'scheduled_date': scheduled_date,
+            'title_de': data['title_de'].strip(),
+            'title_en': data['title_en'].strip(),
+            'description_de': data['description_de'].strip(),
+            'description_en': data['description_en'].strip(),
+            'content': {
+                'question': {'de': data['question_de'].strip(), 'en': data['question_en'].strip()},
+                'statements': [
+                    {
+                        'text': {'de': statement['de'].strip(), 'en': statement['en'].strip()},
+                        'correct_color': statement['correct_color'],
+                        'feedback': {
+                            'de': statement['feedback_de'].strip(),
+                            'en': statement['feedback_en'].strip(),
+                        },
+                    }
+                    for statement in statements
+                ],
+            },
+            'max_points': max_points,
+        }, None
+
     options = data.get('options') or []
-    if len(options) < 2 or any(not option.get('de', '').strip() or not option.get('en', '').strip() for option in options):
-        return None, 'at least two bilingual options are required'
+    minimum_options = 3 if mission_type == Mission.TYPE_PROMPT_RANKING else 2
+    maximum_options = 4 if mission_type == Mission.TYPE_PROMPT_RANKING else 6
+    if len(options) < minimum_options or len(options) > maximum_options or any(
+        not option.get('de', '').strip() or not option.get('en', '').strip() for option in options
+    ):
+        return None, f'{minimum_options} to {maximum_options} bilingual options are required'
+    if mission_type == Mission.TYPE_PROMPT_RANKING:
+        try:
+            selected_correct_order = [int(index) for index in data.get('correct_order', [])]
+            max_points = int(data.get('max_points', 100))
+        except (TypeError, ValueError):
+            return None, 'invalid ranking or points'
+        if sorted(selected_correct_order) != list(range(len(options))) or max_points < 1 or max_points > 1000:
+            return None, 'ranking must contain every option exactly once'
+        return {
+            'mission_type': mission_type,
+            'scheduled_date': scheduled_date,
+            'title_de': data['title_de'].strip(),
+            'title_en': data['title_en'].strip(),
+            'description_de': data['description_de'].strip(),
+            'description_en': data['description_en'].strip(),
+            'content': {
+                'question': {'de': data['question_de'].strip(), 'en': data['question_en'].strip()},
+                'options': [{'de': option['de'].strip(), 'en': option['en'].strip()} for option in options],
+                'correct_order': selected_correct_order,
+                'feedback': {
+                    'de': str(data.get('feedback_de', '')).strip(),
+                    'en': str(data.get('feedback_en', '')).strip(),
+                },
+            },
+            'max_points': max_points,
+        }, None
     raw_correct_indices = data.get('correct_indices')
     if raw_correct_indices is None and data.get('correct_index') is not None:
         raw_correct_indices = [data.get('correct_index')]
@@ -530,27 +631,61 @@ def complete_mission_view(request):
         return JsonResponse({'error': 'unsupported mission type'}, status=400)
 
     content = mission.content or {}
-    options = content.get('options', [])
-    try:
-        if mission.mission_type == Mission.TYPE_MULTIPLE_CHOICE:
-            raw_answers = data.get('answer')
-            if not isinstance(raw_answers, list):
-                raise ValueError
-            selected_indices = sorted({int(index) for index in raw_answers})
-        else:
-            selected_indices = [int(data.get('answer'))]
-    except (TypeError, ValueError):
-        return JsonResponse({'error': 'answer required'}, status=400)
-    if not selected_indices or any(index < 0 or index >= len(options) for index in selected_indices):
-        return JsonResponse({'error': 'invalid answer'}, status=400)
+    if mission.mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
+        statements = content.get('statements', [])
+        if len(statements) != 3:
+            return JsonResponse({'error': 'invalid traffic-light mission'}, status=400)
+        answers = data.get('answer')
+        if not isinstance(answers, list) or len(answers) != len(statements):
+            return JsonResponse({'error': 'all traffic-light answers are required'}, status=400)
+        allowed_colors = {'green', 'yellow', 'red'}
+        if any(answer not in allowed_colors for answer in answers):
+            return JsonResponse({'error': 'invalid traffic-light answer'}, status=400)
+        expected_colors = [statement.get('correct_color') for statement in statements]
+        correct_count = sum(answer == expected for answer, expected in zip(answers, expected_colors))
+        score = mission.max_points * correct_count // len(statements)
+        stored_answer = {'selected_colors': answers}
+        result_details = {
+            'correct_count': correct_count,
+            'total_count': len(statements),
+            'correct_colors': expected_colors,
+        }
+    elif mission.mission_type == Mission.TYPE_PROMPT_RANKING:
+        options = content.get('options', [])
+        raw_order = data.get('answer')
+        try:
+            selected_order = [int(index) for index in raw_order]
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'ranking required'}, status=400)
+        if sorted(selected_order) != list(range(len(options))):
+            return JsonResponse({'error': 'ranking must contain every prompt exactly once'}, status=400)
+        score = mission.max_points if selected_order == content.get('correct_order', []) else 0
+        stored_answer = {'selected_order': selected_order}
+        result_details = {'correct_order': content.get('correct_order', [])}
+    else:
+        options = content.get('options', [])
+        try:
+            if mission.mission_type == Mission.TYPE_MULTIPLE_CHOICE:
+                raw_answers = data.get('answer')
+                if not isinstance(raw_answers, list):
+                    raise ValueError
+                selected_indices = sorted({int(index) for index in raw_answers})
+            else:
+                selected_indices = [int(data.get('answer'))]
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'answer required'}, status=400)
+        if not selected_indices or any(index < 0 or index >= len(options) for index in selected_indices):
+            return JsonResponse({'error': 'invalid answer'}, status=400)
 
-    expected_indices = sorted(correct_indices(content))
-    score = mission.max_points if selected_indices == expected_indices else 0
+        expected_indices = sorted(correct_indices(content))
+        score = mission.max_points if selected_indices == expected_indices else 0
+        stored_answer = {'selected_indices': selected_indices}
+        result_details = {}
     try:
         attempt = MissionAttempt.objects.create(
             user=request.user,
             mission=mission,
-            answer={'selected_indices': selected_indices},
+            answer=stored_answer,
             score=score,
         )
     except IntegrityError:
@@ -560,7 +695,12 @@ def complete_mission_view(request):
     profile.progress_updated_at = attempt.completed_at
     profile.save(update_fields=['progress_updated_at'])
     return JsonResponse({
-        'result': {'correct': score > 0, 'score': score, 'max_points': mission.max_points},
+        'result': {
+            'correct': score == mission.max_points,
+            'score': score,
+            'max_points': mission.max_points,
+            **result_details,
+        },
         'mission': mission_payload(mission, request.user),
         'progress': progress_payload(profile),
     })

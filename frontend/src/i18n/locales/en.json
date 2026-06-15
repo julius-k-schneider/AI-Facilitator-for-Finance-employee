@@ -98,6 +98,10 @@
     "completedButton": "Completed",
     "back": "Back to missions",
     "submit": "Submit answer",
+    "rankingInstruction": "Sort the prompts from worst to best.",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "trafficLight": { "green": "Green - allowed", "yellow": "Yellow - restricted", "red": "Red - not allowed" },
     "streak": {
       "current": "Current streak",
       "best": "Best: {{count}}"
@@ -108,10 +112,13 @@
       "multipleChoice": "Multiple choice",
       "complianceDecision": "Compliance decision",
       "promptSelection": "Prompt selection"
+      ,"promptRanking": "Prompt ranking",
+      "complianceTrafficLight": "Compliance traffic light"
     },
     "result": {
       "correct": "Correct! You receive {{points}} points.",
-      "wrong": "Unfortunately, that answer was not correct. The mission is now completed."
+      "wrong": "Unfortunately, that answer was not correct. The mission is now completed.",
+      "partial": "{{correct}} of {{total}} statements were correct. You receive {{points}} points."
     },
     "creator": {
       "button": "Manage missions",
@@ -132,6 +139,9 @@
       "answers": "Answer options",
       "addAnswer": "Add answer",
       "correctAnswer": "Correct answer",
+      "statements": "Compliance statements",
+      "correctColor": "Correct traffic-light color",
+      "rankingSolution": "Correct order: worst to best prompt",
       "points": "Points",
       "save": "Schedule mission",
       "update": "Save changes",

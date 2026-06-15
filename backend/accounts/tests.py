@@ -10,8 +10,10 @@ from .services.ai_mission_generator import (
     AiMissionGenerationError,
     SYSTEM_PROMPT,
     build_user_prompt,
+    extract_json,
     generate_next_week,
     next_calendar_week,
+    split_target_slots,
 )
 from .services.mission_validation import MissionValidationError, validate_generated_payload
 
@@ -126,6 +128,55 @@ class AccountsApiTests(TestCase):
             MissionAttempt.objects.get(user=correct_player, mission=mission).answer['selected_indices'],
             [0, 2],
         )
+
+    def test_prompt_ranking_requires_the_exact_order(self):
+        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('ranking@example.com')
+        mission = self.create_mission(creator, points=60)
+        mission.mission_type = Mission.TYPE_PROMPT_RANKING
+        mission.content = {
+            'question': {'de': 'Sortiere.', 'en': 'Rank them.'},
+            'options': [{'de': 'A', 'en': 'A'}, {'de': 'B', 'en': 'B'}, {'de': 'C', 'en': 'C'}],
+            'correct_order': [1, 0, 2],
+            'feedback': {'de': 'Mehr Kontext ist besser.', 'en': 'More context is better.'},
+        }
+        mission.save(update_fields=['mission_type', 'content'])
+        self.client.force_login(player)
+
+        response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': mission.id, 'answer': [1, 0, 2],
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['result']['score'], 60)
+        self.assertEqual(MissionAttempt.objects.get(user=player, mission=mission).answer['selected_order'], [1, 0, 2])
+
+    def test_compliance_traffic_light_awards_partial_points(self):
+        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('traffic@example.com')
+        mission = self.create_mission(creator, points=90)
+        mission.mission_type = Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT
+        mission.content = {
+            'question': {'de': 'Bewerte.', 'en': 'Assess.'},
+            'statements': [
+                {'text': {'de': 'A', 'en': 'A'}, 'correct_color': 'green', 'feedback': {'de': 'A', 'en': 'A'}},
+                {'text': {'de': 'B', 'en': 'B'}, 'correct_color': 'yellow', 'feedback': {'de': 'B', 'en': 'B'}},
+                {'text': {'de': 'C', 'en': 'C'}, 'correct_color': 'red', 'feedback': {'de': 'C', 'en': 'C'}},
+            ],
+        }
+        mission.save(update_fields=['mission_type', 'content'])
+        self.client.force_login(player)
+
+        available = self.client.get('/api/auth/missions/today/?lang=en', secure=True).json()['missions'][0]
+        self.assertNotIn('correct_color', str(available['content']))
+        response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': mission.id, 'answer': ['green', 'red', 'red'],
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['result']['score'], 60)
+        self.assertEqual(response.json()['result']['correct_count'], 2)
+        self.assertFalse(response.json()['result']['correct'])
 
     def test_only_creators_can_create_and_date_is_limited_to_two_missions(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -445,6 +496,17 @@ class AiMissionServiceTests(TestCase):
         self.assertIn('Do not require knowledge of machine-learning algorithms', SYSTEM_PROMPT)
         self.assertIn('practical everyday AI usage', prompt)
 
+    def test_generation_batches_are_limited_to_one_day(self):
+        start, _ = next_calendar_week()
+        slots = {start + timedelta(days=offset): 2 for offset in range(7)}
+        batches = split_target_slots(slots)
+        self.assertEqual(len(batches), 7)
+        self.assertTrue(all(sum(batch.values()) <= 2 for batch in batches))
+
+    def test_json_extractor_accepts_fences_and_trailing_text(self):
+        self.assertEqual(extract_json('```json\n{"missions": []}\n```'), {'missions': []})
+        self.assertEqual(extract_json('Result: {"missions": []}\nDone'), {'missions': []})
+
     def test_validator_accepts_multiple_correct_answers_only_for_multiple_choice(self):
         start, _ = next_calendar_week()
         payload = self.valid_payload({start: 1})
@@ -457,6 +519,31 @@ class AiMissionServiceTests(TestCase):
         payload['missions'][0]['type'] = Mission.TYPE_PROMPT_SELECTION
         with self.assertRaises(MissionValidationError):
             validate_generated_payload(payload, {start: 1})
+
+    def test_validator_accepts_prompt_ranking_and_traffic_light(self):
+        start, _ = next_calendar_week()
+        ranking = self.valid_payload({start: 1})
+        ranking['missions'][0]['type'] = Mission.TYPE_PROMPT_RANKING
+        ranking['missions'][0]['content'].update({
+            'options_de': ['Schlecht', 'Mittel', 'Gut'],
+            'options_en': ['Bad', 'Average', 'Good'],
+            'correct_order': [0, 1, 2],
+        })
+        ranking['missions'][0]['content'].pop('correct_option_index')
+        normalized = validate_generated_payload(ranking, {start: 1})
+        self.assertEqual(normalized[0]['content']['correct_order'], [0, 1, 2])
+
+        traffic = self.valid_payload({start: 1})
+        traffic['missions'][0]['type'] = Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT
+        traffic['missions'][0]['content'] = {
+            'question_de': 'Bewerte die Szenarien.', 'question_en': 'Assess the scenarios.',
+            'statements_de': ['A', 'B', 'C'], 'statements_en': ['A', 'B', 'C'],
+            'correct_colors': ['green', 'yellow', 'red'],
+            'statement_feedback_de': ['Gut', 'Prüfen', 'Verboten'],
+            'statement_feedback_en': ['Fine', 'Check', 'Forbidden'],
+        }
+        normalized = validate_generated_payload(traffic, {start: 1})
+        self.assertEqual(normalized[0]['content']['statements'][1]['correct_color'], 'yellow')
 
     @patch('accounts.services.ai_mission_generator.call_ai')
     def test_weekly_generation_creates_review_missions_without_overwriting_published(self, call_ai_mock):
@@ -471,7 +558,7 @@ class AiMissionServiceTests(TestCase):
         )
         expected_slots = {start: 1}
         expected_slots.update({start + timedelta(days=offset): 2 for offset in range(1, 7)})
-        call_ai_mock.return_value = self.valid_payload(expected_slots)
+        call_ai_mock.side_effect = self.valid_payload
 
         created, actual_start, actual_end = generate_next_week(creator)
         self.assertEqual((actual_start, actual_end), (start, end))
@@ -479,6 +566,7 @@ class AiMissionServiceTests(TestCase):
         self.assertTrue(all(mission.status == Mission.STATUS_REVIEW for mission in created))
         self.assertTrue(all(mission.generated_by_ai for mission in created))
         self.assertEqual(Mission.objects.filter(status=Mission.STATUS_PUBLISHED).count(), 1)
+        self.assertEqual(call_ai_mock.call_count, 7)
 
     @patch('accounts.services.ai_mission_generator.call_ai')
     def test_invalid_ai_response_creates_no_missions(self, call_ai_mock):

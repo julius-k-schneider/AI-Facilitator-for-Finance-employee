@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
 from urllib import error, request
 
@@ -13,10 +15,20 @@ from accounts.services.mission_validation import MissionValidationError, validat
 
 
 logger = logging.getLogger(__name__)
+MAX_MISSIONS_PER_REQUEST = 2
+DEFAULT_GENERATION_WORKERS = 2
+DEFAULT_GENERATION_RETRIES = 2
+DEFAULT_MAX_TOKENS = 5000
 
 
 class AiMissionGenerationError(RuntimeError):
     pass
+
+
+class AiMissionRateLimitError(AiMissionGenerationError):
+    def __init__(self, retry_after=5):
+        super().__init__('AI service rate limit reached')
+        self.retry_after = retry_after
 
 
 SYSTEM_PROMPT = """You create approachable daily AI learning missions for employees in a finance organization.
@@ -47,13 +59,20 @@ Content and safety:
 - Never use or invent personal, confidential, Lufthansa-internal, SAP, customer, or employee data.
 - Do not present legal or compliance advice as guaranteed truth. Use broadly accepted German enterprise principles and
   phrase compliance examples cautiously when company-specific rules could differ.
-- Only use these automatically scored types: multiple_choice, compliance_decision, prompt_selection.
+- Only use these automatically scored types: multiple_choice, compliance_decision, prompt_selection, prompt_ranking,
+  compliance_traffic_light.
 - Single-answer types must have exactly one unambiguous correct answer. Multiple-choice missions may have one, several,
   or all answer options as correct.
 - Distractors must be plausible but clearly wrong at the intended beginner level.
 - Include concise bilingual feedback that teaches a reusable rule and explains why the selected answer set is correct.
+- Prompt-ranking missions contain 3-4 prompts and rank every prompt from worst to best. Make the quality progression
+  clear through goal, context, expected output format, and concrete expectations.
+- Compliance-traffic-light missions contain exactly three independent scenarios. Classify each as green (allowed),
+  yellow (allowed only with safeguards), or red (not allowed), and provide short scenario-specific feedback.
 - Descriptions must be one short, natural sentence summarizing the specific topic. Do not mention the expected duration,
-  do not say that the learner must choose or determine an answer, and do not reuse a generic description template."""
+  do not say that the learner must choose or determine an answer, and do not reuse a generic description template.
+- Keep the JSON compact: titles under 80 characters, descriptions under 140 characters, questions under 240 characters,
+  each option or statement under 180 characters, and each feedback text under 240 characters."""
 
 
 def next_calendar_week(reference_date=None):
@@ -65,17 +84,30 @@ def next_calendar_week(reference_date=None):
 def build_user_prompt(target_slots):
     schedule = ', '.join(f'{day.isoformat()}: {count}' for day, count in sorted(target_slots.items()))
     return f"""Create exactly the requested missions for this schedule: {schedule}.
-Use 10-50 points per mission and 2-6 answer options. Return this exact structure:
-{{"missions":[{{"date":"YYYY-MM-DD","type":"multiple_choice|compliance_decision|prompt_selection",
+Use 10-50 points per mission. Return this structure:
+{{"missions":[{{"date":"YYYY-MM-DD","type":"multiple_choice|compliance_decision|prompt_selection|prompt_ranking|compliance_traffic_light",
 "title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,
-"content":{{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
-"correct_option_indices":[0],"feedback_de":"...","feedback_en":"..."}}}}]}}
+"content":{{...type-specific fields...}}}}]}}
+For multiple_choice, compliance_decision, and prompt_selection use:
+{{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
+"correct_option_indices":[0],"feedback_de":"...","feedback_en":"..."}}
 For multiple_choice, correct_option_indices must contain one to all option indices. For compliance_decision and
 prompt_selection it must contain exactly one index. Include a meaningful mix of multiple-choice missions with one
 correct answer and with several correct answers.
+For prompt_ranking use exactly 3-4 bilingual prompts and provide their zero-based order from worst to best:
+{{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
+"correct_order":[0,2,1],"feedback_de":"...","feedback_en":"..."}}
+For compliance_traffic_light use exactly three bilingual scenarios, one valid color per scenario, and bilingual
+scenario-specific feedback:
+{{"question_de":"...","question_en":"...","statements_de":["...","...","..."],
+"statements_en":["...","...","..."],"correct_colors":["green","yellow","red"],
+"statement_feedback_de":["...","...","..."],"statement_feedback_en":["...","...","..."]}}
+The five traffic-light arrays must each contain exactly three items, never more or fewer. The content object must use
+only the fields defined for its selected mission type. Do not add explanations outside the JSON object.
 Across the requested schedule, favor broadly useful beginner topics and vary the scenarios. At least half of the
 missions should focus on practical everyday AI usage such as prompting, checking outputs, confidentiality, or human
-review. Use advanced finance or AI terminology only when the term is explained within the mission.
+review. Include prompt_ranking and compliance_traffic_light regularly when enough slots are available. Use advanced
+finance or AI terminology only when the term is explained within the mission.
 Use only the dates and counts in the requested schedule."""
 
 
@@ -89,7 +121,18 @@ def extract_json(content):
     try:
         return json.loads(text)
     except json.JSONDecodeError as error_value:
-        raise AiMissionGenerationError('AI returned invalid JSON') from error_value
+        start = text.find('{')
+        if start >= 0:
+            try:
+                parsed, _ = json.JSONDecoder().raw_decode(text[start:])
+                return parsed
+            except json.JSONDecodeError:
+                pass
+        logger.warning(
+            'AI returned invalid JSON (%s chars, error at %s). Response tail: %r',
+            len(text), error_value.pos, text[-300:],
+        )
+        raise AiMissionGenerationError('AI returned invalid JSON, likely due to a truncated response') from error_value
 
 
 def call_ai(target_slots):
@@ -106,7 +149,9 @@ def call_ai(target_slots):
             {'role': 'system', 'content': SYSTEM_PROMPT},
             {'role': 'user', 'content': build_user_prompt(target_slots)},
         ],
-        'temperature': 0.6,
+        'temperature': 0.4,
+        'max_tokens': max(1000, int(os.environ.get('KICONNECT_MAX_TOKENS', DEFAULT_MAX_TOKENS))),
+        'response_format': {'type': 'json_object'},
     }).encode('utf-8')
     api_request = request.Request(
         f'{base_url}{path}',
@@ -118,6 +163,33 @@ def call_ai(target_slots):
         with request.urlopen(api_request, timeout=90) as response:
             response_data = json.loads(response.read().decode('utf-8'))
         return extract_json(response_data['choices'][0]['message']['content'])
+    except error.HTTPError as exception:
+        if exception.code == 429:
+            try:
+                retry_after = max(1, int(exception.headers.get('Retry-After', '5')))
+            except (TypeError, ValueError):
+                retry_after = 5
+            logger.warning('KICOnnect rate limit reached; retry after %s seconds', retry_after)
+            raise AiMissionRateLimitError(retry_after) from exception
+        if exception.code == 400:
+            logger.warning('AI endpoint rejected JSON mode; retrying without response_format')
+            legacy_body = json.loads(body.decode('utf-8'))
+            legacy_body.pop('response_format', None)
+            legacy_request = request.Request(
+                f'{base_url}{path}',
+                data=json.dumps(legacy_body).encode('utf-8'),
+                headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
+                method='POST',
+            )
+            try:
+                with request.urlopen(legacy_request, timeout=90) as response:
+                    response_data = json.loads(response.read().decode('utf-8'))
+                return extract_json(response_data['choices'][0]['message']['content'])
+            except (error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError) as retry_exception:
+                logger.exception('KICOnnect mission generation failed after JSON-mode fallback')
+                raise AiMissionGenerationError('AI service is currently unavailable') from retry_exception
+        logger.exception('KICOnnect mission generation failed with HTTP %s', exception.code)
+        raise AiMissionGenerationError('AI service is currently unavailable') from exception
     except (error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError) as exception:
         logger.exception('KICOnnect mission generation failed')
         raise AiMissionGenerationError('AI service is currently unavailable') from exception
@@ -133,6 +205,53 @@ def generate_candidates(target_slots):
         raise AiMissionGenerationError(f'AI response failed validation: {exception}') from exception
 
 
+def split_target_slots(target_slots, max_missions=MAX_MISSIONS_PER_REQUEST):
+    batches = []
+    current = {}
+    current_count = 0
+    for day, count in sorted(target_slots.items()):
+        if current and current_count + count > max_missions:
+            batches.append(current)
+            current = {}
+            current_count = 0
+        current[day] = count
+        current_count += count
+    if current:
+        batches.append(current)
+    return batches
+
+
+def generate_candidate_batch(target_slots):
+    retries = max(0, int(os.environ.get('KICONNECT_GENERATION_RETRIES', DEFAULT_GENERATION_RETRIES)))
+    last_error = None
+    for attempt in range(retries + 1):
+        try:
+            return generate_candidates(target_slots)
+        except AiMissionGenerationError as exception:
+            last_error = exception
+            if attempt < retries:
+                if isinstance(exception, AiMissionRateLimitError):
+                    time.sleep(exception.retry_after * (attempt + 1))
+                logger.warning('Retrying AI mission batch after generation error: %s', exception)
+    raise last_error
+
+
+def generate_candidates_parallel(target_slots):
+    batches = split_target_slots(target_slots)
+    if len(batches) <= 1:
+        return generate_candidate_batch(target_slots)
+    workers = max(1, min(
+        len(batches),
+        int(os.environ.get('KICONNECT_GENERATION_WORKERS', DEFAULT_GENERATION_WORKERS)),
+    ))
+    candidates = []
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(generate_candidate_batch, batch): batch for batch in batches}
+        for future in as_completed(futures):
+            candidates.extend(future.result())
+    return sorted(candidates, key=lambda candidate: candidate['scheduled_date'])
+
+
 def apply_candidate(mission, candidate):
     mission.mission_type = candidate['mission_type']
     mission.scheduled_date = candidate['scheduled_date']
@@ -146,22 +265,33 @@ def apply_candidate(mission, candidate):
 
 def generate_next_week(created_by, force=False, reference_date=None):
     week_start, week_end = next_calendar_week(reference_date)
+    target_slots = {}
+    for offset in range(7):
+        day = week_start + timedelta(days=offset)
+        occupied_missions = Mission.objects.filter(
+            scheduled_date=day,
+            status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
+        )
+        if force:
+            occupied_missions = occupied_missions.exclude(status=Mission.STATUS_REVIEW, generated_by_ai=True)
+        occupied = occupied_missions.count()
+        if occupied < 2:
+            target_slots[day] = 2 - occupied
+
+    candidates = generate_candidates_parallel(target_slots)
     with transaction.atomic():
         missions = Mission.objects.select_for_update().filter(scheduled_date__range=(week_start, week_end))
         if force:
             missions.filter(status=Mission.STATUS_REVIEW, generated_by_ai=True).delete()
-
-        target_slots = {}
-        for offset in range(7):
-            day = week_start + timedelta(days=offset)
+        for day, expected_count in target_slots.items():
             occupied = Mission.objects.filter(
                 scheduled_date=day,
                 status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
             ).count()
-            if occupied < 2:
-                target_slots[day] = 2 - occupied
-
-        candidates = generate_candidates(target_slots)
+            if occupied + expected_count > 2:
+                raise AiMissionGenerationError(
+                    f'mission schedule changed during generation for {day.isoformat()}; please try again'
+                )
         batch_id = uuid.uuid4()
         created = []
         for candidate in candidates:
