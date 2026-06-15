@@ -12,6 +12,7 @@ import Grundlagen from './pages/Grundlagen'
 import Home from './pages/Home'
 import Leaderboard from './pages/Leaderboard'
 import Missions from './pages/Missions'
+import Training from './pages/Training'
 import Profile from './pages/Profile'
 import UserManagement from './pages/UserManagement'
 
@@ -116,6 +117,8 @@ function App() {
         return <Grundlagen user={user} onUserUpdate={setUser} apiBase={API_BASE} />
       case 'missions':
         return <Missions user={user} navigate={navigate} startMissionId={startMissionId} />
+      case 'training':
+        return <Training />
       case 'bibliothek':
         return <Bibliothek />
       case 'leaderboard':

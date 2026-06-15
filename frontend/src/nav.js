@@ -3,6 +3,7 @@ import {
   IconBooks,
   IconSchool,
   IconTargetArrow,
+  IconDeviceGamepad2,
   IconTrophy,
   IconUserCircle,
   IconUserCog,
@@ -13,6 +14,7 @@ export const NAV_ITEMS = [
   { value: 'home', label: 'Home', labelKey: 'nav.home', icon: IconLayoutDashboard },
   { value: 'grundlagen', label: 'Grundlagen', labelKey: 'nav.grundlagen', icon: IconSchool },
   { value: 'missions', label: 'Missions', labelKey: 'nav.missions', icon: IconTargetArrow, requiresOnboarding: true },
+  { value: 'training', label: 'Training', labelKey: 'nav.training', icon: IconDeviceGamepad2, requiresOnboarding: true },
   { value: 'bibliothek', label: 'Bibliothek', labelKey: 'nav.bibliothek', icon: IconBooks },
   { value: 'leaderboard', label: 'Leaderboard', labelKey: 'nav.leaderboard', icon: IconTrophy },
   {

@@ -14,6 +14,7 @@
     "bibliothek": "Library",
     "leaderboard": "Leaderboard",
     "missions": "Missions",
+    "training": "Training",
     "userManagement": "User management",
     "profile": "Profile"
   },
@@ -190,6 +191,26 @@
       "title": "Mission debug area",
       "description": "Test every mission type with sample data without changing points or database records.",
       "button": "Test missions"
+    }
+  },
+  "training": {
+    "badge": "TRAINING AREA",
+    "title": "Practice games freely",
+    "description": "Choose a game type and instantly generate a new exercise. Training does not affect points, leaderboard rank, or streaks.",
+    "generate": "Generate exercise",
+    "back": "Back to training",
+    "result": {
+      "correct": "Correctly solved!",
+      "wrong": "That answer was not correct yet. Use the feedback for your next exercise.",
+      "partial": "{{correct}} of {{total}} statements were correct."
+    },
+    "types": {
+      "singleChoice": { "title": "Single choice", "description": "Practice a question with exactly one correct answer." },
+      "multipleChoice": { "title": "Multiple choice", "description": "Identify all applicable answers in a practical task." },
+      "complianceDecision": { "title": "Compliance decision", "description": "Practice safe decisions about AI usage in finance." },
+      "promptSelection": { "title": "Prompt selection", "description": "Choose the clearest and most useful prompt for a situation." },
+      "promptRanking": { "title": "Prompt ranking", "description": "Sort prompts from the weakest to the strongest instruction." },
+      "complianceTrafficLight": { "title": "Compliance traffic light", "description": "Assess three scenarios as allowed, restricted, or prohibited." }
     }
   },
   "profile": {

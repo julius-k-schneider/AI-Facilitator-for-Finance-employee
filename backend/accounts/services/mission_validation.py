@@ -8,6 +8,7 @@ class MissionValidationError(ValueError):
 
 
 ALLOWED_AI_TYPES = {
+    Mission.TYPE_SINGLE_CHOICE,
     Mission.TYPE_MULTIPLE_CHOICE,
     Mission.TYPE_COMPLIANCE_DECISION,
     Mission.TYPE_PROMPT_SELECTION,

@@ -14,6 +14,7 @@
     "bibliothek": "Bibliothek",
     "leaderboard": "Rangliste",
     "missions": "Missionen",
+    "training": "Training",
     "userManagement": "Nutzerverwaltung",
     "profile": "Profil"
   },
@@ -190,6 +191,26 @@
       "title": "Missions-Debugbereich",
       "description": "Teste alle Missionsarten mit Beispieldaten, ohne Punkte oder Datenbankeinträge zu verändern.",
       "button": "Missionen testen"
+    }
+  },
+  "training": {
+    "badge": "TRAININGSBEREICH",
+    "title": "Spiele frei trainieren",
+    "description": "Wähle eine Spielart und lasse dir sofort eine neue Übung generieren. Trainings verändern weder Punkte noch Rangliste oder Serie.",
+    "generate": "Übung generieren",
+    "back": "Zurück zum Training",
+    "result": {
+      "correct": "Richtig gelöst!",
+      "wrong": "Die Antwort war noch nicht richtig. Nutze das Feedback für die nächste Übung.",
+      "partial": "{{correct}} von {{total}} Aussagen waren richtig."
+    },
+    "types": {
+      "singleChoice": { "title": "Single Choice", "description": "Trainiere eine Frage mit genau einer richtigen Antwort." },
+      "multipleChoice": { "title": "Multiple Choice", "description": "Erkenne alle zutreffenden Antworten in einer praktischen Aufgabe." },
+      "complianceDecision": { "title": "Compliance-Entscheidung", "description": "Übe sichere Entscheidungen zur AI-Nutzung im Finance-Kontext." },
+      "promptSelection": { "title": "Prompt-Auswahl", "description": "Wähle den klarsten und hilfreichsten Prompt für eine Situation." },
+      "promptRanking": { "title": "Prompt Ranking", "description": "Sortiere Prompts vom schlechtesten bis zum besten Arbeitsauftrag." },
+      "complianceTrafficLight": { "title": "Compliance-Ampel", "description": "Bewerte drei Szenarien einzeln als erlaubt, eingeschränkt oder verboten." }
     }
   },
   "profile": {

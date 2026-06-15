@@ -4,19 +4,20 @@ import {
   SimpleGrid, Stack, Switch, Text, Textarea, TextInput, ThemeIcon, Title,
 } from '@mantine/core'
 import {
-  IconArrowLeft, IconArrowRight, IconCalendar, IconCheck, IconChevronLeft,
+  IconArrowRight, IconCalendar, IconCheck, IconChevronLeft,
   IconChevronRight, IconCircleCheck, IconEdit, IconEye, IconPlus, IconRefresh, IconSparkles,
-  IconFlame, IconTargetArrow, IconTrash, IconTrophy, IconX,
+  IconFlame, IconTargetArrow, IconTrash, IconX,
   IconBug,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
 import {
   approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, getDailyMissions,
-  getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, submitMission, updateMission,
+  getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, updateMission,
   rejectAllReviewMissions,
 } from '../services/missionService'
 import { createMissionTypeDefaults, createTestMissions, defaultMissionType, getMissionType, missionTypes } from './missions/missionTypes'
+import MissionRunner from './missions/MissionRunner'
 import './Missions.css'
 
 const createEmptyForm = () => ({
@@ -115,58 +116,6 @@ function MissionCard({ mission, onOpen }) {
         </Button>
       </Stack>
     </Paper>
-  )
-}
-
-function MissionRunner({ mission, onBack, onCompleted, language, testMode = false }) {
-  const { t } = useTranslation()
-  const definition = getMissionType(mission.type)
-  const [answer, setAnswer] = useState(() => definition.initialAnswer(mission))
-  const [result, setResult] = useState(null)
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  const submit = async () => {
-    setSubmitting(true)
-    setError('')
-    try {
-      if (testMode) {
-        setResult(definition.evaluateTest(mission, answer))
-        return
-      }
-      const data = await submitMission(mission.id, answer, language)
-      setResult({ ...data.result, feedback: data.mission.content.feedback })
-      onCompleted(data.mission)
-    } catch (nextError) {
-      setError(nextError.message)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
-      <Button variant="subtle" color="secondary" leftSection={<IconArrowLeft size={17} />} onClick={onBack} mb="lg">{t('missions.back')}</Button>
-      <Paper withBorder radius="lg" p={{ base: 'xl', md: 40 }} bg="white">
-        <Stack gap="xl">
-          <Box>
-            <Badge variant="light" color="brand" mb="sm">{missionTypeLabel(t, mission.type)}</Badge>
-            <Title order={1} fz={{ base: 25, md: 32 }}>{mission.title}</Title>
-            <Text c="dimmed" mt={6}>{mission.description}</Text>
-          </Box>
-          <Text fw={700} fz="lg">{mission.content.question}</Text>
-          <definition.Runner mission={mission} answer={answer} setAnswer={setAnswer} result={result} t={t} />
-          {error && <Alert color="red">{error}</Alert>}
-          {result && <Alert color={result.correct ? 'green' : 'orange'} icon={result.correct ? <IconTrophy size={20} /> : undefined}>
-            {result.correct ? t('missions.result.correct', { points: result.score }) : result.correct_count !== undefined
-              ? t('missions.result.partial', { points: result.score, correct: result.correct_count, total: result.total_count })
-              : t('missions.result.wrong')}
-          </Alert>}
-          {result && definition.ResultDetails && <definition.ResultDetails mission={mission} result={result} t={t} />}
-          {!result && <Button color="brand" disabled={!definition.isAnswerComplete(answer)} loading={submitting} onClick={submit}>{t('missions.submit')}</Button>}
-        </Stack>
-      </Paper>
-    </Box>
   )
 }
 

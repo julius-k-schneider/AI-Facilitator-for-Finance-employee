@@ -59,7 +59,7 @@ Content and safety:
 - Never use or invent personal, confidential, Lufthansa-internal, SAP, customer, or employee data.
 - Do not present legal or compliance advice as guaranteed truth. Use broadly accepted German enterprise principles and
   phrase compliance examples cautiously when company-specific rules could differ.
-- Only use these automatically scored types: multiple_choice, compliance_decision, prompt_selection, prompt_ranking,
+- Only use these automatically scored types: single_choice, multiple_choice, compliance_decision, prompt_selection, prompt_ranking,
   compliance_traffic_light.
 - Single-answer types must have exactly one unambiguous correct answer. Multiple-choice missions may have one, several,
   or all answer options as correct.
@@ -81,18 +81,20 @@ def next_calendar_week(reference_date=None):
     return start, start + timedelta(days=6)
 
 
-def build_user_prompt(target_slots):
+def build_user_prompt(target_slots, requested_type=None):
     schedule = ', '.join(f'{day.isoformat()}: {count}' for day, count in sorted(target_slots.items()))
+    type_requirement = f'Every mission must use exactly the type {requested_type}.' if requested_type else ''
     return f"""Create exactly the requested missions for this schedule: {schedule}.
+{type_requirement}
 Use 10-50 points per mission. Return this structure:
-{{"missions":[{{"date":"YYYY-MM-DD","type":"multiple_choice|compliance_decision|prompt_selection|prompt_ranking|compliance_traffic_light",
+{{"missions":[{{"date":"YYYY-MM-DD","type":"single_choice|multiple_choice|compliance_decision|prompt_selection|prompt_ranking|compliance_traffic_light",
 "title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,
 "content":{{...type-specific fields...}}}}]}}
-For multiple_choice, compliance_decision, and prompt_selection use:
+For single_choice, multiple_choice, compliance_decision, and prompt_selection use:
 {{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
 "correct_option_indices":[0],"feedback_de":"...","feedback_en":"..."}}
-For multiple_choice, correct_option_indices must contain one to all option indices. For compliance_decision and
-prompt_selection it must contain exactly one index. Include a meaningful mix of multiple-choice missions with one
+For multiple_choice, correct_option_indices must contain one to all option indices. For single_choice,
+compliance_decision and prompt_selection it must contain exactly one index. Include a meaningful mix of multiple-choice missions with one
 correct answer and with several correct answers.
 For prompt_ranking use exactly 3-4 bilingual prompts and provide their zero-based order from worst to best:
 {{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
@@ -135,7 +137,7 @@ def extract_json(content):
         raise AiMissionGenerationError('AI returned invalid JSON, likely due to a truncated response') from error_value
 
 
-def call_ai(target_slots):
+def call_ai(target_slots, requested_type=None):
     api_key = os.environ.get('KICONNECT_API_KEY', '').strip()
     model = os.environ.get('KICONNECT_MODEL', '').strip()
     base_url = os.environ.get('KICONNECT_BASE_URL', 'https://chat.kiconnect.nrw/api/v1').rstrip('/')
@@ -147,7 +149,7 @@ def call_ai(target_slots):
         'model': model,
         'messages': [
             {'role': 'system', 'content': SYSTEM_PROMPT},
-            {'role': 'user', 'content': build_user_prompt(target_slots)},
+            {'role': 'user', 'content': build_user_prompt(target_slots, requested_type)},
         ],
         'temperature': 0.4,
         'max_tokens': max(1000, int(os.environ.get('KICONNECT_MAX_TOKENS', DEFAULT_MAX_TOKENS))),
@@ -195,11 +197,15 @@ def call_ai(target_slots):
         raise AiMissionGenerationError('AI service is currently unavailable') from exception
 
 
-def generate_candidates(target_slots):
+def generate_candidates(target_slots, requested_type=None):
     if not target_slots:
         return []
     try:
-        return validate_generated_payload(call_ai(target_slots), target_slots)
+        payload = call_ai(target_slots, requested_type) if requested_type else call_ai(target_slots)
+        candidates = validate_generated_payload(payload, target_slots)
+        if requested_type and any(candidate['mission_type'] != requested_type for candidate in candidates):
+            raise MissionValidationError(f'AI did not return the requested type {requested_type}')
+        return candidates
     except MissionValidationError as exception:
         logger.warning('Rejected invalid AI mission response: %s', exception)
         raise AiMissionGenerationError(f'AI response failed validation: {exception}') from exception
@@ -326,3 +332,9 @@ def regenerate_review_mission(mission, requested_by):
         locked.reviewed_at = None
         locked.save()
     return locked
+
+
+def generate_training_candidate(mission_type):
+    if mission_type not in Mission.CHOICE_TYPES:
+        raise AiMissionGenerationError('Unsupported training mission type')
+    return generate_candidates({timezone.localdate(): 1}, requested_type=mission_type)[0]

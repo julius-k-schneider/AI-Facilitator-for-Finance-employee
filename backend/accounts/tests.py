@@ -300,6 +300,39 @@ class AccountsApiTests(TestCase):
         self.assertEqual(self.client.post(f'/api/auth/missions/{mission.id}/approve/', secure=True).status_code, 403)
         self.assertEqual(self.client.post('/api/auth/missions/generate-next-week/', secure=True).status_code, 403)
 
+    @patch('accounts.views.generate_training_candidate')
+    def test_authenticated_user_can_generate_training_without_saving_mission(self, generate_mock):
+        player = self.create_user('training@example.com')
+        generate_mock.return_value = {
+            'mission_type': Mission.TYPE_SINGLE_CHOICE,
+            'title_de': 'Training', 'title_en': 'Training',
+            'description_de': 'Beschreibung', 'description_en': 'Description',
+            'max_points': 30,
+            'content': {
+                'question': {'de': 'Frage?', 'en': 'Question?'},
+                'options': [{'de': 'Ja', 'en': 'Yes'}, {'de': 'Nein', 'en': 'No'}],
+                'correct_indices': [0],
+                'feedback': {'de': 'Gut.', 'en': 'Good.'},
+            },
+        }
+        self.client.force_login(player)
+
+        response = self.client.post('/api/auth/training/generate/', {
+            'type': Mission.TYPE_SINGLE_CHOICE,
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['mission']['question_en'], 'Question?')
+        self.assertEqual(response.json()['mission']['test_solution']['correct_indices'], [0])
+        self.assertEqual(Mission.objects.count(), 0)
+        generate_mock.assert_called_once_with(Mission.TYPE_SINGLE_CHOICE)
+
+    def test_training_generation_requires_authentication(self):
+        response = self.client.post('/api/auth/training/generate/', {
+            'type': Mission.TYPE_SINGLE_CHOICE,
+        }, content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 401)
+
     def test_creator_can_review_approve_and_reject(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         approved = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
@@ -597,6 +630,13 @@ class AiMissionServiceTests(TestCase):
         payload['missions'][0]['type'] = Mission.TYPE_PROMPT_SELECTION
         with self.assertRaises(MissionValidationError):
             validate_generated_payload(payload, {start: 1})
+
+    def test_validator_accepts_ai_single_choice(self):
+        start, _ = next_calendar_week()
+        payload = self.valid_payload({start: 1})
+        payload['missions'][0]['type'] = Mission.TYPE_SINGLE_CHOICE
+        normalized = validate_generated_payload(payload, {start: 1})
+        self.assertEqual(normalized[0]['mission_type'], Mission.TYPE_SINGLE_CHOICE)
 
     def test_validator_accepts_prompt_ranking_and_traffic_light(self):
         start, _ = next_calendar_week()

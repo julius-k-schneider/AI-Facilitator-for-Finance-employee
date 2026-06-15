@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods
 from .models import Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
 from .services.ai_mission_generator import (
     AiMissionGenerationError,
+    generate_training_candidate,
     generate_next_week,
     regenerate_review_mission,
 )
@@ -899,6 +900,41 @@ def generate_next_week_missions_view(request):
         'week_end': week_end.isoformat(),
         'missions': [mission_schedule_payload(mission, request.user) for mission in missions],
     })
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def generate_training_mission_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    mission_type = parse_json(request).get('type')
+    try:
+        candidate = generate_training_candidate(mission_type)
+    except AiMissionGenerationError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=503)
+
+    content = candidate['content']
+    payload = {
+        'type': candidate['mission_type'],
+        'title_de': candidate['title_de'],
+        'title_en': candidate['title_en'],
+        'description_de': candidate['description_de'],
+        'description_en': candidate['description_en'],
+        'question_de': translated(content.get('question', {}), 'de'),
+        'question_en': translated(content.get('question', {}), 'en'),
+        'options': content.get('options', []),
+        'statements': content.get('statements', []),
+        'feedback_de': translated(content.get('feedback', {}), 'de'),
+        'feedback_en': translated(content.get('feedback', {}), 'en'),
+        'test_solution': {
+            'correct_indices': correct_indices(content),
+            'correct_order': content.get('correct_order', []),
+            'correct_colors': [statement.get('correct_color') for statement in content.get('statements', [])],
+            'feedback_de': [translated(statement.get('feedback', {}), 'de') for statement in content.get('statements', [])],
+            'feedback_en': [translated(statement.get('feedback', {}), 'en') for statement in content.get('statements', [])],
+        },
+    }
+    return JsonResponse({'mission': payload})
 
 
 @require_http_methods(['POST'])

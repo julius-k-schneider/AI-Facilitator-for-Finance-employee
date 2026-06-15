@@ -21,6 +21,7 @@ urlpatterns = [
     path('missions/review/approve-all/', views.approve_all_review_missions_view, name='approve_all_review_missions'),
     path('missions/review/reject-all/', views.reject_all_review_missions_view, name='reject_all_review_missions'),
     path('missions/generate-next-week/', views.generate_next_week_missions_view, name='generate_next_week_missions'),
+    path('training/generate/', views.generate_training_mission_view, name='generate_training_mission'),
     path('missions/<int:mission_id>/approve/', views.approve_mission_view, name='approve_mission'),
     path('missions/<int:mission_id>/regenerate/', views.regenerate_mission_view, name='regenerate_mission'),
     path('missions/<int:mission_id>/reject/', views.reject_mission_view, name='reject_mission'),
