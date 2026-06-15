@@ -161,7 +161,11 @@
     "review": {
       "title": "KI-generierte Missionen zur Prüfung",
       "description": "Prüfe zweisprachige Vorschläge, bevor sie als Daily Missions veröffentlicht werden.",
-      "generate": "Nächste Woche generieren",
+      "generate": "Ausgewählte Woche generieren",
+      "selectWeek": "Woche für die Generierung auswählen",
+      "selectWeekButton": "Wochenauswahl",
+      "selectWeekDescription": "Wähle im Kalender eine Woche von Montag bis Sonntag. Bestehende Missionen werden weiterhin pro Tag angezeigt.",
+      "selectedWeek": "Ausgewählt: {{start}} bis {{end}}",
       "approveAll": "Alle freigeben",
       "rejectAll": "Alle verwerfen",
       "rejectAllConfirm": "Sollen wirklich alle {{count}} Review-Missionen verworfen werden?",
@@ -181,6 +185,11 @@
       "approveSuccess": "Die Mission wurde freigegeben.",
       "regenerateSuccess": "Die Mission wurde neu generiert.",
       "rejectSuccess": "Der Missionsvorschlag wurde verworfen."
+    },
+    "test": {
+      "title": "Missions-Debugbereich",
+      "description": "Teste alle Missionsarten mit Beispieldaten, ohne Punkte oder Datenbankeinträge zu verändern.",
+      "button": "Missionen testen"
     }
   },
   "profile": {

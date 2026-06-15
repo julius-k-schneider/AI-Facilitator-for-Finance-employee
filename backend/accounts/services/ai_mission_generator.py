@@ -263,11 +263,17 @@ def apply_candidate(mission, candidate):
     mission.max_points = candidate['max_points']
 
 
-def generate_next_week(created_by, force=False, reference_date=None):
-    week_start, week_end = next_calendar_week(reference_date)
+def generate_next_week(created_by, force=False, reference_date=None, week_start=None):
+    if week_start is None:
+        week_start, week_end = next_calendar_week(reference_date)
+    else:
+        week_end = week_start + timedelta(days=6)
     target_slots = {}
+    today = timezone.localdate()
     for offset in range(7):
         day = week_start + timedelta(days=offset)
+        if day < today:
+            continue
         occupied_missions = Mission.objects.filter(
             scheduled_date=day,
             status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],

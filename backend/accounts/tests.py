@@ -41,6 +41,7 @@ class AccountsApiTests(TestCase):
                 'question': {'de': 'Richtig?', 'en': 'Correct?'},
                 'options': [{'de': 'Ja', 'en': 'Yes'}, {'de': 'Nein', 'en': 'No'}],
                 'correct_index': 0,
+                'feedback': {'de': 'Deutsches Feedback', 'en': 'English feedback'},
             },
             max_points=points,
             created_by=creator,
@@ -97,6 +98,21 @@ class AccountsApiTests(TestCase):
         self.assertEqual(first.json()['progress']['total_points'], 130)
         self.assertEqual(second.status_code, 409)
         self.assertEqual(MissionAttempt.objects.filter(user=player, mission=mission).count(), 1)
+
+    def test_completed_mission_response_uses_requested_language(self):
+        creator = self.create_user('creator-language@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('player-language@example.com')
+        mission = self.create_mission(creator)
+        self.client.force_login(player)
+
+        response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': mission.id, 'answer': 0, 'language': 'en',
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['mission']['title'], 'Test mission')
+        self.assertEqual(response.json()['mission']['content']['question'], 'Correct?')
+        self.assertEqual(response.json()['mission']['content']['feedback'], 'English feedback')
 
     def test_multiple_choice_requires_the_exact_set_of_correct_answers(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -330,6 +346,28 @@ class AccountsApiTests(TestCase):
         third.refresh_from_db()
         self.assertEqual(third.status, Mission.STATUS_REJECTED)
 
+    def test_review_list_and_bulk_action_are_limited_to_selected_week(self):
+        creator = self.create_user('creator-filter@example.com', Profile.ROLE_CONTENT_CREATOR)
+        week_start, _ = next_calendar_week()
+        selected = self.create_mission(creator, week_start)
+        other = self.create_mission(creator, week_start + timedelta(days=7))
+        Mission.objects.filter(id__in=[selected.id, other.id]).update(status=Mission.STATUS_REVIEW)
+        self.client.force_login(creator)
+
+        review = self.client.get(
+            f'/api/auth/missions/review/?week_start={week_start.isoformat()}', secure=True,
+        )
+        approved = self.client.post('/api/auth/missions/review/approve-all/', {
+            'week_start': week_start.isoformat(),
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual([mission['id'] for mission in review.json()['missions']], [selected.id])
+        self.assertEqual(approved.json()['approved_count'], 1)
+        selected.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual(selected.status, Mission.STATUS_PUBLISHED)
+        self.assertEqual(other.status, Mission.STATUS_REVIEW)
+
     def test_approve_all_is_atomic_when_a_day_would_exceed_two_missions(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         scheduled_date = timezone.localdate() + timedelta(days=1)
@@ -355,7 +393,47 @@ class AccountsApiTests(TestCase):
         response = self.client.post('/api/auth/missions/generate-next-week/', {}, content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['created_count'], 0)
-        generate_mock.assert_called_once_with(creator, force=False)
+        generate_mock.assert_called_once_with(creator, force=False, week_start=None)
+
+    @patch('accounts.views.generate_next_week')
+    def test_creator_can_select_a_monday_for_generation(self, generate_mock):
+        creator = self.create_user('creator-week@example.com', Profile.ROLE_CONTENT_CREATOR)
+        start, end = next_calendar_week()
+        generate_mock.return_value = ([], start, end)
+        self.client.force_login(creator)
+
+        response = self.client.post('/api/auth/missions/generate-next-week/', {
+            'week_start': start.isoformat(),
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        generate_mock.assert_called_once_with(creator, force=False, week_start=start)
+
+    def test_generation_week_must_be_a_future_monday(self):
+        creator = self.create_user('creator-invalid-week@example.com', Profile.ROLE_CONTENT_CREATOR)
+        start, _ = next_calendar_week()
+        self.client.force_login(creator)
+
+        response = self.client.post('/api/auth/missions/generate-next-week/', {
+            'week_start': (start + timedelta(days=1)).isoformat(),
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual(response.status_code, 400)
+
+    @patch('accounts.views.generate_next_week')
+    def test_creator_can_select_the_current_week_monday(self, generate_mock):
+        creator = self.create_user('creator-current-week@example.com', Profile.ROLE_CONTENT_CREATOR)
+        today = timezone.localdate()
+        current_monday = today - timedelta(days=today.weekday())
+        generate_mock.return_value = ([], current_monday, current_monday + timedelta(days=6))
+        self.client.force_login(creator)
+
+        response = self.client.post('/api/auth/missions/generate-next-week/', {
+            'week_start': current_monday.isoformat(),
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        generate_mock.assert_called_once_with(creator, force=False, week_start=current_monday)
 
     def test_leaderboard_combines_legacy_and_daily_mission_points(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)

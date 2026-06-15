@@ -19,10 +19,10 @@ async function request(path, options = {}) {
 
 export const getDailyMissions = (language) => request(`/api/auth/missions/today/?lang=${language}`)
 
-export async function submitMission(missionId, answer) {
+export async function submitMission(missionId, answer, language) {
   const data = await request('/api/auth/progress/complete/', {
     method: 'POST',
-    body: JSON.stringify({ mission_id: missionId, answer }),
+    body: JSON.stringify({ mission_id: missionId, answer, language }),
   })
   const progress = data.progress
   window.dispatchEvent(new CustomEvent(PROGRESS_EVENT, { detail: {
@@ -54,19 +54,21 @@ export const updateMission = (missionId, payload) => request(`/api/auth/missions
   body: JSON.stringify(payload),
 })
 
-export const getReviewMissions = () => request('/api/auth/missions/review/')
+export const getReviewMissions = (weekStart) => request(`/api/auth/missions/review/?week_start=${weekStart}`)
 
-export const approveAllReviewMissions = () => request('/api/auth/missions/review/approve-all/', {
+export const approveAllReviewMissions = (weekStart) => request('/api/auth/missions/review/approve-all/', {
   method: 'POST',
+  body: JSON.stringify({ week_start: weekStart }),
 })
 
-export const rejectAllReviewMissions = () => request('/api/auth/missions/review/reject-all/', {
+export const rejectAllReviewMissions = (weekStart) => request('/api/auth/missions/review/reject-all/', {
   method: 'POST',
+  body: JSON.stringify({ week_start: weekStart }),
 })
 
-export const generateNextWeekMissions = (force = false) => request('/api/auth/missions/generate-next-week/', {
+export const generateNextWeekMissions = (weekStart, force = false) => request('/api/auth/missions/generate-next-week/', {
   method: 'POST',
-  body: JSON.stringify({ force }),
+  body: JSON.stringify({ force, week_start: weekStart }),
 })
 
 export const approveMission = (missionId) => request(`/api/auth/missions/${missionId}/approve/`, {

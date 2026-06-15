@@ -1,6 +1,7 @@
 .mission-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
 .mission-calendar-day { min-height: 58px; padding: 7px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); cursor: pointer; }
 .mission-calendar-day:hover, .mission-calendar-day.is-selected { border-color: var(--blue); background: rgba(var(--blue-rgb), 0.06); }
+.mission-calendar-day:disabled { cursor: not-allowed; opacity: 0.42; }
 .mission-calendar-count { padding: 1px 6px; border-radius: 999px; background: var(--mantine-color-brand-0); color: var(--mantine-color-brand-8); font-size: 10px; font-weight: 700; }
 .mission-calendar-count.is-full { background: var(--mantine-color-green-0); color: var(--mantine-color-green-8); }
 

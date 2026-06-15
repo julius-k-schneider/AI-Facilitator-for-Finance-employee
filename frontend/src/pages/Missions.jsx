@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Alert, Badge, Box, Button, Checkbox, Group, Modal, NumberInput, Paper, Radio, Select,
+  Alert, Badge, Box, Button, Group, Modal, NumberInput, Paper, Select,
   SimpleGrid, Stack, Switch, Text, Textarea, TextInput, ThemeIcon, Title,
 } from '@mantine/core'
 import {
   IconArrowLeft, IconArrowRight, IconCalendar, IconCheck, IconChevronLeft,
   IconChevronRight, IconCircleCheck, IconEdit, IconEye, IconPlus, IconRefresh, IconSparkles,
-  IconArrowDown, IconArrowUp, IconFlame, IconTargetArrow, IconTrash, IconTrophy, IconX,
+  IconFlame, IconTargetArrow, IconTrash, IconTrophy, IconX,
+  IconBug,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
@@ -15,18 +16,14 @@ import {
   getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, submitMission, updateMission,
   rejectAllReviewMissions,
 } from '../services/missionService'
+import { createMissionTypeDefaults, createTestMissions, defaultMissionType, getMissionType, missionTypes } from './missions/missionTypes'
 import './Missions.css'
 
 const createEmptyForm = () => ({
-  type: 'single_choice', scheduled_date: '', title_de: '', title_en: '',
+  type: defaultMissionType, scheduled_date: '', title_de: '', title_en: '',
   description_de: '', description_en: '', question_de: '', question_en: '',
   feedback_de: '', feedback_en: '',
-  max_points: 100, correct_indices: [0],
-  correct_order: [0, 1, 2],
-  options: [{ de: '', en: '' }, { de: '', en: '' }],
-  statements: Array.from({ length: 3 }, () => ({
-    de: '', en: '', correct_color: 'green', feedback_de: '', feedback_en: '',
-  })),
+  max_points: 100, correct_indices: [0], ...createMissionTypeDefaults(),
 })
 
 function isoDate(date) {
@@ -40,16 +37,26 @@ function monthRange(month) {
   }
 }
 
+function mondayOf(date) {
+  const result = new Date(date)
+  const day = (result.getDay() + 6) % 7
+  result.setDate(result.getDate() - day)
+  result.setHours(12, 0, 0, 0)
+  return result
+}
+
+function nextWeekStart() {
+  const monday = mondayOf(new Date())
+  monday.setDate(monday.getDate() + 7)
+  return isoDate(monday)
+}
+
+function currentWeekStart() {
+  return isoDate(mondayOf(new Date()))
+}
+
 function missionTypeLabel(t, type) {
-  const labels = {
-    single_choice: 'singleChoice',
-    multiple_choice: 'multipleChoice',
-    compliance_decision: 'complianceDecision',
-    prompt_selection: 'promptSelection',
-    prompt_ranking: 'promptRanking',
-    compliance_traffic_light: 'complianceTrafficLight',
-  }
-  return t(`missions.types.${labels[type] || 'singleChoice'}`)
+  return t(`missions.types.${getMissionType(type).labelKey}`)
 }
 
 function missionToForm(mission) {
@@ -66,33 +73,16 @@ function missionToForm(mission) {
     feedback_en: mission.feedback_en || '',
     max_points: mission.max_points,
     correct_indices: mission.correct_indices?.length ? mission.correct_indices : [0],
-    correct_order: mission.correct_order?.length ? mission.correct_order : mission.options.map((_, index) => index),
-    options: mission.options.map((option) => ({ ...option })),
+    correct_order: mission.correct_order?.length ? mission.correct_order : (mission.options || []).map((_, index) => index),
+    options: (mission.options || []).map((option) => ({ ...option })),
     statements: mission.statements?.length ? mission.statements.map((statement) => ({ ...statement })) : createEmptyForm().statements,
   }
 }
 
-function moveItem(items, index, direction) {
-  const target = index + direction
-  if (target < 0 || target >= items.length) return items
-  const next = [...items]
-  ;[next[index], next[target]] = [next[target], next[index]]
-  return next
-}
-
 function MissionSolutionContent({ mission, language, showSolution = true }) {
   const { t } = useTranslation()
-  if (mission.type === 'compliance_traffic_light') {
-    return <Stack gap="xs">{mission.statements.map((statement, index) => <Paper key={index} withBorder radius="md" p="sm">
-      <Text fz="sm" fw={600}>{index + 1}. {statement[language]}</Text>
-      {showSolution && <><Badge mt="xs" color={statement.correct_color === 'yellow' ? 'orange' : statement.correct_color}>{t(`missions.trafficLight.${statement.correct_color}`)}</Badge><Text fz="sm" mt="xs">{statement[`feedback_${language}`]}</Text></>}
-    </Paper>)}</Stack>
-  }
-  if (mission.type === 'prompt_ranking') {
-    const order = showSolution ? mission.correct_order : mission.options.map((_, index) => index)
-    return <Stack gap={4}>{order.map((optionIndex, position) => <Text key={optionIndex} fz="sm" c={showSolution ? 'green.8' : undefined} fw={showSolution ? 700 : 400}>{position + 1}. {mission.options[optionIndex]?.[language]}</Text>)}</Stack>
-  }
-  return <Stack gap={4}>{mission.options.map((option, index) => <Text key={index} fz="sm" c={showSolution && mission.correct_indices.includes(index) ? 'green.8' : undefined} fw={showSolution && mission.correct_indices.includes(index) ? 700 : 400}>{index + 1}. {option[language]}</Text>)}</Stack>
+  const Solution = getMissionType(mission.type).Solution
+  return <Solution mission={mission} language={language} showSolution={showSolution} t={t} />
 }
 
 function MissionCard({ mission, onOpen }) {
@@ -128,15 +118,10 @@ function MissionCard({ mission, onOpen }) {
   )
 }
 
-function MissionRunner({ mission, onBack, onCompleted }) {
+function MissionRunner({ mission, onBack, onCompleted, language, testMode = false }) {
   const { t } = useTranslation()
-  const isMultiple = mission.type === 'multiple_choice'
-  const isRanking = mission.type === 'prompt_ranking'
-  const isTrafficLight = mission.type === 'compliance_traffic_light'
-  const initialAnswer = isMultiple ? [] : isRanking
-    ? mission.content.options.map((_, index) => index)
-    : isTrafficLight ? mission.content.statements.map(() => '') : null
-  const [answer, setAnswer] = useState(initialAnswer)
+  const definition = getMissionType(mission.type)
+  const [answer, setAnswer] = useState(() => definition.initialAnswer(mission))
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -145,7 +130,11 @@ function MissionRunner({ mission, onBack, onCompleted }) {
     setSubmitting(true)
     setError('')
     try {
-      const data = await submitMission(mission.id, answer)
+      if (testMode) {
+        setResult(definition.evaluateTest(mission, answer))
+        return
+      }
+      const data = await submitMission(mission.id, answer, language)
       setResult({ ...data.result, feedback: data.mission.content.feedback })
       onCompleted(data.mission)
     } catch (nextError) {
@@ -166,50 +155,22 @@ function MissionRunner({ mission, onBack, onCompleted }) {
             <Text c="dimmed" mt={6}>{mission.description}</Text>
           </Box>
           <Text fw={700} fz="lg">{mission.content.question}</Text>
-          {isRanking ? <Stack gap="sm">
-              <Text fz="sm" c="dimmed">{t('missions.rankingInstruction')}</Text>
-              {answer.map((optionIndex, position) => <Paper key={optionIndex} withBorder radius="md" p="md">
-                <Group justify="space-between" wrap="nowrap">
-                  <Group wrap="nowrap"><Badge variant="light">{position + 1}</Badge><Text>{mission.content.options[optionIndex]}</Text></Group>
-                  <Group gap={4} wrap="nowrap">
-                    <Button variant="subtle" size="compact-sm" disabled={Boolean(result) || position === 0} aria-label={t('missions.moveUp')} onClick={() => setAnswer((current) => moveItem(current, position, -1))}><IconArrowUp size={17} /></Button>
-                    <Button variant="subtle" size="compact-sm" disabled={Boolean(result) || position === answer.length - 1} aria-label={t('missions.moveDown')} onClick={() => setAnswer((current) => moveItem(current, position, 1))}><IconArrowDown size={17} /></Button>
-                  </Group>
-                </Group>
-              </Paper>)}
-            </Stack> : isTrafficLight ? <Stack gap="md">
-              {mission.content.statements.map((statement, index) => <Paper key={index} withBorder radius="md" p="md">
-                <Stack gap="sm"><Text fw={600}>{index + 1}. {statement}</Text>
-                  <Radio.Group value={answer[index]} onChange={(value) => setAnswer((current) => current.map((item, itemIndex) => itemIndex === index ? value : item))}>
-                    <Group grow>{['green', 'yellow', 'red'].map((color) => <Paper key={color} withBorder radius="md" p="xs"><Radio value={color} color={color === 'yellow' ? 'orange' : color} label={t(`missions.trafficLight.${color}`)} disabled={Boolean(result)} /></Paper>)}</Group>
-                  </Radio.Group>
-                </Stack>
-              </Paper>)}
-            </Stack> : isMultiple ? <Checkbox.Group value={answer.map(String)} onChange={(values) => setAnswer(values.map(Number))}>
-              <Stack gap="sm">
-                {mission.content.options.map((option, index) => <Paper key={`${index}-${option}`} withBorder radius="md" p="md"><Checkbox value={String(index)} label={option} disabled={Boolean(result)} /></Paper>)}
-              </Stack>
-            </Checkbox.Group> : <Radio.Group value={answer === null ? '' : String(answer)} onChange={(value) => setAnswer(Number(value))}>
-              <Stack gap="sm">
-                {mission.content.options.map((option, index) => <Paper key={`${index}-${option}`} withBorder radius="md" p="md"><Radio value={String(index)} label={option} disabled={Boolean(result)} /></Paper>)}
-              </Stack>
-            </Radio.Group>}
+          <definition.Runner mission={mission} answer={answer} setAnswer={setAnswer} result={result} t={t} />
           {error && <Alert color="red">{error}</Alert>}
           {result && <Alert color={result.correct ? 'green' : 'orange'} icon={result.correct ? <IconTrophy size={20} /> : undefined}>
             {result.correct ? t('missions.result.correct', { points: result.score }) : result.correct_count !== undefined
               ? t('missions.result.partial', { points: result.score, correct: result.correct_count, total: result.total_count })
               : t('missions.result.wrong')}
           </Alert>}
-          {result && isTrafficLight && <Stack gap="xs">{mission.content.statements.map((statement, index) => <Paper key={index} withBorder radius="md" p="sm"><Group gap="xs"><Badge color={result.correct_colors[index] === 'yellow' ? 'orange' : result.correct_colors[index]}>{t(`missions.trafficLight.${result.correct_colors[index]}`)}</Badge><Text fz="sm" fw={600}>{statement}</Text></Group><Text fz="sm" c="dimmed" mt="xs">{result.feedback[index]}</Text></Paper>)}</Stack>}
-          {result && isRanking && <Paper withBorder radius="md" p="md"><Text fw={700} mb="xs">{t('missions.creator.rankingSolution')}</Text>{result.correct_order.map((optionIndex, index) => <Text key={optionIndex} fz="sm">{index + 1}. {mission.content.options[optionIndex]}</Text>)}{result.feedback && <Text fz="sm" c="dimmed" mt="sm">{result.feedback}</Text>}</Paper>}
-          {!result && <Button color="brand" disabled={isMultiple ? answer.length === 0 : isTrafficLight ? answer.some((value) => !value) : answer === null} loading={submitting} onClick={submit}>{t('missions.submit')}</Button>}
+          {result && definition.ResultDetails && <definition.ResultDetails mission={mission} result={result} t={t} />}
+          {!result && <Button color="brand" disabled={!definition.isAnswerComplete(answer)} loading={submitting} onClick={submit}>{t('missions.submit')}</Button>}
         </Stack>
       </Paper>
     </Box>
   )
 }
 
-function Calendar({ month, setMonth, schedule, selectedDate, onSelect }) {
+function Calendar({ month, setMonth, schedule, selectedDate, selectedWeekStart, onSelect, weekMode = false }) {
   const { i18n, t } = useTranslation()
   const offset = (new Date(month.getFullYear(), month.getMonth(), 1).getDay() + 6) % 7
   const length = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
@@ -229,7 +190,10 @@ function Calendar({ month, setMonth, schedule, selectedDate, onSelect }) {
           if (!day) return <div key={`empty-${index}`} />
           const value = isoDate(new Date(month.getFullYear(), month.getMonth(), day))
           const count = schedule[value] || 0
-          return <button key={value} type="button" className={`mission-calendar-day${selectedDate === value ? ' is-selected' : ''}`} onClick={() => onSelect(value)}>
+          const weekStart = isoDate(mondayOf(new Date(`${value}T12:00:00`)))
+          const selected = weekMode ? selectedWeekStart === weekStart : selectedDate === value
+          const disabled = weekMode && weekStart < currentWeekStart()
+          return <button key={value} type="button" disabled={disabled} className={`mission-calendar-day${selected ? ' is-selected' : ''}`} onClick={() => onSelect(weekMode ? weekStart : value)}>
             <span>{day}</span>{count > 0 && <span className={`mission-calendar-count${count >= 2 ? ' is-full' : ''}`}>{count}/2</span>}
           </button>
         })}
@@ -260,27 +224,11 @@ function Creator({ opened, onClose, onCreated }) {
 
   useEffect(() => { if (opened) loadSchedule() }, [opened, loadSchedule])
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }))
-  const setType = (value) => setForm((current) => ({
-    ...current,
-    type: value,
-    correct_indices: value === 'multiple_choice' ? current.correct_indices : [current.correct_indices[0] ?? 0],
-    options: value === 'prompt_ranking' && current.options.length < 3
-      ? [...current.options, ...Array.from({ length: 3 - current.options.length }, () => ({ de: '', en: '' }))]
-      : current.options,
-    correct_order: value === 'prompt_ranking'
-      ? Array.from({ length: Math.max(3, current.options.length) }, (_, index) => index)
-      : current.correct_order,
-  }))
+  const setType = (value) => setForm((current) => {
+    const next = { ...current, ...getMissionType(value).createDefaults(), type: value }
+    return getMissionType(value).prepareForm?.(next) || next
+  })
   const setOption = (index, language, value) => setForm((current) => ({ ...current, options: current.options.map((option, optionIndex) => optionIndex === index ? { ...option, [language]: value } : option) }))
-  const addOption = () => setForm((current) => ({
-    ...current,
-    options: [...current.options, { de: '', en: '' }],
-    correct_order: current.type === 'prompt_ranking' ? [...current.correct_order, current.options.length] : current.correct_order,
-  }))
-  const setStatement = (index, field, value) => setForm((current) => ({
-    ...current,
-    statements: current.statements.map((statement, statementIndex) => statementIndex === index ? { ...statement, [field]: value } : statement),
-  }))
   const toggleCorrectOption = (index) => setForm((current) => ({
     ...current,
     correct_indices: current.correct_indices.includes(index)
@@ -345,32 +293,13 @@ function Creator({ opened, onClose, onCreated }) {
       <div className="mission-manager-grid">
         <Stack gap="md">
           {editingId && <Group justify="space-between"><Badge variant="light" color="brand">{t('missions.creator.editing')}</Badge><Button variant="subtle" size="xs" onClick={resetForm}>{t('missions.creator.cancelEdit')}</Button></Group>}
-          <Select label={t('missions.creator.type')} value={form.type} data={[
-            { value: 'single_choice', label: t('missions.types.singleChoice') },
-            { value: 'multiple_choice', label: t('missions.types.multipleChoice') },
-            { value: 'prompt_selection', label: t('missions.types.promptSelection') },
-            { value: 'prompt_ranking', label: t('missions.types.promptRanking') },
-            { value: 'compliance_traffic_light', label: t('missions.types.complianceTrafficLight') },
-          ]} onChange={setType} />
+          <Select label={t('missions.creator.type')} value={form.type} data={missionTypes.map((definition) => ({ value: definition.id, label: t(`missions.types.${definition.labelKey}`) }))} onChange={setType} />
           <TextInput type="date" label={t('missions.creator.date')} value={form.scheduled_date} min={editingId ? undefined : isoDate(new Date())} onChange={(event) => setField('scheduled_date', event.target.value)} />
           <SimpleGrid cols={2}><TextInput label={t('missions.creator.titleDe')} value={form.title_de} onChange={(e) => setField('title_de', e.target.value)} /><TextInput label={t('missions.creator.titleEn')} value={form.title_en} onChange={(e) => setField('title_en', e.target.value)} /></SimpleGrid>
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.descriptionDe')} value={form.description_de} onChange={(e) => setField('description_de', e.target.value)} /><Textarea label={t('missions.creator.descriptionEn')} value={form.description_en} onChange={(e) => setField('description_en', e.target.value)} /></SimpleGrid>
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.questionDe')} value={form.question_de} onChange={(e) => setField('question_de', e.target.value)} /><Textarea label={t('missions.creator.questionEn')} value={form.question_en} onChange={(e) => setField('question_en', e.target.value)} /></SimpleGrid>
-          {form.type !== 'compliance_traffic_light' && <SimpleGrid cols={2}><Textarea label={t('missions.creator.feedbackDe')} value={form.feedback_de} onChange={(e) => setField('feedback_de', e.target.value)} /><Textarea label={t('missions.creator.feedbackEn')} value={form.feedback_en} onChange={(e) => setField('feedback_en', e.target.value)} /></SimpleGrid>}
-          {form.type === 'compliance_traffic_light' ? <Stack gap="sm">
-            <Text fw={700}>{t('missions.creator.statements')}</Text>
-            {form.statements.map((statement, index) => <Paper key={index} withBorder radius="md" p="sm">
-              <Stack gap="sm">
-                <Group grow><TextInput label={`DE ${index + 1}`} value={statement.de} onChange={(e) => setStatement(index, 'de', e.target.value)} /><TextInput label={`EN ${index + 1}`} value={statement.en} onChange={(e) => setStatement(index, 'en', e.target.value)} /></Group>
-                <Select label={t('missions.creator.correctColor')} value={statement.correct_color} data={['green', 'yellow', 'red'].map((color) => ({ value: color, label: t(`missions.trafficLight.${color}`) }))} onChange={(value) => setStatement(index, 'correct_color', value)} />
-                <Group grow><Textarea label={t('missions.creator.feedbackDe')} value={statement.feedback_de} onChange={(e) => setStatement(index, 'feedback_de', e.target.value)} /><Textarea label={t('missions.creator.feedbackEn')} value={statement.feedback_en} onChange={(e) => setStatement(index, 'feedback_en', e.target.value)} /></Group>
-              </Stack>
-            </Paper>)}
-          </Stack> : <Stack gap="sm">
-            <Group justify="space-between"><Text fw={700}>{t('missions.creator.answers')}</Text><Button size="xs" variant="light" leftSection={<IconPlus size={14} />} disabled={form.type === 'prompt_ranking' && form.options.length >= 4} onClick={addOption}>{t('missions.creator.addAnswer')}</Button></Group>
-            {form.options.map((option, index) => <Paper key={index} withBorder radius="md" p="sm"><Group align="flex-end" wrap="nowrap">{form.type === 'prompt_ranking' ? <Badge variant="light">{form.correct_order.indexOf(index) + 1}</Badge> : form.type === 'multiple_choice' ? <Checkbox checked={form.correct_indices.includes(index)} onChange={() => toggleCorrectOption(index)} aria-label={t('missions.creator.correctAnswer')} /> : <Radio checked={form.correct_indices.includes(index)} onChange={() => setField('correct_indices', [index])} aria-label={t('missions.creator.correctAnswer')} />}<TextInput label={`DE ${index + 1}`} value={option.de} onChange={(e) => setOption(index, 'de', e.target.value)} style={{ flex: 1 }} /><TextInput label={`EN ${index + 1}`} value={option.en} onChange={(e) => setOption(index, 'en', e.target.value)} style={{ flex: 1 }} /></Group></Paper>)}
-            {form.type === 'prompt_ranking' && <Stack gap="xs"><Text fw={700}>{t('missions.creator.rankingSolution')}</Text>{form.correct_order.map((optionIndex, position) => <Paper key={optionIndex} withBorder radius="md" p="xs"><Group justify="space-between" wrap="nowrap"><Text fz="sm">{position + 1}. {form.options[optionIndex]?.de || form.options[optionIndex]?.en || `${t('missions.creator.answers')} ${optionIndex + 1}`}</Text><Group gap={4}><Button variant="subtle" size="compact-sm" disabled={position === 0} onClick={() => setField('correct_order', moveItem(form.correct_order, position, -1))}><IconArrowUp size={16} /></Button><Button variant="subtle" size="compact-sm" disabled={position === form.correct_order.length - 1} onClick={() => setField('correct_order', moveItem(form.correct_order, position, 1))}><IconArrowDown size={16} /></Button></Group></Group></Paper>)}</Stack>}
-          </Stack>}
+          {getMissionType(form.type).hasSharedFeedback && <SimpleGrid cols={2}><Textarea label={t('missions.creator.feedbackDe')} value={form.feedback_de} onChange={(e) => setField('feedback_de', e.target.value)} /><Textarea label={t('missions.creator.feedbackEn')} value={form.feedback_en} onChange={(e) => setField('feedback_en', e.target.value)} /></SimpleGrid>}
+          {(() => { const Editor = getMissionType(form.type).Editor; return <Editor form={form} setForm={setForm} setOption={setOption} toggleCorrectOption={toggleCorrectOption} t={t} /> })()}
           <NumberInput label={t('missions.creator.points')} min={1} max={1000} value={form.max_points} onChange={(value) => setField('max_points', value)} />
           {error && <Alert color="red">{error}</Alert>}
           <Button color="brand" loading={saving} onClick={save}>{editingId ? t('missions.creator.update') : t('missions.creator.save')}</Button>
@@ -410,7 +339,7 @@ function Creator({ opened, onClose, onCreated }) {
               <Text fz="sm" c="dimmed">{preview[`description_${language}`]}</Text>
               <Text fw={700}>{preview[`question_${language}`]}</Text>
               <MissionSolutionContent mission={preview} language={language} showSolution={showPreviewSolution} />
-              {showPreviewSolution && preview.type !== 'compliance_traffic_light' && preview[`feedback_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{preview[`feedback_${language}`]}</Text>}
+              {showPreviewSolution && getMissionType(preview.type).hasSharedFeedback && preview[`feedback_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{preview[`feedback_${language}`]}</Text>}
             </Stack>
           </Paper>)}
           </SimpleGrid>
@@ -429,20 +358,37 @@ function MissionReview({ enabled, onPublished }) {
   const [activeAction, setActiveAction] = useState('')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [weekSelectionOpen, setWeekSelectionOpen] = useState(false)
+  const [generationMonth, setGenerationMonth] = useState(() => new Date(`${nextWeekStart()}T12:00:00`))
+  const [generationWeek, setGenerationWeek] = useState(nextWeekStart)
+  const [generationSchedule, setGenerationSchedule] = useState({})
+
+  const loadGenerationSchedule = useCallback(() => {
+    const range = monthRange(generationMonth)
+    return getMissionSchedule(range.from, range.to)
+      .then((data) => setGenerationSchedule(data.dates || {}))
+      .catch(() => setGenerationSchedule({}))
+  }, [generationMonth])
+
+  useEffect(() => {
+    if (!enabled) return undefined
+    loadGenerationSchedule()
+    return undefined
+  }, [enabled, loadGenerationSchedule])
 
   const loadReview = useCallback(() => {
     if (!enabled) return
     setLoading(true)
-    return getReviewMissions()
+    return getReviewMissions(generationWeek)
       .then((data) => { setMissions(data.missions || []); setError('') })
       .catch((nextError) => setError(nextError.message))
       .finally(() => setLoading(false))
-  }, [enabled])
+  }, [enabled, generationWeek])
 
   useEffect(() => {
     if (!enabled) return undefined
     let active = true
-    getReviewMissions()
+    getReviewMissions(generationWeek)
       .then((data) => {
         if (!active) return
         setMissions(data.missions || [])
@@ -451,16 +397,16 @@ function MissionReview({ enabled, onPublished }) {
       .catch((nextError) => active && setError(nextError.message))
       .finally(() => active && setLoading(false))
     return () => { active = false }
-  }, [enabled])
+  }, [enabled, generationWeek])
 
   const generate = async () => {
     setGenerating(true)
     setError('')
     setMessage('')
     try {
-      const data = await generateNextWeekMissions()
+      const data = await generateNextWeekMissions(generationWeek)
       setMessage(t('missions.review.generated', { count: data.created_count }))
-      loadReview()
+      await Promise.all([loadReview(), loadGenerationSchedule()])
     } catch (nextError) {
       setError(nextError.message)
     } finally {
@@ -493,7 +439,7 @@ function MissionReview({ enabled, onPublished }) {
     setError('')
     setMessage('')
     try {
-      const data = action === 'approve' ? await approveAllReviewMissions() : await rejectAllReviewMissions()
+      const data = action === 'approve' ? await approveAllReviewMissions(generationWeek) : await rejectAllReviewMissions(generationWeek)
       const count = action === 'approve' ? data.approved_count : data.rejected_count
       setMessage(t(`missions.review.${action}AllSuccess`, { count }))
       await loadReview()
@@ -527,6 +473,16 @@ function MissionReview({ enabled, onPublished }) {
             </Group>
           </Stack>
         </Group>
+        <Group justify="space-between">
+          <Text fw={700}>{t('missions.review.selectedWeek', {
+            start: new Date(`${generationWeek}T12:00:00`).toLocaleDateString(i18n.resolvedLanguage),
+            end: new Date(new Date(`${generationWeek}T12:00:00`).getTime() + 6 * 86400000).toLocaleDateString(i18n.resolvedLanguage),
+          })}</Text>
+          <Button variant="light" leftSection={<IconCalendar size={17} />} onClick={() => setWeekSelectionOpen((current) => !current)}>{t('missions.review.selectWeekButton')}</Button>
+        </Group>
+        <Modal opened={weekSelectionOpen} onClose={() => setWeekSelectionOpen(false)} title={t('missions.review.selectWeek')} size="lg" centered>
+          <Stack gap="md"><Text c="dimmed" fz="sm">{t('missions.review.selectWeekDescription')}</Text><Calendar month={generationMonth} setMonth={setGenerationMonth} schedule={generationSchedule} selectedWeekStart={generationWeek} onSelect={(value) => { setGenerationWeek(value); setWeekSelectionOpen(false) }} weekMode /></Stack>
+        </Modal>
         {error && <Alert color="red">{error}</Alert>}
         {message && <Alert color="green">{message}</Alert>}
         {loading ? <Text c="dimmed">{t('missions.review.loading')}</Text> : missions.length === 0 ? (
@@ -552,7 +508,7 @@ function MissionReview({ enabled, onPublished }) {
                   <Text fz="sm" c="dimmed" mb="xs">{mission[`description_${language}`]}</Text>
                   <Text fw={700} fz="sm" mb="xs">{mission[`question_${language}`]}</Text>
                   <MissionSolutionContent mission={mission} language={language} />
-                  {mission.type !== 'compliance_traffic_light' && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{mission[`feedback_${language}`]}</Text>}
+                  {getMissionType(mission.type).hasSharedFeedback && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{mission[`feedback_${language}`]}</Text>}
                 </Box>)}
               </SimpleGrid>
               <Group justify="flex-end">
@@ -568,16 +524,33 @@ function MissionReview({ enabled, onPublished }) {
   )
 }
 
+function MissionTestArea({ language, onSelect }) {
+  const { t } = useTranslation()
+  const [opened, setOpened] = useState(false)
+  const examples = createTestMissions(language)
+  return <>
+    <Paper withBorder radius="lg" p="xl" bg="white" mt="xl">
+      <Group justify="space-between"><Box><Group gap="xs"><IconBug size={20} /><Text fw={700}>{t('missions.test.title')}</Text></Group><Text fz="sm" c="dimmed" mt={4}>{t('missions.test.description')}</Text></Box><Button variant="light" leftSection={<IconBug size={17} />} onClick={() => setOpened(true)}>{t('missions.test.button')}</Button></Group>
+    </Paper>
+    <Modal opened={opened} onClose={() => setOpened(false)} title={t('missions.test.title')} size="xl" centered>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">{examples.map((mission) => <MissionCard key={mission.id} mission={mission} onOpen={(selected) => { setOpened(false); onSelect(selected) }} />)}</SimpleGrid>
+    </Modal>
+  </>
+}
+
 export default function Missions({ user }) {
   const { t, i18n } = useTranslation()
   const { progress } = useUserProgress(user)
   const [missions, setMissions] = useState([])
   const [canCreate, setCanCreate] = useState(false)
-  const [activeMission, setActiveMission] = useState(null)
+  const [activeMissionId, setActiveMissionId] = useState(null)
+  const [testMissionId, setTestMissionId] = useState(null)
   const [creatorOpen, setCreatorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const language = i18n.resolvedLanguage === 'en' ? 'en' : 'de'
+  const language = (i18n.resolvedLanguage || i18n.language || 'de').split('-')[0] === 'en' ? 'en' : 'de'
+  const activeMission = missions.find((mission) => mission.id === activeMissionId)
+  const testMission = createTestMissions(language).find((mission) => mission.id === testMissionId)
 
   const load = useCallback((showLoading = true) => {
     if (showLoading) setLoading(true)
@@ -597,7 +570,8 @@ export default function Missions({ user }) {
     return () => { active = false }
   }, [language])
 
-  if (activeMission) return <MissionRunner mission={activeMission} onBack={() => { setActiveMission(null); load() }} onCompleted={(completed) => setMissions((current) => current.map((mission) => mission.id === completed.id ? completed : mission))} />
+  if (testMission) return <MissionRunner mission={testMission} language={language} testMode onBack={() => setTestMissionId(null)} onCompleted={() => {}} />
+  if (activeMission) return <MissionRunner mission={activeMission} language={language} onBack={() => { setActiveMissionId(null); load() }} onCompleted={(completed) => setMissions((current) => current.map((mission) => mission.id === completed.id ? completed : mission))} />
 
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
@@ -613,9 +587,10 @@ export default function Missions({ user }) {
           {canCreate && <Button color="brand" leftSection={<IconPlus size={18} />} onClick={() => setCreatorOpen(true)}>{t('missions.creator.button')}</Button>}
         </Group>
       </Group>
-      {loading ? <Text c="dimmed">{t('missions.loading')}</Text> : error ? <Alert color="red">{error}</Alert> : missions.length === 0 ? <Paper withBorder radius="lg" p={48} bg="white"><Stack align="center"><ThemeIcon size={58} radius="xl" variant="light"><IconCalendar size={28} /></ThemeIcon><Text fw={700}>{t('missions.emptyTitle')}</Text><Text c="dimmed" ta="center">{t('missions.emptyText')}</Text></Stack></Paper> : <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">{missions.map((mission) => <MissionCard key={mission.id} mission={mission} onOpen={setActiveMission} />)}</SimpleGrid>}
+      {loading ? <Text c="dimmed">{t('missions.loading')}</Text> : error ? <Alert color="red">{error}</Alert> : missions.length === 0 ? <Paper withBorder radius="lg" p={48} bg="white"><Stack align="center"><ThemeIcon size={58} radius="xl" variant="light"><IconCalendar size={28} /></ThemeIcon><Text fw={700}>{t('missions.emptyTitle')}</Text><Text c="dimmed" ta="center">{t('missions.emptyText')}</Text></Stack></Paper> : <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">{missions.map((mission) => <MissionCard key={mission.id} mission={mission} onOpen={(selected) => setActiveMissionId(selected.id)} />)}</SimpleGrid>}
       <MissionReview enabled={canCreate} onPublished={() => load(false)} />
       <Creator opened={creatorOpen} onClose={() => setCreatorOpen(false)} onCreated={load} />
+      {user?.role === 'admin' && <MissionTestArea language={language} onSelect={(selected) => setTestMissionId(selected.id)} />}
     </Box>
   )
 }

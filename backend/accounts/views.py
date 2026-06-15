@@ -617,6 +617,7 @@ def complete_mission_view(request):
         return JsonResponse({'error': 'authentication required'}, status=401)
 
     data = parse_json(request)
+    language = 'en' if data.get('language') == 'en' else 'de'
     mission = Mission.objects.filter(
         id=data.get('mission_id'),
         scheduled_date=timezone.localdate(),
@@ -701,7 +702,7 @@ def complete_mission_view(request):
             'max_points': mission.max_points,
             **result_details,
         },
-        'mission': mission_payload(mission, request.user),
+        'mission': mission_payload(mission, request.user, language),
         'progress': progress_payload(profile),
     })
 
@@ -801,6 +802,11 @@ def mission_review_view(request):
     if not can_create_missions(request.user):
         return JsonResponse({'error': 'permission denied'}, status=403)
     missions = Mission.objects.filter(status=Mission.STATUS_REVIEW).prefetch_related('attempts')
+    week_start = parse_iso_date(request.GET.get('week_start'))
+    if request.GET.get('week_start') and week_start is None:
+        return JsonResponse({'error': 'week_start must be a valid ISO date'}, status=400)
+    if week_start is not None:
+        missions = missions.filter(scheduled_date__range=(week_start, week_start + timedelta(days=6)))
     return JsonResponse({'missions': [mission_schedule_payload(mission, request.user) for mission in missions]})
 
 
@@ -809,9 +815,16 @@ def mission_review_view(request):
 def approve_all_review_missions_view(request):
     if not can_create_missions(request.user):
         return JsonResponse({'error': 'permission denied'}, status=403)
+    data = parse_json(request)
+    week_start = parse_iso_date(data.get('week_start'))
+    if data.get('week_start') and week_start is None:
+        return JsonResponse({'error': 'week_start must be a valid ISO date'}, status=400)
     with transaction.atomic():
+        review_query = Mission.objects.select_for_update().filter(status=Mission.STATUS_REVIEW)
+        if week_start is not None:
+            review_query = review_query.filter(scheduled_date__range=(week_start, week_start + timedelta(days=6)))
         review_missions = list(
-            Mission.objects.select_for_update().filter(status=Mission.STATUS_REVIEW)
+            review_query
         )
         review_counts = {}
         for mission in review_missions:
@@ -840,8 +853,14 @@ def approve_all_review_missions_view(request):
 def reject_all_review_missions_view(request):
     if not can_create_missions(request.user):
         return JsonResponse({'error': 'permission denied'}, status=403)
+    data = parse_json(request)
+    week_start = parse_iso_date(data.get('week_start'))
+    if data.get('week_start') and week_start is None:
+        return JsonResponse({'error': 'week_start must be a valid ISO date'}, status=400)
     with transaction.atomic():
         review_missions = Mission.objects.select_for_update().filter(status=Mission.STATUS_REVIEW)
+        if week_start is not None:
+            review_missions = review_missions.filter(scheduled_date__range=(week_start, week_start + timedelta(days=6)))
         rejected_count = review_missions.count()
         review_missions.update(
             status=Mission.STATUS_REJECTED,
@@ -856,9 +875,22 @@ def reject_all_review_missions_view(request):
 def generate_next_week_missions_view(request):
     if not can_create_missions(request.user):
         return JsonResponse({'error': 'permission denied'}, status=403)
-    force = bool(parse_json(request).get('force', False))
+    data = parse_json(request)
+    force = bool(data.get('force', False))
+    raw_week_start = data.get('week_start')
+    week_start = parse_iso_date(raw_week_start) if raw_week_start else None
+    if raw_week_start and week_start is None:
+        return JsonResponse({'error': 'week_start must be a valid ISO date'}, status=400)
+    today = timezone.localdate()
+    current_week_start = today - timedelta(days=today.weekday())
+    if week_start is not None and (week_start.weekday() != 0 or week_start < current_week_start):
+        return JsonResponse({'error': 'week_start must be the current or a future Monday'}, status=400)
     try:
-        missions, week_start, week_end = generate_next_week(request.user, force=force)
+        missions, week_start, week_end = generate_next_week(
+            request.user,
+            force=force,
+            week_start=week_start,
+        )
     except AiMissionGenerationError as error_value:
         return JsonResponse({'error': str(error_value)}, status=503)
     return JsonResponse({
