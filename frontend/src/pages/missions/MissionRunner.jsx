@@ -18,7 +18,9 @@ export default function MissionRunner({ mission, onBack, onCompleted = () => {},
     setError('')
     try {
       if (testMode) {
-        setResult(definition.evaluateTest(mission, answer))
+        setResult(definition.submitTraining
+          ? await definition.submitTraining(mission, answer, language)
+          : definition.evaluateTest(mission, answer))
         return
       }
       const data = await submitMission(mission.id, answer, language)
@@ -43,6 +45,7 @@ export default function MissionRunner({ mission, onBack, onCompleted = () => {},
           {showPoints
             ? result.correct ? t('missions.result.correct', { points: result.score }) : result.correct_count !== undefined ? t('missions.result.partial', { points: result.score, correct: result.correct_count, total: result.total_count }) : t('missions.result.wrong')
             : result.correct ? t('training.result.correct') : result.correct_count !== undefined ? t('training.result.partial', { correct: result.correct_count, total: result.total_count }) : t('training.result.wrong')}
+          {typeof result.feedback === 'string' && result.feedback && !definition.ResultDetails && <Text fz="sm" mt={6}>{result.correct ? t('missions.result.correctPrefix') : t('missions.result.wrongPrefix')} {result.feedback}</Text>}
         </Alert>}
         {result && definition.ResultDetails && <definition.ResultDetails mission={mission} result={result} t={t} />}
         {!result && <Button color="brand" disabled={!definition.isAnswerComplete(answer)} loading={submitting} onClick={submit}>{t('missions.submit')}</Button>}

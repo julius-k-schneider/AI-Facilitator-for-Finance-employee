@@ -115,8 +115,11 @@
       "promptSelection": "Prompt-Auswahl"
       ,"promptRanking": "Prompt Ranking",
       "complianceTrafficLight": "Compliance-Ampel"
+      ,"aiChatChallenge": "AI Chat Challenge"
     },
     "result": {
+      "correctPrefix": "Richtig.",
+      "wrongPrefix": "Falsch.",
       "correct": "Richtig! Du erhältst {{points}} Punkte.",
       "wrong": "Die Antwort war leider nicht richtig. Die Mission ist damit abgeschlossen.",
       "partial": "{{correct}} von {{total}} Aussagen waren richtig. Du erhältst {{points}} Punkte."
@@ -211,6 +214,18 @@
       "promptSelection": { "title": "Prompt-Auswahl", "description": "Wähle den klarsten und hilfreichsten Prompt für eine Situation." },
       "promptRanking": { "title": "Prompt Ranking", "description": "Sortiere Prompts vom schlechtesten bis zum besten Arbeitsauftrag." },
       "complianceTrafficLight": { "title": "Compliance-Ampel", "description": "Bewerte drei Szenarien einzeln als erlaubt, eingeschränkt oder verboten." }
+      ,"aiChatChallenge": { "title": "AI Chat Challenge", "description": "Löse einen Finance-Fall mit höchstens drei gezielten Fragen an einen eingebauten KI-Chat." }
+    },
+    "chat": {
+      "caseData": "Falldaten",
+      "title": "Mini-Chat",
+      "remaining": "Noch {{count}} Fragen",
+      "you": "Du",
+      "assistant": "KI-Assistent",
+      "empty": "Stelle gezielte Fragen, lasse dir Rechenschritte erklären oder prüfe deine Vermutung.",
+      "message": "Deine Frage",
+      "send": "Senden",
+      "finalAnswers": "Finale Antworten"
     }
   },
   "profile": {

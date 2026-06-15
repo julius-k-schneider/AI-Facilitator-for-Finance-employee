@@ -115,8 +115,11 @@
       "promptSelection": "Prompt selection"
       ,"promptRanking": "Prompt ranking",
       "complianceTrafficLight": "Compliance traffic light"
+      ,"aiChatChallenge": "AI chat challenge"
     },
     "result": {
+      "correctPrefix": "Correct.",
+      "wrongPrefix": "Incorrect.",
       "correct": "Correct! You receive {{points}} points.",
       "wrong": "Unfortunately, that answer was not correct. The mission is now completed.",
       "partial": "{{correct}} of {{total}} statements were correct. You receive {{points}} points."
@@ -211,6 +214,18 @@
       "promptSelection": { "title": "Prompt selection", "description": "Choose the clearest and most useful prompt for a situation." },
       "promptRanking": { "title": "Prompt ranking", "description": "Sort prompts from the weakest to the strongest instruction." },
       "complianceTrafficLight": { "title": "Compliance traffic light", "description": "Assess three scenarios as allowed, restricted, or prohibited." }
+      ,"aiChatChallenge": { "title": "AI chat challenge", "description": "Solve a finance case with no more than three focused questions to an embedded AI chat." }
+    },
+    "chat": {
+      "caseData": "Case data",
+      "title": "Mini chat",
+      "remaining": "{{count}} questions left",
+      "you": "You",
+      "assistant": "AI assistant",
+      "empty": "Ask focused questions, request an explanation of calculations, or test your assumption.",
+      "message": "Your question",
+      "send": "Send",
+      "finalAnswers": "Final answers"
     }
   },
   "profile": {

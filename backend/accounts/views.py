@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from datetime import date, timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
@@ -16,6 +17,7 @@ from .services.ai_mission_generator import (
     generate_next_week,
     regenerate_review_mission,
 )
+from .services.ai_chat_challenge import chat_reply, evaluate_final_answers, generate_chat_challenge
 
 
 User = get_user_model()
@@ -196,6 +198,35 @@ def correct_indices(content):
     return [index] if isinstance(index, int) else []
 
 
+def translated_feedback(content, language):
+    feedback = translated(content.get('feedback', {}), language)
+    if feedback:
+        return feedback
+    options = content.get('options', [])
+    correct_options = [
+        translated(options[index], language)
+        for index in correct_indices(content)
+        if 0 <= index < len(options)
+    ]
+    if not correct_options:
+        return ''
+    prefix = 'Correct answer' if language == 'en' else 'Richtige Antwort'
+    return f'{prefix}: {", ".join(correct_options)}.'
+
+
+def traffic_light_feedback(statement, language):
+    feedback = translated(statement.get('feedback', {}), language)
+    if feedback:
+        return feedback
+    color = statement.get('correct_color', '')
+    labels = {
+        'de': {'green': 'erlaubt', 'yellow': 'nur eingeschraenkt erlaubt', 'red': 'nicht erlaubt'},
+        'en': {'green': 'allowed', 'yellow': 'allowed with restrictions', 'red': 'not allowed'},
+    }
+    prefix = 'Richtige Bewertung' if language == 'de' else 'Correct assessment'
+    return f'{prefix}: {labels[language].get(color, color)}.'
+
+
 def mission_payload(mission, user, language='de', include_content=True):
     attempt = mission.attempts.filter(user=user).first()
     content = mission.content or {}
@@ -216,7 +247,7 @@ def mission_payload(mission, user, language='de', include_content=True):
         }
         if attempt is not None:
             payload['content']['feedback'] = [
-                translated(statement.get('feedback', {}), language) for statement in content.get('statements', [])
+                traffic_light_feedback(statement, language) for statement in content.get('statements', [])
             ]
     elif include_content and mission.mission_type == Mission.TYPE_PROMPT_RANKING:
         payload['content'] = {
@@ -224,7 +255,7 @@ def mission_payload(mission, user, language='de', include_content=True):
             'options': [translated(option, language) for option in content.get('options', [])],
         }
         if attempt is not None:
-            payload['content']['feedback'] = translated(content.get('feedback', {}), language)
+            payload['content']['feedback'] = translated_feedback(content, language)
     elif include_content and mission.mission_type in Mission.CHOICE_TYPES:
         payload['content'] = {
             'question': translated(content.get('question', {}), language),
@@ -232,7 +263,7 @@ def mission_payload(mission, user, language='de', include_content=True):
             'multiple': mission.mission_type == Mission.TYPE_MULTIPLE_CHOICE,
         }
         if attempt is not None:
-            payload['content']['feedback'] = translated(content.get('feedback', {}), language)
+            payload['content']['feedback'] = translated_feedback(content, language)
     return payload
 
 
@@ -651,6 +682,7 @@ def complete_mission_view(request):
             'correct_count': correct_count,
             'total_count': len(statements),
             'correct_colors': expected_colors,
+            'item_correct': [answer == expected for answer, expected in zip(answers, expected_colors)],
         }
     elif mission.mission_type == Mission.TYPE_PROMPT_RANKING:
         options = content.get('options', [])
@@ -935,6 +967,105 @@ def generate_training_mission_view(request):
         },
     }
     return JsonResponse({'mission': payload})
+
+
+def training_challenges(request):
+    return dict(request.session.get('training_chat_challenges', {}))
+
+
+def public_chat_challenge(challenge, challenge_id):
+    return {
+        'id': challenge_id,
+        'type': challenge['type'],
+        'title_de': challenge['title_de'],
+        'title_en': challenge['title_en'],
+        'description_de': challenge['description_de'],
+        'description_en': challenge['description_en'],
+        'task_de': challenge['task_de'],
+        'task_en': challenge['task_en'],
+        'case_data_de': challenge['case_data_de'],
+        'case_data_en': challenge['case_data_en'],
+        'final_questions': [
+            {
+                key: value for key, value in question.items()
+                if key not in {'solution', 'tolerance', 'feedback_de', 'feedback_en'}
+            }
+            for question in challenge['final_questions']
+        ],
+    }
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def generate_training_chat_challenge_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    try:
+        challenge = generate_chat_challenge()
+    except AiMissionGenerationError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=503)
+    challenge_id = uuid.uuid4().hex
+    challenge['history'] = []
+    challenge['prompt_count'] = 0
+    challenges = training_challenges(request)
+    challenges[challenge_id] = challenge
+    request.session['training_chat_challenges'] = challenges
+    request.session.modified = True
+    return JsonResponse({'mission': public_chat_challenge(challenge, challenge_id)})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def training_chat_message_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    data = parse_json(request)
+    challenge_id = str(data.get('challenge_id', ''))
+    message = str(data.get('message', '')).strip()
+    challenges = training_challenges(request)
+    challenge = challenges.get(challenge_id)
+    if challenge is None:
+        return JsonResponse({'error': 'training challenge not found'}, status=404)
+    if not message:
+        return JsonResponse({'error': 'message required'}, status=400)
+    if challenge.get('prompt_count', 0) >= 3:
+        return JsonResponse({'error': 'maximum of three chat prompts reached'}, status=409)
+    language = 'en' if data.get('language') == 'en' else 'de'
+    try:
+        reply = chat_reply(challenge, challenge.get('history', []), message, language)
+    except AiMissionGenerationError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=503)
+    challenge['history'] = [
+        *challenge.get('history', []),
+        {'role': 'user', 'content': message},
+        {'role': 'assistant', 'content': reply},
+    ]
+    challenge['prompt_count'] = challenge.get('prompt_count', 0) + 1
+    challenges[challenge_id] = challenge
+    request.session['training_chat_challenges'] = challenges
+    request.session.modified = True
+    return JsonResponse({'reply': reply, 'remaining_prompts': 3 - challenge['prompt_count']})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def submit_training_chat_challenge_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    data = parse_json(request)
+    challenge_id = str(data.get('challenge_id', ''))
+    challenges = training_challenges(request)
+    challenge = challenges.get(challenge_id)
+    if challenge is None:
+        return JsonResponse({'error': 'training challenge not found'}, status=404)
+    answers = data.get('answers')
+    if not isinstance(answers, dict):
+        return JsonResponse({'error': 'final answers required'}, status=400)
+    result = evaluate_final_answers(challenge, answers, data.get('language'))
+    challenges.pop(challenge_id, None)
+    request.session['training_chat_challenges'] = challenges
+    request.session.modified = True
+    return JsonResponse({'result': result})
 
 
 @require_http_methods(['POST'])

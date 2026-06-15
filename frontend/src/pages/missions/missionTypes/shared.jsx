@@ -35,7 +35,8 @@ export function evaluateChoiceTest(mission, answer, multiple = false) {
   const selected = multiple ? [...answer].sort() : [answer]
   const expected = [...mission.test_solution.correct_indices].sort()
   const correct = selected.length === expected.length && selected.every((value, index) => value === expected[index])
-  return { correct, score: correct ? mission.max_points : 0, max_points: mission.max_points }
+  const feedback = mission.test_solution.feedback || `${mission.content.options.filter((_, index) => expected.includes(index)).join(', ')}`
+  return { correct, score: correct ? mission.max_points : 0, max_points: mission.max_points, feedback }
 }
 
 export function choiceDefinition({ id, labelKey, multiple = false, example }) {

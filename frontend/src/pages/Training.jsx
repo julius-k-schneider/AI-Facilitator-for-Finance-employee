@@ -3,11 +3,27 @@ import { Alert, Badge, Box, Button, Group, Paper, SimpleGrid, Stack, Text, Theme
 import { IconBrain, IconPlayerPlay, IconSparkles } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import MissionRunner from './missions/MissionRunner'
-import { missionTypes } from './missions/missionTypes'
-import { generateTrainingMission } from '../services/trainingService'
+import { trainingMissionTypes } from './missions/missionTypes'
+import { generateChatChallenge, generateTrainingMission } from '../services/trainingService'
 
 function localizeMission(raw, language) {
   const text = (value) => value?.[language] || value?.de || value?.en || ''
+  if (raw.type === 'ai_chat_challenge') {
+    return {
+      id: `training-${raw.id}`, session_id: raw.id, language, type: raw.type,
+      title: raw[`title_${language}`], description: raw[`description_${language}`], max_points: 0,
+      content: {
+        question: raw[`task_${language}`],
+        case_data: raw[`case_data_${language}`],
+        final_questions: raw.final_questions.map((question) => ({
+          id: question.id,
+          type: question.type,
+          prompt: question[`prompt_${language}`],
+          options: question.type === 'number' ? [] : (question[`options_${language}`] || []).map((label, index) => ({ label, value: question.option_values[index] })),
+        })),
+      },
+    }
+  }
   const content = {
     question: raw[`question_${language}`],
     options: (raw.options || []).map(text),
@@ -43,7 +59,7 @@ export default function Training() {
     setGeneratingType(type)
     setError('')
     try {
-      setRawMission(await generateTrainingMission(type))
+      setRawMission(type === 'ai_chat_challenge' ? await generateChatChallenge() : await generateTrainingMission(type))
     } catch (nextError) {
       setError(nextError.message)
     } finally {
@@ -59,7 +75,7 @@ export default function Training() {
     <Text c="dimmed" fz="lg" mt={4} mb="xl">{t('training.description')}</Text>
     {error && <Alert color="red" mb="lg">{error}</Alert>}
     <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="lg">
-      {missionTypes.map((definition) => <Paper key={definition.id} withBorder radius="lg" p="xl" bg="white">
+      {trainingMissionTypes.map((definition) => <Paper key={definition.id} withBorder radius="lg" p="xl" bg="white">
         <Stack gap="lg" h="100%">
           <Group justify="space-between"><ThemeIcon size={48} radius="md" variant="light" color="brand"><IconBrain size={25} /></ThemeIcon><Badge variant="light" color="secondary">{t(`missions.types.${definition.labelKey}`)}</Badge></Group>
           <Box style={{ flex: 1 }}><Text fw={700} fz="lg">{t(`training.types.${definition.labelKey}.title`)}</Text><Text c="dimmed" fz="sm" mt={5}>{t(`training.types.${definition.labelKey}.description`)}</Text></Box>

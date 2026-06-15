@@ -4,9 +4,11 @@ import multipleChoice from './multipleChoice'
 import promptRanking from './promptRanking'
 import promptSelection from './promptSelection'
 import singleChoice from './singleChoice'
+import aiChatChallenge from './aiChatChallenge'
 
 export const missionTypes = [singleChoice, multipleChoice, complianceDecision, promptSelection, promptRanking, complianceTrafficLight]
-export const missionTypeRegistry = Object.fromEntries(missionTypes.map((definition) => [definition.id, definition]))
+export const trainingMissionTypes = [...missionTypes, aiChatChallenge]
+export const missionTypeRegistry = Object.fromEntries(trainingMissionTypes.map((definition) => [definition.id, definition]))
 export const defaultMissionType = singleChoice.id
 
 export function getMissionType(type) {

@@ -15,6 +15,7 @@ from .services.ai_mission_generator import (
     next_calendar_week,
     split_target_slots,
 )
+from .services.ai_chat_challenge import evaluate_final_answers, validate_challenge
 from .services.mission_validation import MissionValidationError, validate_generated_payload
 
 
@@ -46,6 +47,28 @@ class AccountsApiTests(TestCase):
             max_points=points,
             created_by=creator,
         )
+
+    def chat_challenge(self):
+        return validate_challenge({
+            'title_de': 'Abweichungsanalyse', 'title_en': 'Variance analysis',
+            'description_de': 'Uebe mit einem KI-Chat.', 'description_en': 'Practice with an AI chat.',
+            'task_de': 'Pruefe die Plan-Ist-Abweichung.', 'task_en': 'Check the plan-versus-actual variance.',
+            'case_data_de': ['Plan: 100', 'Ist: 110'], 'case_data_en': ['Plan: 100', 'Actual: 110'],
+            'chat_system_prompt_de': 'Hilf beim Rechnen.', 'chat_system_prompt_en': 'Help with the calculation.',
+            'final_questions': [
+                {
+                    'id': 'q1', 'type': 'number', 'prompt_de': 'Abweichung?', 'prompt_en': 'Variance?',
+                    'solution': 10, 'tolerance': 0.1, 'feedback_de': 'Die Abweichung betraegt 10 Prozent.',
+                    'feedback_en': 'The variance is 10 percent.',
+                },
+                {
+                    'id': 'q2', 'type': 'evidence_boolean', 'prompt_de': 'Belegt?', 'prompt_en': 'Supported?',
+                    'options_de': ['Ja', 'Nein'], 'options_en': ['Yes', 'No'], 'solution': True,
+                    'feedback_de': 'Die Falldaten belegen die Aussage.',
+                    'feedback_en': 'The case data supports the statement.',
+                },
+            ],
+        })
 
     def test_first_registered_user_becomes_admin(self):
         response = self.client.post('/api/auth/register/', {
@@ -192,6 +215,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['result']['score'], 60)
         self.assertEqual(response.json()['result']['correct_count'], 2)
+        self.assertEqual(response.json()['result']['item_correct'], [True, False, True])
         self.assertFalse(response.json()['result']['correct'])
 
     def test_only_creators_can_create_and_date_is_limited_to_two_missions(self):
@@ -332,6 +356,68 @@ class AccountsApiTests(TestCase):
             'type': Mission.TYPE_SINGLE_CHOICE,
         }, content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 401)
+
+    def test_completed_choice_without_feedback_gets_solution_explanation(self):
+        creator = self.create_user('fallback-creator@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('fallback-player@example.com')
+        mission = self.create_mission(creator)
+        mission.content.pop('feedback')
+        mission.save(update_fields=['content'])
+        self.client.force_login(player)
+
+        response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': mission.id, 'answer': 1, 'language': 'en',
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['mission']['content']['feedback'], 'Correct answer: Yes.')
+
+    @patch('accounts.views.generate_chat_challenge')
+    def test_chat_challenge_hides_solutions_and_is_not_saved_as_mission(self, generate_mock):
+        player = self.create_user('chat-player@example.com')
+        generate_mock.return_value = self.chat_challenge()
+        self.client.force_login(player)
+
+        response = self.client.post('/api/auth/training/chat-challenge/generate/', {},
+                                    content_type='application/json', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        question = response.json()['mission']['final_questions'][0]
+        self.assertNotIn('solution', question)
+        self.assertNotIn('tolerance', question)
+        self.assertNotIn('feedback_en', question)
+        self.assertEqual(response.json()['mission']['final_questions'][1]['option_values'], [True, False])
+        self.assertEqual(Mission.objects.count(), 0)
+
+    @patch('accounts.views.chat_reply', return_value='Pruefe zuerst die Differenz zwischen Ist und Plan.')
+    @patch('accounts.views.generate_chat_challenge')
+    def test_chat_challenge_allows_only_three_messages(self, generate_mock, chat_reply_mock):
+        player = self.create_user('chat-limit@example.com')
+        generate_mock.return_value = self.chat_challenge()
+        self.client.force_login(player)
+        generated = self.client.post('/api/auth/training/chat-challenge/generate/', {},
+                                     content_type='application/json', secure=True).json()['mission']
+
+        for expected_remaining in (2, 1, 0):
+            response = self.client.post('/api/auth/training/chat-challenge/message/', {
+                'challenge_id': generated['id'], 'message': 'Gib mir einen Hinweis.', 'language': 'de',
+            }, content_type='application/json', secure=True)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()['remaining_prompts'], expected_remaining)
+        blocked = self.client.post('/api/auth/training/chat-challenge/message/', {
+            'challenge_id': generated['id'], 'message': 'Noch ein Hinweis.', 'language': 'de',
+        }, content_type='application/json', secure=True)
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(chat_reply_mock.call_count, 3)
+
+    def test_chat_challenge_final_answers_return_feedback_for_each_answer(self):
+        result = evaluate_final_answers(self.chat_challenge(), {'q1': 10.05, 'q2': False}, 'de')
+
+        self.assertFalse(result['correct'])
+        self.assertTrue(result['items'][0]['correct'])
+        self.assertFalse(result['items'][1]['correct'])
+        self.assertIn('10 Prozent', result['items'][0]['feedback'])
+        self.assertIn('Falldaten', result['items'][1]['feedback'])
 
     def test_creator_can_review_approve_and_reject(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
