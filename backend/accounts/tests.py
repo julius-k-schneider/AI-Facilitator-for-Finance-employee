@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from .models import Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
+from .models import AgentChat, Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
 from .services.ai_mission_generator import (
     AiMissionGenerationError,
     SYSTEM_PROMPT,
@@ -454,6 +454,30 @@ class AccountsApiTests(TestCase):
         self.assertEqual(unauthenticated.status_code, 401)
         self.assertEqual(authenticated.status_code, 200)
         self.assertEqual(authenticated.json()['reply'], 'Ich helfe dir beim Strukturieren.')
+        reply_mock.assert_called_once()
+
+    @patch('accounts.views.personal_agent_reply', return_value='Gespeicherte Antwort.')
+    def test_personal_agent_chats_are_saved_per_user(self, reply_mock):
+        player = self.create_user('agent-history@example.com')
+        other = self.create_user('agent-other@example.com')
+        self.client.force_login(player)
+
+        created = self.client.post('/api/auth/agent/chats/', {}, content_type='application/json', secure=True)
+        chat_id = created.json()['chat']['id']
+        message = self.client.post(f'/api/auth/agent/chats/{chat_id}/message/', {
+            'message': 'Hilf mir mit einem Prompt.', 'language': 'de',
+        }, content_type='application/json', secure=True)
+        listing = self.client.get('/api/auth/agent/chats/', secure=True)
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(message.status_code, 200)
+        self.assertEqual(len(message.json()['chat']['messages']), 2)
+        self.assertEqual(listing.json()['chats'][0]['id'], chat_id)
+        self.assertEqual(AgentChat.objects.get(id=chat_id).user, player)
+
+        self.client.force_login(other)
+        blocked = self.client.get(f'/api/auth/agent/chats/{chat_id}/', secure=True)
+        self.assertEqual(blocked.status_code, 404)
         reply_mock.assert_called_once()
 
     def test_creator_can_review_approve_and_reject(self):

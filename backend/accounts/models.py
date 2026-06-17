@@ -139,3 +139,21 @@ class WeeklyLeaderboardSnapshot(models.Model):
 
     def __str__(self):
         return f'{self.week_start} - {self.week_end}'
+
+
+class AgentChat(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='agent_chats',
+    )
+    title = models.CharField(max_length=120, default='Neuer Chat')
+    messages = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('-updated_at', '-id')
+
+    def __str__(self):
+        return f'{self.user} - {self.title}'

@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
+from .models import AgentChat, Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
 from .services.ai_mission_generator import (
     AiMissionGenerationError,
     generate_training_candidate,
@@ -1075,6 +1075,57 @@ def submit_training_chat_challenge_view(request):
     return JsonResponse({'result': result})
 
 
+def agent_chat_summary(chat):
+    return {
+        'id': chat.id,
+        'title': chat.title,
+        'updated_at': chat.updated_at.isoformat(),
+        'created_at': chat.created_at.isoformat(),
+    }
+
+
+def agent_chat_payload(chat):
+    return {
+        **agent_chat_summary(chat),
+        'messages': chat.messages if isinstance(chat.messages, list) else [],
+    }
+
+
+def agent_chat_title(message):
+    title = ' '.join(str(message).strip().split())
+    if not title:
+        return 'Neuer Chat'
+    return title[:80]
+
+
+@require_http_methods(['GET', 'POST'])
+@csrf_exempt
+def personal_agent_chats_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    if request.method == 'GET':
+        chats = AgentChat.objects.filter(user=request.user)[:50]
+        return JsonResponse({'chats': [agent_chat_summary(chat) for chat in chats]})
+    data = parse_json(request)
+    title = agent_chat_title(data.get('title') or 'Neuer Chat')
+    chat = AgentChat.objects.create(user=request.user, title=title, messages=[])
+    return JsonResponse({'chat': agent_chat_payload(chat)}, status=201)
+
+
+@require_http_methods(['GET', 'DELETE'])
+@csrf_exempt
+def personal_agent_chat_detail_view(request, chat_id):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    chat = AgentChat.objects.filter(id=chat_id, user=request.user).first()
+    if chat is None:
+        return JsonResponse({'error': 'chat not found'}, status=404)
+    if request.method == 'DELETE':
+        chat.delete()
+        return JsonResponse({'deleted': True})
+    return JsonResponse({'chat': agent_chat_payload(chat)})
+
+
 @require_http_methods(['POST'])
 @csrf_exempt
 def personal_agent_chat_view(request):
@@ -1087,6 +1138,33 @@ def personal_agent_chat_view(request):
     except AiMissionGenerationError as error_value:
         return JsonResponse({'error': str(error_value)}, status=400)
     return JsonResponse({'reply': reply})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def personal_agent_chat_message_view(request, chat_id):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    chat = AgentChat.objects.filter(id=chat_id, user=request.user).first()
+    if chat is None:
+        return JsonResponse({'error': 'chat not found'}, status=404)
+    data = parse_json(request)
+    message = str(data.get('message', '')).strip()
+    if not message:
+        return JsonResponse({'error': 'message required'}, status=400)
+    messages = chat.messages if isinstance(chat.messages, list) else []
+    next_messages = [*messages, {'role': 'user', 'content': message}]
+    language = 'en' if data.get('language') == 'en' else 'de'
+    try:
+        reply = personal_agent_reply(next_messages, language)
+    except AiMissionGenerationError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=400)
+    next_messages.append({'role': 'assistant', 'content': reply})
+    chat.messages = next_messages
+    if chat.title == 'Neuer Chat' or chat.title == 'New chat':
+        chat.title = agent_chat_title(message)
+    chat.save(update_fields=['messages', 'title', 'updated_at'])
+    return JsonResponse({'chat': agent_chat_payload(chat), 'reply': reply})
 
 
 @require_http_methods(['POST'])
