@@ -128,6 +128,27 @@ class MissionAttempt(models.Model):
         return f'{self.user} - {self.mission} ({self.score})'
 
 
+class DailyMissionReminder(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='daily_mission_reminders',
+    )
+    reminder_date = models.DateField(db_index=True)
+    mission_count = models.PositiveIntegerField(default=0)
+    missing_count = models.PositiveIntegerField(default=0)
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=('user', 'reminder_date'), name='unique_daily_mission_reminder'),
+        ]
+        ordering = ('-sent_at',)
+
+    def __str__(self):
+        return f'{self.user} - {self.reminder_date}'
+
+
 class WeeklyLeaderboardSnapshot(models.Model):
     week_start = models.DateField(unique=True)
     week_end = models.DateField()

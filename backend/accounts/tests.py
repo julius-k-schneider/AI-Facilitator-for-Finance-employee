@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from .models import AgentChat, Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
+from .models import AgentChat, DailyMissionReminder, Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
 from .services.ai_mission_generator import (
     AiMissionGenerationError,
     SYSTEM_PROMPT,
@@ -16,6 +16,7 @@ from .services.ai_mission_generator import (
     split_target_slots,
 )
 from .services.ai_chat_challenge import evaluate_final_answers, validate_challenge
+from .services.email_notifications import send_daily_mission_reminders
 from .services.mission_validation import MissionValidationError, validate_generated_payload
 
 
@@ -261,6 +262,32 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         send_email_mock.assert_called_once()
         self.assertEqual(send_email_mock.call_args.args[0].title_de, 'Titel')
+
+    @patch('accounts.services.email_notifications.send_daily_mission_reminder', return_value=1)
+    def test_daily_mission_reminders_target_only_incomplete_users_once(self, send_mock):
+        creator = self.create_user('creator-reminder@example.com', Profile.ROLE_CONTENT_CREATOR)
+        done_user = self.create_user('done@example.com')
+        partial_user = self.create_user('partial@example.com')
+        missing_user = self.create_user('missing@example.com')
+        today = timezone.localdate()
+        first = self.create_mission(creator, today)
+        second = self.create_mission(creator, today)
+        MissionAttempt.objects.create(user=done_user, mission=first, score=10)
+        MissionAttempt.objects.create(user=done_user, mission=second, score=10)
+        MissionAttempt.objects.create(user=partial_user, mission=first, score=10)
+
+        first_result = send_daily_mission_reminders(today)
+        second_result = send_daily_mission_reminders(today)
+
+        self.assertEqual(first_result['sent'], 3)
+        self.assertEqual(first_result['incomplete_count'], 3)
+        self.assertEqual(second_result['sent'], 0)
+        self.assertEqual(second_result['skipped'], 3)
+        self.assertEqual(send_mock.call_count, 3)
+        self.assertEqual(
+            set(DailyMissionReminder.objects.values_list('user__email', flat=True)),
+            {'creator-reminder@example.com', 'partial@example.com', 'missing@example.com'},
+        )
 
     def test_creator_can_create_supported_types_and_edit_from_calendar(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)

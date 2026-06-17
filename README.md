@@ -77,6 +77,7 @@ docker compose exec web python manage.py makemigrations
 docker compose exec web python manage.py migrate
 docker compose exec web python manage.py shell
 docker compose exec web python manage.py generate_weekly_missions
+docker compose exec web python manage.py send_daily_mission_reminders
 ```
 
 ### AI mission review workflow
@@ -102,6 +103,26 @@ docker compose exec web python manage.py generate_weekly_missions --force
 The command requires at least one user with the `content_creator` or `admin`
 role. Generated missions remain in review until a content creator approves them
 on the Missions page.
+
+### Daily mission email reminders
+
+To remind users who have not completed all published missions for the current
+day, run:
+
+```bash
+docker compose exec web python manage.py send_daily_mission_reminders
+```
+
+Schedule this command externally at 12:00, for example with Railway Cron or a
+server cron job. The command records one reminder per user and day, so reruns do
+not send duplicate reminders.
+
+Useful local checks:
+
+```bash
+docker compose exec web python manage.py send_daily_mission_reminders --dry-run
+docker compose exec web python manage.py send_daily_mission_reminders --date 2026-06-17
+```
 
 ## Alternative: native venv (no Docker for the app)
 
