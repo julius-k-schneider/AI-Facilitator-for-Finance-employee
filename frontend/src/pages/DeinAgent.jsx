@@ -50,15 +50,16 @@ export default function DeinAgent() {
 
   const starters = t('agent.starters', { returnObjects: true })
 
-  return <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
-    <Stack gap="lg" maw={980} mx="auto">
-      <Box>
-        <Badge variant="light" color="brand" mb="sm">{t('agent.badge')}</Badge>
-        <Title order={1} fz={{ base: 28, md: 34 }}>{t('agent.title')}</Title>
-        <Text c="dimmed" fz="lg" mt={4}>{t('agent.description')}</Text>
-      </Box>
+  return <Box px={{ base: 'md', md: 32 }} py={{ base: 10, md: 12 }} w="100%" style={{ height: 'calc(100vh - 65px)', boxSizing: 'border-box', display: 'flex', overflow: 'hidden' }}>
+    <Stack gap="sm" maw={1120} mx="auto" w="100%" style={{ flex: 1, minHeight: 0 }}>
+      <Group justify="space-between" align="center">
+        <Box>
+          <Badge variant="light" color="brand" mb={4}>{t('agent.badge')}</Badge>
+          <Title order={1} fz={{ base: 22, md: 28 }}>{t('agent.title')}</Title>
+        </Box>
+      </Group>
 
-      <Paper withBorder radius="lg" bg="white" style={{ height: 'calc(100vh - 230px)', minHeight: 520, maxHeight: 760, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Paper withBorder radius="lg" bg="white" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <Stack gap="sm" p={{ base: 'md', md: 'xl' }} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {messages.length === 0 && <Stack gap="md" align="center" justify="center" mih={260}>
             <IconSparkles size={34} color="var(--mantine-color-brand-6)" />
