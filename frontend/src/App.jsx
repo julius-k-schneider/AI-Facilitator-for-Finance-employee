@@ -8,6 +8,7 @@ import LoginScreen from './components/LoginScreen'
 import Sidebar from './components/Sidebar'
 import { NAV_LABEL_KEYS } from './nav'
 import Bibliothek from './pages/Bibliothek'
+import DeinAgent from './pages/DeinAgent'
 import Grundlagen from './pages/Grundlagen'
 import Home from './pages/Home'
 import Leaderboard from './pages/Leaderboard'
@@ -119,6 +120,8 @@ function App() {
         return <Missions user={user} navigate={navigate} startMissionId={startMissionId} />
       case 'training':
         return <Training />
+      case 'agent':
+        return <DeinAgent />
       case 'bibliothek':
         return <Bibliothek />
       case 'leaderboard':

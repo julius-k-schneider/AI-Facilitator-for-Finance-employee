@@ -1,6 +1,7 @@
 import {
   IconLayoutDashboard,
   IconBooks,
+  IconMessageChatbot,
   IconSchool,
   IconTargetArrow,
   IconDeviceGamepad2,
@@ -15,6 +16,7 @@ export const NAV_ITEMS = [
   { value: 'grundlagen', label: 'Grundlagen', labelKey: 'nav.grundlagen', icon: IconSchool },
   { value: 'missions', label: 'Missions', labelKey: 'nav.missions', icon: IconTargetArrow, requiresOnboarding: true },
   { value: 'training', label: 'Training', labelKey: 'nav.training', icon: IconDeviceGamepad2, requiresOnboarding: true },
+  { value: 'agent', label: 'Dein Agent', labelKey: 'nav.agent', icon: IconMessageChatbot, requiresOnboarding: true },
   { value: 'bibliothek', label: 'Bibliothek', labelKey: 'nav.bibliothek', icon: IconBooks },
   { value: 'leaderboard', label: 'Leaderboard', labelKey: 'nav.leaderboard', icon: IconTrophy },
   {

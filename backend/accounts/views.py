@@ -19,6 +19,7 @@ from .services.ai_mission_generator import (
 )
 from .services.ai_chat_challenge import chat_reply, evaluate_final_answers, generate_chat_challenge
 from .services.email_notifications import send_published_mission_email, send_published_mission_emails
+from .services.personal_agent import personal_agent_reply
 
 
 User = get_user_model()
@@ -1020,7 +1021,6 @@ def generate_training_chat_challenge_view(request):
     request.session.modified = True
     return JsonResponse({'mission': public_chat_challenge(challenge, challenge_id)})
 
-
 @require_http_methods(['POST'])
 @csrf_exempt
 def training_chat_message_view(request):
@@ -1073,6 +1073,20 @@ def submit_training_chat_challenge_view(request):
     request.session['training_chat_challenges'] = challenges
     request.session.modified = True
     return JsonResponse({'result': result})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def personal_agent_chat_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    data = parse_json(request)
+    language = 'en' if data.get('language') == 'en' else 'de'
+    try:
+        reply = personal_agent_reply(data.get('messages'), language)
+    except AiMissionGenerationError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=400)
+    return JsonResponse({'reply': reply})
 
 
 @require_http_methods(['POST'])

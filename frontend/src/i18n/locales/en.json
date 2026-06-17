@@ -15,6 +15,7 @@
     "leaderboard": "Leaderboard",
     "missions": "Missions",
     "training": "Training",
+    "agent": "Your Agent",
     "userManagement": "User management",
     "profile": "Profile"
   },
@@ -227,6 +228,23 @@
       "send": "Send",
       "finalAnswers": "Final answers"
     }
+  },
+  "agent": {
+    "badge": "YOUR AGENT",
+    "title": "Your Agent",
+    "description": "Ask free-form questions about AI use, finance work, prompts, summaries, or safe next steps.",
+    "emptyTitle": "How should your agent help?",
+    "emptyText": "You can write like in a normal chat. Please do not enter confidential, personal, or Lufthansa-internal data.",
+    "you": "You",
+    "assistant": "Your Agent",
+    "placeholder": "Write your question...",
+    "send": "Send",
+    "note": "Send with Ctrl/⌘ + Enter. Please anonymize sensitive data.",
+    "starters": [
+      "Help me write a prompt for a management summary.",
+      "How can I check an AI answer for hallucinations?",
+      "Make this statement more cautious for finance reporting."
+    ]
   },
   "profile": {
     "title": "Profile",

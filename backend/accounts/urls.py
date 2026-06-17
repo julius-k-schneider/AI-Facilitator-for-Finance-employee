@@ -25,6 +25,7 @@ urlpatterns = [
     path('training/chat-challenge/generate/', views.generate_training_chat_challenge_view, name='generate_training_chat_challenge'),
     path('training/chat-challenge/message/', views.training_chat_message_view, name='training_chat_message'),
     path('training/chat-challenge/submit/', views.submit_training_chat_challenge_view, name='submit_training_chat_challenge'),
+    path('agent/chat/', views.personal_agent_chat_view, name='personal_agent_chat'),
     path('missions/<int:mission_id>/approve/', views.approve_mission_view, name='approve_mission'),
     path('missions/<int:mission_id>/regenerate/', views.regenerate_mission_view, name='regenerate_mission'),
     path('missions/<int:mission_id>/reject/', views.reject_mission_view, name='reject_mission'),

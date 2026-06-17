@@ -15,6 +15,7 @@
     "leaderboard": "Rangliste",
     "missions": "Missionen",
     "training": "Training",
+    "agent": "Dein Agent",
     "userManagement": "Nutzerverwaltung",
     "profile": "Profil"
   },
@@ -227,6 +228,23 @@
       "send": "Senden",
       "finalAnswers": "Finale Antworten"
     }
+  },
+  "agent": {
+    "badge": "DEIN AGENT",
+    "title": "Dein Agent",
+    "description": "Stelle freie Fragen zu KI-Nutzung, Finance-Arbeit, Prompts, Zusammenfassungen oder sicheren nächsten Schritten.",
+    "emptyTitle": "Wobei soll dein Agent helfen?",
+    "emptyText": "Du kannst wie in einem Chat schreiben. Bitte keine vertraulichen, personenbezogenen oder Lufthansa-internen Daten eingeben.",
+    "you": "Du",
+    "assistant": "Dein Agent",
+    "placeholder": "Schreibe deine Frage...",
+    "send": "Senden",
+    "note": "Mit Strg/⌘ + Enter senden. Bitte sensible Daten anonymisieren.",
+    "starters": [
+      "Hilf mir, einen Prompt für eine Management Summary zu formulieren.",
+      "Wie kann ich eine KI-Antwort auf Halluzinationen prüfen?",
+      "Formuliere diese Aussage vorsichtiger für ein Finance-Reporting."
+    ]
   },
   "profile": {
     "title": "Profil",

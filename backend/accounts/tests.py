@@ -440,6 +440,22 @@ class AccountsApiTests(TestCase):
         self.assertIn('10 Prozent', result['items'][0]['feedback'])
         self.assertIn('Falldaten', result['items'][1]['feedback'])
 
+    @patch('accounts.views.personal_agent_reply', return_value='Ich helfe dir beim Strukturieren.')
+    def test_personal_agent_chat_requires_auth_and_returns_reply(self, reply_mock):
+        unauthenticated = self.client.post('/api/auth/agent/chat/', {
+            'messages': [{'role': 'user', 'content': 'Hilf mir'}], 'language': 'de',
+        }, content_type='application/json', secure=True)
+        player = self.create_user('agent-player@example.com')
+        self.client.force_login(player)
+        authenticated = self.client.post('/api/auth/agent/chat/', {
+            'messages': [{'role': 'user', 'content': 'Hilf mir'}], 'language': 'de',
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual(unauthenticated.status_code, 401)
+        self.assertEqual(authenticated.status_code, 200)
+        self.assertEqual(authenticated.json()['reply'], 'Ich helfe dir beim Strukturieren.')
+        reply_mock.assert_called_once()
+
     def test_creator_can_review_approve_and_reject(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         approved = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
