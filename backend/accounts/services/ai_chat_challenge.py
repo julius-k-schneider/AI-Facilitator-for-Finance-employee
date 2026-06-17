@@ -151,7 +151,14 @@ def chat_reply(challenge, history, message, language):
     system = challenge[f'chat_system_prompt_{language}']
     messages = [{
         'role': 'system',
-        'content': f'{system}\nTask: {task}\nCase data: {json.dumps(case_data, ensure_ascii=False)}\nGive hints and explain reasoning, but never state final answer values or identify the correct final option.',
+        'content': (
+            f'{system}\n'
+            f'Task: {task}\n'
+            f'Case data: {json.dumps(case_data, ensure_ascii=False)}\n'
+            'Give hints and explain reasoning, but never state final answer values or identify the correct final option. '
+            'Answer in plain text only: no Markdown, no bold markers, no tables. '
+            'Use at most one short paragraph plus up to three short bullet lines when helpful.'
+        ),
     }]
     messages.extend(history)
     messages.append({'role': 'user', 'content': message})
