@@ -2,20 +2,20 @@ import { Alert, Image, List, Stack, Text, Title } from '@mantine/core'
 import { IconAlertTriangle, IconBulb, IconInfoCircle } from '@tabler/icons-react'
 
 /**
- * Datengetriebene Info-Darstellung für eine Lerneinheit.
+ * Data-driven info rendering for a learning unit.
  *
- * Erwartet ein Array typisierter Blöcke (`blocks`). Das Format ist bewusst
- * schema-basiert (kein HTML/Markdown): sicher by design und 1:1 als
- * JSON-Schema für KI-generierte Inhalte (Daily Challenges) wiederverwendbar.
+ * Expects an array of typed blocks (`blocks`). The format is deliberately
+ * schema-based (no HTML/Markdown): safe by design and reusable 1:1 as a
+ * JSON schema for AI-generated content (daily challenges).
  *
- * Unterstützte Block-Typen:
+ * Supported block types:
  *   { type: 'heading',   text }
  *   { type: 'paragraph', text }
  *   { type: 'list',      ordered?, items: [] }
  *   { type: 'callout',   variant: 'tip'|'info'|'warning', title?, text }
  *   { type: 'image',     url, alt, caption? }
  *
- * Unbekannte Typen werden ignoriert (vorwärtskompatibel).
+ * Unknown types are ignored (forward-compatible).
  */
 
 const CALLOUT_CONFIG = {

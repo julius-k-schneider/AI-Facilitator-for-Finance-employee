@@ -7,16 +7,16 @@ import Quiz from '../components/learning/Quiz'
 import { ONBOARDING, pickLang } from './content'
 
 /**
- * Onboarding-Ablauf, eingebettet in die Grundlagen-Seite. Führt sequenziell
- * durch die Kapitel (Info → Kapitel-Quiz) und am Ende durch das Abschluss-Quiz.
- * Erst danach wird das Profil-Flag gesetzt und die Daily Challenges freigeschaltet.
+ * Onboarding flow embedded in the Basics page. Runs sequentially through the
+ * chapters (info → chapter quiz) and finally through the final quiz.
+ * Only afterwards is the profile flag set and the daily challenges unlocked.
  *
  * Props:
  *   user, apiBase
- *   onProgress(chapterId)  – nach bestandenem Kapitel (für Übersicht-Sync)
- *   onComplete()           – nach bestandenem Abschluss-Quiz
- *   onExit()               – zurück zur Übersicht
- *   startAtBeginning       – Flow von Kapitel 1 starten (Wiederholung), statt fortzusetzen
+ *   onProgress(chapterId)  – after a passed chapter (for overview sync)
+ *   onComplete()           – after a passed final quiz
+ *   onExit()               – back to the overview
+ *   startAtBeginning       – start the flow from chapter 1 (replay) instead of resuming
  */
 export default function OnboardingFlow({
   user,
@@ -30,7 +30,7 @@ export default function OnboardingFlow({
   const lang = (i18n.language || 'de').split('-')[0]
   const { chapters, finalQuiz, passThreshold } = ONBOARDING
 
-  // Wiederaufnahme: erstes noch nicht abgeschlossenes Kapitel suchen.
+  // Resume: find the first chapter that has not been completed yet.
   const initialStep = useMemo(() => {
     if (startAtBeginning) return { kind: 'chapter', index: 0, view: 'info' }
     const completed = new Set(user?.onboarding_progress || [])
@@ -66,7 +66,7 @@ export default function OnboardingFlow({
     onComplete?.()
   }
 
-  // --- Anzeige-Metadaten (Fortschrittsbalken, Titel) -------------------------
+  // --- Display metadata (progress bar, title) --------------------------------
   const totalSteps = chapters.length + 1
   const isFinal = step.kind === 'final'
   const currentStepNumber = isFinal ? totalSteps : step.index + 1
@@ -74,7 +74,7 @@ export default function OnboardingFlow({
     ? t('onboarding.finalTitle')
     : t('onboarding.chapterProgress', { current: step.index + 1, total: chapters.length })
 
-  // --- Inhalt ----------------------------------------------------------------
+  // --- Content ---------------------------------------------------------------
   let content
   if (isFinal) {
     content = (
@@ -125,7 +125,7 @@ export default function OnboardingFlow({
 
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} maw={820} mx="auto">
-      {/* Branding-Header mit Fortschritt */}
+      {/* Branding header with progress */}
       <Box
         p={{ base: 'lg', md: 'xl' }}
         mb="lg"
@@ -180,7 +180,7 @@ export default function OnboardingFlow({
         </Text>
       </Box>
 
-      {/* Inhaltskarte */}
+      {/* Content card */}
       <Paper withBorder radius="lg" p={{ base: 'lg', md: 36 }} bg="white">
         <Box key={`${step.kind}-${step.index}-${step.view}`} className="fade-up">
           {content}

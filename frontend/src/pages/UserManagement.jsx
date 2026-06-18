@@ -18,6 +18,7 @@ import {
   Title,
 } from '@mantine/core'
 import { IconSearch, IconShield, IconTrash, IconUserCog, IconUsers } from '@tabler/icons-react'
+import { useTranslation } from 'react-i18next'
 import { getUserId } from '../services/progressService'
 import { ROLE_LABELS, ROLES, getAvailableRoles } from '../auth/permissions'
 import { deleteUser, getAllRegisteredUsers, updateUserRole } from '../services/userService'
@@ -50,6 +51,7 @@ const roleOptions = getAvailableRoles().map((role) => ({
 }))
 
 export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
+  const { t } = useTranslation()
   const [users, setUsers] = useState([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -68,7 +70,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
       })
       .catch((error) => {
         if (!isActive) return
-        setMessage({ type: 'error', text: error.message || 'Nutzer konnten nicht geladen werden.' })
+        setMessage({ type: 'error', text: error.message || t('userManagement.errors.loadFailed') })
       })
       .finally(() => {
         if (isActive) setLoading(false)
@@ -77,7 +79,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
     return () => {
       isActive = false
     }
-  }, [])
+  }, [t])
 
   const filteredUsers = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -94,7 +96,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
   const handleRoleChange = async (target, role) => {
     if (!role || role === target.role) return
     if (isLastAdmin(users, target.id) && role !== ROLES.ADMIN) {
-      setMessage({ type: 'error', text: 'Der letzte Admin kann nicht degradiert werden.' })
+      setMessage({ type: 'error', text: t('userManagement.errors.lastAdminDowngrade') })
       return
     }
 
@@ -104,21 +106,21 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
       if (String(updatedUser.id) === currentUserId) {
         onCurrentUserUpdate(updatedUser)
       }
-      setMessage({ type: 'success', text: 'Rolle wurde aktualisiert.' })
+      setMessage({ type: 'success', text: t('userManagement.success.roleUpdated') })
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || 'Rolle konnte nicht aktualisiert werden.' })
+      setMessage({ type: 'error', text: error.message || t('userManagement.errors.roleUpdateFailed') })
     }
   }
 
   const handleDelete = async () => {
     if (!deleteTarget) return
     if (String(deleteTarget.id) === currentUserId) {
-      setMessage({ type: 'error', text: 'Du kannst deinen eigenen Account hier nicht löschen.' })
+      setMessage({ type: 'error', text: t('userManagement.errors.selfDelete') })
       setDeleteTarget(null)
       return
     }
     if (isLastAdmin(users, deleteTarget.id)) {
-      setMessage({ type: 'error', text: 'Der letzte Admin kann nicht gelöscht werden.' })
+      setMessage({ type: 'error', text: t('userManagement.errors.lastAdminDelete') })
       setDeleteTarget(null)
       return
     }
@@ -127,9 +129,9 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
       await deleteUser(deleteTarget.id)
       setUsers((current) => current.filter((user) => user.id !== deleteTarget.id))
       setDeleteTarget(null)
-      setMessage({ type: 'success', text: 'Nutzer wurde gelöscht.' })
+      setMessage({ type: 'success', text: t('userManagement.success.deleted') })
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || 'Nutzer konnte nicht gelöscht werden.' })
+      setMessage({ type: 'error', text: error.message || t('userManagement.errors.deleteFailed') })
     }
   }
 
@@ -165,10 +167,10 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
           </ThemeIcon>
           <Stack gap={6}>
             <Title order={1} fz={{ base: 28, md: 36 }}>
-              Nutzerverwaltung
+              {t('userManagement.title')}
             </Title>
             <Text c="rgba(255,255,255,0.78)" maw={680}>
-              Verwalte registrierte Nutzer, Rollen und Zugriffsrechte.
+              {t('userManagement.subtitle')}
             </Text>
           </Stack>
         </Group>
@@ -182,17 +184,17 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
             </ThemeIcon>
             <Box>
               <Text fw={700} c="secondary.9">
-                Registrierte Nutzer
+                {t('userManagement.registeredTitle')}
               </Text>
               <Text fz="sm" c="dimmed">
-                Suche, Rollen und Zugriffspflege
+                {t('userManagement.registeredSubtitle')}
               </Text>
             </Box>
           </Group>
           <TextInput
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Suchen..."
+            placeholder={t('userManagement.searchPlaceholder')}
             leftSection={<IconSearch size={16} />}
             w={{ base: '100%', sm: 280 }}
           />
@@ -207,17 +209,17 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
         {loading ? (
           <Group justify="center" py={48}>
             <Loader size="sm" color="brand" />
-            <Text c="dimmed">Nutzer werden geladen...</Text>
+            <Text c="dimmed">{t('userManagement.loading')}</Text>
           </Group>
         ) : (
           <Table verticalSpacing="md" horizontalSpacing="lg" highlightOnHover>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Nutzer</Table.Th>
-                <Table.Th>Rolle</Table.Th>
-                <Table.Th>Punkte</Table.Th>
-                <Table.Th>Missions</Table.Th>
-                <Table.Th>Aktionen</Table.Th>
+                <Table.Th>{t('userManagement.columnUser')}</Table.Th>
+                <Table.Th>{t('userManagement.columnRole')}</Table.Th>
+                <Table.Th>{t('userManagement.columnPoints')}</Table.Th>
+                <Table.Th>{t('userManagement.columnMissions')}</Table.Th>
+                <Table.Th>{t('userManagement.columnActions')}</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -249,7 +251,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
                             </Text>
                             {isCurrent && (
                               <Badge size="sm" color="accent" variant="light">
-                                Du
+                                {t('userManagement.youBadge')}
                               </Badge>
                             )}
                           </Group>
@@ -261,7 +263,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
                     </Table.Td>
                     <Table.Td>
                       <Select
-                        aria-label={`Rolle fuer ${displayName(user)}`}
+                        aria-label={t('userManagement.roleSelectAria', { name: displayName(user) })}
                         data={roleOptions}
                         value={user.role || ROLES.USER}
                         onChange={(role) => handleRoleChange(user, role)}
@@ -292,7 +294,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
                         disabled={lastAdmin || isCurrent}
                         onClick={() => setDeleteTarget(user)}
                       >
-                        Löschen
+                        {t('userManagement.delete')}
                       </Button>
                     </Table.Td>
                   </Table.Tr>
@@ -306,22 +308,22 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
       <Modal
         opened={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
-        title="Nutzer löschen"
+        title={t('userManagement.deleteModalTitle')}
         centered
       >
         <Stack gap="md">
           <Text c="secondary.9">
-            Soll der Account {deleteTarget ? displayName(deleteTarget) : ''} wirklich gelöscht werden?
+            {t('userManagement.deleteConfirm', { name: deleteTarget ? displayName(deleteTarget) : '' })}
           </Text>
           <Text fz="sm" c="dimmed">
-            Der Nutzer und sein gespeicherter Fortschritt werden aus der Datenbank entfernt.
+            {t('userManagement.deleteHint')}
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setDeleteTarget(null)}>
-              Abbrechen
+              {t('userManagement.cancel')}
             </Button>
             <Button color="red" leftSection={<IconTrash size={16} />} onClick={handleDelete}>
-              Löschen
+              {t('userManagement.delete')}
             </Button>
           </Group>
         </Stack>

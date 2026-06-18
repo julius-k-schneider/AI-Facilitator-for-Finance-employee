@@ -121,7 +121,7 @@ export default function Home({ user, navigate }) {
                 <Text fz="sm" c="dimmed" maw={520}>{t('home.locked.text')}</Text>
               </Box>
             </Group>
-            <Button color="brand" rightSection={<IconArrowRight size={18} />} onClick={() => navigate('grundlagen')}>
+            <Button color="brand" rightSection={<IconArrowRight size={18} />} onClick={() => navigate('basics')}>
               {t('home.locked.cta')}
             </Button>
           </Group>
@@ -143,7 +143,7 @@ export default function Home({ user, navigate }) {
           title={onboardingDone ? t('home.actions.dailyMissionsTitle') : t('home.actions.onboardingTitle')}
           text={onboardingDone ? t('home.actions.dailyMissionsText') : t('home.actions.onboardingText')}
           action={onboardingDone ? t('home.actions.openMissions') : t('home.locked.cta')}
-          onClick={() => onboardingDone ? navigate('missions') : navigate('grundlagen')}
+          onClick={() => onboardingDone ? navigate('missions') : navigate('basics')}
           color={onboardingDone ? 'brand' : 'accent'}
         />
         <ActionCard
@@ -151,7 +151,7 @@ export default function Home({ user, navigate }) {
           title={t('home.actions.libraryTitle')}
           text={t('home.actions.libraryText')}
           action={t('home.actions.openLibrary')}
-          onClick={() => navigate('bibliothek')}
+          onClick={() => navigate('library')}
           color="secondary"
         />
       </SimpleGrid>

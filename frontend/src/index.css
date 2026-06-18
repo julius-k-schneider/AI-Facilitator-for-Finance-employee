@@ -1,5 +1,5 @@
 :root {
-  /* Fallback-Werte – werden zur Laufzeit aus branding.js überschrieben (applyBrandingVars). */
+  /* Fallback values – overridden at runtime from branding.js (applyBrandingVars). */
   --ink: #05164d;
   --ink-soft: #0b245f;
   --ink-rgb: 5, 22, 77;
@@ -61,7 +61,7 @@ body {
   background-clip: padding-box;
 }
 
-/* Eintritts-Animationen für gestaffelte Reveals */
+/* Entry animations for staggered reveals */
 @keyframes fadeUp {
   from {
     opacity: 0;

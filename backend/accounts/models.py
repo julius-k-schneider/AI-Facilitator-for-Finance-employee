@@ -168,7 +168,7 @@ class AgentChat(models.Model):
         on_delete=models.CASCADE,
         related_name='agent_chats',
     )
-    title = models.CharField(max_length=120, default='Neuer Chat')
+    title = models.CharField(max_length=120, blank=True, default='')
     messages = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

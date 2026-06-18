@@ -2,7 +2,11 @@
   "app": {
     "checkingAuth": "Authentifizierung wird geprüft…",
     "greeting": "Hallo, {{name}} 👋",
-    "genericError": "Etwas ist schiefgelaufen"
+    "genericError": "Etwas ist schiefgelaufen",
+    "accessDenied": {
+      "title": "Kein Zugriff",
+      "text": "Du hast keine Berechtigung für diese Seite."
+    }
   },
   "language": {
     "current": "Deutsch",
@@ -10,8 +14,8 @@
   },
   "nav": {
     "home": "Home",
-    "grundlagen": "Grundlagen",
-    "bibliothek": "Bibliothek",
+    "basics": "Grundlagen",
+    "library": "Bibliothek",
     "leaderboard": "Rangliste",
     "missions": "Missionen",
     "training": "Training",
@@ -263,6 +267,38 @@
     "errorChange": "Passwort konnte nicht geändert werden",
     "successChange": "Passwort erfolgreich aktualisiert"
   },
+  "userManagement": {
+    "title": "Nutzerverwaltung",
+    "subtitle": "Verwalte registrierte Nutzer, Rollen und Zugriffsrechte.",
+    "registeredTitle": "Registrierte Nutzer",
+    "registeredSubtitle": "Suche, Rollen und Zugriffspflege",
+    "searchPlaceholder": "Suchen...",
+    "loading": "Nutzer werden geladen...",
+    "columnUser": "Nutzer",
+    "columnRole": "Rolle",
+    "columnPoints": "Punkte",
+    "columnMissions": "Missions",
+    "columnActions": "Aktionen",
+    "youBadge": "Du",
+    "roleSelectAria": "Rolle für {{name}}",
+    "delete": "Löschen",
+    "cancel": "Abbrechen",
+    "deleteModalTitle": "Nutzer löschen",
+    "deleteConfirm": "Soll der Account {{name}} wirklich gelöscht werden?",
+    "deleteHint": "Der Nutzer und sein gespeicherter Fortschritt werden aus der Datenbank entfernt.",
+    "errors": {
+      "loadFailed": "Nutzer konnten nicht geladen werden.",
+      "lastAdminDowngrade": "Der letzte Admin kann nicht degradiert werden.",
+      "roleUpdateFailed": "Rolle konnte nicht aktualisiert werden.",
+      "selfDelete": "Du kannst deinen eigenen Account hier nicht löschen.",
+      "lastAdminDelete": "Der letzte Admin kann nicht gelöscht werden.",
+      "deleteFailed": "Nutzer konnte nicht gelöscht werden."
+    },
+    "success": {
+      "roleUpdated": "Rolle wurde aktualisiert.",
+      "deleted": "Nutzer wurde gelöscht."
+    }
+  },
   "onboarding": {
     "badge": "ONBOARDING",
     "hubTitle": "Onboarding",
@@ -297,17 +333,19 @@
   "pages": {
     "comingSoon": "Demnächst verfügbar",
     "comingSoonText": "Dieser Bereich wird gerade aufgebaut. Schau bald wieder vorbei – hier entstehen neue Inhalte für dein AI-Enablement.",
-    "grundlagen": {
+    "basics": {
       "title": "Grundlagen",
       "description": "Die wichtigsten AI-Basics für deinen Finance-Alltag"
     },
-    "bibliothek": {
+    "library": {
       "title": "Bibliothek",
       "description": "Materialien, Vorlagen und Links zum Nachschlagen"
     },
     "leaderboard": {
       "title": "Rangliste",
       "description": "Vergleiche deine Punkte mit deinen Kollegen",
+      "loading": "Rangliste wird geladen...",
+      "loadError": "Die Rangliste konnte nicht geladen werden.",
       "allTime": "Gesamtwertung",
       "weekly": "Wochenwertung",
       "history": "Vergangene Wochen",

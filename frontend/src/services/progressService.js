@@ -32,7 +32,7 @@ async function request(path, options = {}) {
     ...options,
   })
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data.error || 'Fortschritt konnte nicht gespeichert werden.')
+  if (!response.ok) throw new Error(data.error || 'Progress request failed')
   return data
 }
 

@@ -5,12 +5,12 @@ import { useTranslation } from 'react-i18next'
 import QuizCard from './QuizCard'
 
 /**
- * Runner über eine Liste von Single-Choice-Fragen.
+ * Runner over a list of single-choice questions.
  *
- * Führt die Fragen sequenziell aus, zählt die Treffer und vergleicht die Quote
- * mit `passThreshold` (0..1). Bei Bestehen wird `onPassed()` über einen Button
- * aufgerufen, sonst „Erneut versuchen". Wiederverwendbar für Kapitel- und
- * Abschluss-Quiz sowie spätere Daily Challenges.
+ * Runs the questions sequentially, counts the correct answers and compares the
+ * ratio with `passThreshold` (0..1). On passing, `onPassed()` is invoked via a
+ * button, otherwise "Try again" is shown. Reusable for chapter and final
+ * quizzes as well as later daily challenges.
  *
  * Props: { questions: [], passThreshold = 0.8, onPassed, continueLabel }
  */
@@ -92,7 +92,7 @@ export default function Quiz({ questions = [], passThreshold = 0.8, onPassed, co
         </Text>
       </Group>
 
-      {/* key erzwingt frischen State pro Frage */}
+      {/* key forces fresh state per question */}
       <QuizCard
         key={index}
         question={current.question}

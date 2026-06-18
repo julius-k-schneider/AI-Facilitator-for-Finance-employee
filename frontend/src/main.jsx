@@ -7,7 +7,7 @@ import { theme, applyBrandingVars } from './theme'
 import './i18n'
 import App from './App.jsx'
 
-// Branding-Farben als CSS-Variablen verfügbar machen (zentral über branding.js steuerbar).
+// Expose the branding colors as CSS variables (controlled centrally via branding.js).
 applyBrandingVars()
 
 createRoot(document.getElementById('root')).render(

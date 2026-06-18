@@ -48,7 +48,7 @@ function ChapterRow({ chapter, done, lang }) {
   )
 }
 
-export default function Grundlagen({ user, onUserUpdate, apiBase }) {
+export default function Basics({ user, onUserUpdate, apiBase }) {
   const { t, i18n } = useTranslation()
   const lang = (i18n.language || 'de').split('-')[0]
   const [running, setRunning] = useState(false)
@@ -60,7 +60,7 @@ export default function Grundlagen({ user, onUserUpdate, apiBase }) {
   const allDone = Boolean(user?.onboarding_completed)
   const started = doneCount > 0
   const totalSteps = chapters.length + 1
-  // Abgeschlossene Schritte inkl. Abschluss-Quiz, sobald alles fertig ist.
+  // Completed steps including the final quiz once everything is done.
   const completedSteps = allDone ? totalSteps : doneCount
   const progressValue = (completedSteps / totalSteps) * 100
 
@@ -109,10 +109,10 @@ export default function Grundlagen({ user, onUserUpdate, apiBase }) {
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Stack gap={6} mb="xl">
         <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9">
-          {t('pages.grundlagen.title')}
+          {t('pages.basics.title')}
         </Title>
         <Text fz="lg" c="dimmed" maw={620}>
-          {t('pages.grundlagen.description')}
+          {t('pages.basics.description')}
         </Text>
       </Stack>
 
@@ -139,7 +139,7 @@ export default function Grundlagen({ user, onUserUpdate, apiBase }) {
           )}
         </Group>
 
-        {/* Fortschritt */}
+        {/* Progress */}
         <Box mb="xl">
           <Group justify="space-between" mb={6}>
             <Text fz="sm" fw={600} c="secondary.9">
@@ -152,7 +152,7 @@ export default function Grundlagen({ user, onUserUpdate, apiBase }) {
           <Progress value={progressValue} color={allDone ? 'green' : 'brand'} size="md" radius="xl" />
         </Box>
 
-        {/* Kapitelliste */}
+        {/* Chapter list */}
         <Stack gap="lg" mb="xl">
           {chapters.map((chapter) => (
             <ChapterRow
@@ -162,7 +162,7 @@ export default function Grundlagen({ user, onUserUpdate, apiBase }) {
               lang={lang}
             />
           ))}
-          {/* Abschluss-Quiz als finaler Schritt */}
+          {/* Final quiz as the last step */}
           <Group gap="md" wrap="nowrap" align="flex-start">
             <ThemeIcon
               size={32}

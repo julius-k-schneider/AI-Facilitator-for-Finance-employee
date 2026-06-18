@@ -156,7 +156,7 @@ export default function Leaderboard({ user }) {
       fetch(`${API_BASE}/api/auth/leaderboard/`, { credentials: 'include' })
         .then(async (response) => {
           const data = await response.json().catch(() => ({}))
-          if (!response.ok) throw new Error(data.error || 'Leaderboard konnte nicht geladen werden.')
+          if (!response.ok) throw new Error(data.error || t('pages.leaderboard.loadError'))
           return data
         })
         .then((data) => {
@@ -177,7 +177,7 @@ export default function Leaderboard({ user }) {
       active = false
       window.removeEventListener(PROGRESS_EVENT, load)
     }
-  }, [])
+  }, [t])
 
   const leaderboardEntries = useMemo(
     () => {
@@ -236,7 +236,7 @@ export default function Leaderboard({ user }) {
       </Group>
       {mode !== 'all' && <Text c="dimmed" fz="sm" mb="md">{mode === 'history' ? t('pages.leaderboard.archivedWeek') : t('pages.leaderboard.currentWeek')}: {formatRange(activeRange)}</Text>}
       {loading ? (
-        <Paper withBorder radius="lg" p="xl"><Group justify="center"><Loader size="sm" /><Text c="dimmed">Leaderboard wird geladen...</Text></Group></Paper>
+        <Paper withBorder radius="lg" p="xl"><Group justify="center"><Loader size="sm" /><Text c="dimmed">{t('pages.leaderboard.loading')}</Text></Group></Paper>
       ) : error ? (
         <Paper withBorder radius="lg" p="xl"><Text c="red.7">{error}</Text></Paper>
       ) : leaderboardEntries.length === 0 ? (
