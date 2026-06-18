@@ -26,14 +26,21 @@ def send_published_mission_email(mission):
     if not recipients:
         return 0
 
-    subject = f'Neue Mission verfuegbar: {mission.title_de}'
+    subject = f'Neue Mission verfügbar / New mission available: {mission.title_de}'
     message = (
         'Hallo,\n\n'
-        'eine neue Mission wurde veroeffentlicht:\n\n'
+        'eine neue Mission wurde veröffentlicht:\n\n'
         f'{mission.title_de}\n'
         f'{mission.description_de}\n\n'
         f'Datum: {mission.scheduled_date.isoformat()}\n\n'
-        'Viel Erfolg!'
+        'Viel Erfolg!\n\n'
+        '----------\n\n'
+        'Hello,\n\n'
+        'a new mission has been published:\n\n'
+        f'{mission.title_en}\n'
+        f'{mission.description_en}\n\n'
+        f'Date: {mission.scheduled_date.isoformat()}\n\n'
+        'Good luck!'
     )
 
     try:
@@ -80,16 +87,26 @@ def incomplete_daily_mission_users(reminder_date=None):
 
 
 def send_daily_mission_reminder(user, reminder_date, missions, missing_count):
-    subject = 'Reminder: Deine Daily Missions warten noch'
-    mission_lines = '\n'.join(f'- {mission.title_de}' for mission in missions)
+    subject = 'Reminder: Deine Daily Missions warten noch / Your daily missions are still waiting'
+    mission_lines_de = '\n'.join(f'- {mission.title_de}' for mission in missions)
+    mission_lines_en = '\n'.join(f'- {mission.title_en}' for mission in missions)
     message = (
         f'Hallo {user.first_name or user.username},\n\n'
-        'du hast deine heutigen Daily Missions noch nicht vollstaendig abgeschlossen.\n\n'
+        'du hast deine heutigen Daily Missions noch nicht vollständig abgeschlossen.\n\n'
         f'Offene Missionen: {missing_count} von {len(missions)}\n'
         f'Datum: {reminder_date.isoformat()}\n\n'
-        f'Heutige Missionen:\n{mission_lines}\n\n'
+        f'Heutige Missionen:\n{mission_lines_de}\n\n'
         'Schau kurz in die App und erledige sie, wenn du Zeit hast.\n\n'
-        'Viele Gruesse\n'
+        'Viele Grüße\n'
+        'AI Facilitator\n\n'
+        '----------\n\n'
+        f'Hello {user.first_name or user.username},\n\n'
+        'you have not yet completed all of today\'s daily missions.\n\n'
+        f'Open missions: {missing_count} of {len(missions)}\n'
+        f'Date: {reminder_date.isoformat()}\n\n'
+        f'Today\'s missions:\n{mission_lines_en}\n\n'
+        'Take a quick look at the app and complete them when you have time.\n\n'
+        'Best regards\n'
         'AI Facilitator'
     )
     return send_mail(

@@ -1094,7 +1094,7 @@ def agent_chat_payload(chat):
 def agent_chat_title(message):
     title = ' '.join(str(message).strip().split())
     if not title:
-        return 'Neuer Chat'
+        return ''
     return title[:80]
 
 
@@ -1107,7 +1107,7 @@ def personal_agent_chats_view(request):
         chats = AgentChat.objects.filter(user=request.user)[:50]
         return JsonResponse({'chats': [agent_chat_summary(chat) for chat in chats]})
     data = parse_json(request)
-    title = agent_chat_title(data.get('title') or 'Neuer Chat')
+    title = agent_chat_title(data.get('title') or '')
     chat = AgentChat.objects.create(user=request.user, title=title, messages=[])
     return JsonResponse({'chat': agent_chat_payload(chat)}, status=201)
 
@@ -1161,7 +1161,7 @@ def personal_agent_chat_message_view(request, chat_id):
         return JsonResponse({'error': str(error_value)}, status=400)
     next_messages.append({'role': 'assistant', 'content': reply})
     chat.messages = next_messages
-    if chat.title == 'Neuer Chat' or chat.title == 'New chat':
+    if not chat.title:
         chat.title = agent_chat_title(message)
     chat.save(update_fields=['messages', 'title', 'updated_at'])
     return JsonResponse({'chat': agent_chat_payload(chat), 'reply': reply})

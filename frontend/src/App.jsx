@@ -7,9 +7,9 @@ import { PERMISSIONS, hasPermission } from './auth/permissions'
 import LoginScreen from './components/LoginScreen'
 import Sidebar from './components/Sidebar'
 import { NAV_LABEL_KEYS } from './nav'
-import Bibliothek from './pages/Bibliothek'
-import DeinAgent from './pages/DeinAgent'
-import Grundlagen from './pages/Grundlagen'
+import Library from './pages/Library'
+import YourAgent from './pages/YourAgent'
+import Basics from './pages/Basics'
 import Home from './pages/Home'
 import Leaderboard from './pages/Leaderboard'
 import Missions from './pages/Missions'
@@ -21,10 +21,11 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '', role: 'accountant' }
 
 function AccessDenied() {
+  const { t } = useTranslation()
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
       <Box bg="white" p={{ base: 'xl', md: 40 }} style={{ border: '1px solid var(--line)', borderRadius: 18 }}>
-        <Group gap="md"><IconShieldLock size={28} /><Box><Title order={1}>Kein Zugriff</Title><Text c="dimmed">Du hast keine Berechtigung für diese Seite.</Text></Box></Group>
+        <Group gap="md"><IconShieldLock size={28} /><Box><Title order={1}>{t('app.accessDenied.title')}</Title><Text c="dimmed">{t('app.accessDenied.text')}</Text></Box></Group>
       </Box>
     </Box>
   )
@@ -114,16 +115,16 @@ function App() {
     switch (page) {
       case 'profile':
         return <Profile user={user} />
-      case 'grundlagen':
-        return <Grundlagen user={user} onUserUpdate={setUser} apiBase={API_BASE} />
+      case 'basics':
+        return <Basics user={user} onUserUpdate={setUser} apiBase={API_BASE} />
       case 'missions':
         return <Missions user={user} navigate={navigate} startMissionId={startMissionId} />
       case 'training':
         return <Training />
       case 'agent':
-        return <DeinAgent />
-      case 'bibliothek':
-        return <Bibliothek />
+        return <YourAgent />
+      case 'library':
+        return <Library />
       case 'leaderboard':
         return <Leaderboard user={user} />
       case 'user-management':

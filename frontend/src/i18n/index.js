@@ -3,21 +3,21 @@ import { initReactI18next } from 'react-i18next'
 import de from './locales/de.json'
 import en from './locales/en.json'
 
-// Zentrale i18n-Konfiguration. Neue Sprachen hier ergänzen und eine
-// passende JSON-Datei unter ./locales anlegen.
+// Central i18n configuration. Add new languages here and create a matching
+// JSON file under ./locales.
 export const SUPPORTED_LANGUAGES = ['de', 'en']
 const STORAGE_KEY = 'app-language'
 
 function initialLanguage() {
-  // 1. Explizite Nutzerwahl aus einer früheren Sitzung hat Vorrang.
+  // 1. An explicit user choice from an earlier session takes precedence.
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored && SUPPORTED_LANGUAGES.includes(stored)) return stored
   } catch {
-    /* localStorage nicht verfügbar – weiter mit Browsersprache */
+    /* localStorage not available – fall back to the browser language */
   }
 
-  // 2. Browsersprache(n) – erste unterstützte Übereinstimmung gewinnt.
+  // 2. Browser language(s) – the first supported match wins.
   if (typeof navigator !== 'undefined') {
     const candidates = navigator.languages?.length ? navigator.languages : [navigator.language]
     for (const lang of candidates) {
@@ -37,15 +37,15 @@ i18n.use(initReactI18next).init({
   },
   lng: initialLanguage(),
   fallbackLng: 'de',
-  interpolation: { escapeValue: false }, // React schützt bereits vor XSS
+  interpolation: { escapeValue: false }, // React already protects against XSS
 })
 
-// Sprachwahl persistieren und <html lang> aktuell halten.
+// Persist the language choice and keep <html lang> up to date.
 i18n.on('languageChanged', (lng) => {
   try {
     localStorage.setItem(STORAGE_KEY, lng)
   } catch {
-    /* ignorieren */
+    /* ignore */
   }
   if (typeof document !== 'undefined') document.documentElement.lang = lng
 })

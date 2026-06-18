@@ -13,15 +13,15 @@ import { PERMISSIONS } from './auth/permissions'
 
 export const NAV_ITEMS = [
   { value: 'home', label: 'Home', labelKey: 'nav.home', icon: IconLayoutDashboard },
-  { value: 'grundlagen', label: 'Grundlagen', labelKey: 'nav.grundlagen', icon: IconSchool },
+  { value: 'basics', label: 'Basics', labelKey: 'nav.basics', icon: IconSchool },
   { value: 'missions', label: 'Missions', labelKey: 'nav.missions', icon: IconTargetArrow, requiresOnboarding: true },
   { value: 'training', label: 'Training', labelKey: 'nav.training', icon: IconDeviceGamepad2, requiresOnboarding: true },
-  { value: 'agent', label: 'Dein Agent', labelKey: 'nav.agent', icon: IconMessageChatbot, requiresOnboarding: true },
-  { value: 'bibliothek', label: 'Bibliothek', labelKey: 'nav.bibliothek', icon: IconBooks },
+  { value: 'agent', label: 'Your Agent', labelKey: 'nav.agent', icon: IconMessageChatbot, requiresOnboarding: true },
+  { value: 'library', label: 'Library', labelKey: 'nav.library', icon: IconBooks },
   { value: 'leaderboard', label: 'Leaderboard', labelKey: 'nav.leaderboard', icon: IconTrophy },
   {
     value: 'user-management',
-    label: 'Nutzerverwaltung',
+    label: 'User management',
     labelKey: 'nav.userManagement',
     icon: IconUserCog,
     permission: PERMISSIONS.MANAGE_USERS,
@@ -30,7 +30,7 @@ export const NAV_ITEMS = [
 
 export const PROFILE_ITEM = {
   value: 'profile',
-  label: 'Profil',
+  label: 'Profile',
   labelKey: 'nav.profile',
   icon: IconUserCircle,
 }

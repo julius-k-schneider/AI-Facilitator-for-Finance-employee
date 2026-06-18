@@ -1,7 +1,7 @@
 import { createTheme } from '@mantine/core'
 import { branding } from './branding'
 
-// Mischt zwei HEX-Farben mit gegebenem Anteil (0..1 Richtung target).
+// Mixes two HEX colors by the given amount (0..1 towards target).
 function mix(hex, target, amount) {
   const a = hexToRgb(hex)
   const b = hexToRgb(target)
@@ -26,8 +26,8 @@ function rgbToHex(r, g, b) {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`
 }
 
-// Erzeugt aus einer Basisfarbe eine 10-stufige Mantine-Palette.
-// Index 6 entspricht der Basisfarbe (Mantine-Standard für primaryShade).
+// Generates a 10-step Mantine palette from a base color.
+// Index 6 corresponds to the base color (Mantine default for primaryShade).
 function generatePalette(base) {
   return [
     mix(base, '#ffffff', 0.92),
@@ -46,8 +46,8 @@ function generatePalette(base) {
 const bodyFont = "'Hanken Grotesk', system-ui, 'Segoe UI', sans-serif"
 const displayFont = "'Bricolage Grotesque', system-ui, 'Segoe UI', sans-serif"
 
-// Überträgt die Branding-Farben in globale CSS-Variablen, damit alle Komponenten
-// (inkl. Verläufe/Glows) automatisch der zentralen Branding-Konfiguration folgen.
+// Maps the branding colors to global CSS variables so that all components
+// (including gradients/glows) automatically follow the central branding config.
 export function applyBrandingVars(target) {
   const root = target || document.documentElement
   const { primary, secondary, accent } = branding.colors

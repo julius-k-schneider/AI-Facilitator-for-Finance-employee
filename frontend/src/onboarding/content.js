@@ -1,13 +1,13 @@
 /**
- * Hardcoded Onboarding-Inhalt.
+ * Hardcoded onboarding content.
  *
- * Das Onboarding ist statisch und nicht rollenspezifisch, daher liegt der
- * Content bewusst hier im Frontend (nicht im Django-Admin). Die Info- und
- * Frage-Strukturen folgen demselben Schema, das `InfoView`/`Quiz` rendern und
- * das später für KI-generierte Daily Challenges wiederverwendet wird.
+ * The onboarding is static and not role-specific, so the content deliberately
+ * lives here in the frontend (not in the Django admin). The info and question
+ * structures follow the same schema that `InfoView`/`Quiz` render and that is
+ * later reused for AI-generated daily challenges.
  *
- * Pro Kapitel gibt es eine deutsche und eine englische Variante (`{ de, en }`).
- * `pickLang()` wählt anhand der aktiven i18n-Sprache (Fallback Deutsch).
+ * Each chapter has a German and an English variant (`{ de, en }`).
+ * `pickLang()` selects based on the active i18n language (fallback German).
  */
 
 export const PASS_THRESHOLD = 0.8
@@ -269,7 +269,7 @@ export const ONBOARDING = {
       },
     },
   ],
-  // Eigenständige Fragen, die alle Kapitel abdecken (Freischalt-Quiz).
+  // Standalone questions covering all chapters (unlock quiz).
   finalQuiz: {
     de: [
       {

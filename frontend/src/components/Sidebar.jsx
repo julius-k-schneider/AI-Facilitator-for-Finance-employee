@@ -16,7 +16,7 @@ function roleLabel(user, t) {
   return user?.role ? t(`roles.${user.role}`, { defaultValue: '' }) : ''
 }
 
-// Gemeinsames Styling für die kleinen Icon-Buttons in der User-Box.
+// Shared styling for the small icon buttons in the user box.
 const iconButtonStyle = {
   display: 'grid',
   placeItems: 'center',
@@ -102,7 +102,7 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
         overflow: 'hidden',
       }}
     >
-      {/* Dezenter Gold-Schimmer oben rechts */}
+      {/* Subtle gold glow in the top right */}
       <Box
         style={{
           position: 'absolute',
@@ -153,7 +153,7 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
         ))}
       </Stack>
 
-      {/* User-Karte + Logout */}
+      {/* User card + logout */}
       <Box p="md">
         <Box
           style={{

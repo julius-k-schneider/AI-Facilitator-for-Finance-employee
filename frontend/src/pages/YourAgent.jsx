@@ -15,7 +15,7 @@ function cleanText(text) {
     .trim()
 }
 
-export default function DeinAgent() {
+export default function YourAgent() {
   const { t, i18n } = useTranslation()
   const language = (i18n.resolvedLanguage || i18n.language || 'de').split('-')[0] === 'en' ? 'en' : 'de'
   const [chats, setChats] = useState([])

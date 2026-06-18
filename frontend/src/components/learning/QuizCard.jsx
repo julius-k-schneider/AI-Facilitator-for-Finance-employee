@@ -4,12 +4,12 @@ import { IconCheck, IconX } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 
 /**
- * Datengetriebene Single-Choice-Frage.
+ * Data-driven single-choice question.
  *
  * Props: { question, choices: [], correctIndex, explanation, onAnswered }
- * Nach dem Absenden wird richtig/falsch + Erklärung aufgedeckt und
- * `onAnswered(isCorrect)` aufgerufen. Wird im Onboarding wie später in den
- * Daily Challenges verwendet.
+ * After submitting, correct/incorrect + explanation is revealed and
+ * `onAnswered(isCorrect)` is called. Used in onboarding as well as later in the
+ * daily challenges.
  */
 export default function QuizCard({ question, choices = [], correctIndex, explanation, onAnswered }) {
   const { t } = useTranslation()

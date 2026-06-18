@@ -33,7 +33,7 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
         gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1fr)',
       }}
     >
-      {/* Linke Markenfläche */}
+      {/* Left brand panel */}
       <Box
         visibleFrom="md"
         style={{
@@ -126,7 +126,7 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
         </Text>
       </Box>
 
-      {/* Rechte Formularfläche */}
+      {/* Right form panel */}
       <Box
         style={{
           display: 'flex',

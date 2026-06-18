@@ -1,22 +1,22 @@
 import logo from './assets/Lufthansa_Group_2025.svg.png'
 
 /**
- * Zentrale Branding-Konfiguration.
+ * Central branding configuration.
  *
- * Hier lassen sich Logo und die drei Markenfarben anpassen, um die App
- * für einen anderen Mandanten / ein anderes Unternehmen einzufärben.
- * Die Werte werden in main.jsx in ein Mantine-Theme übersetzt.
+ * Logo and the three brand colors can be adjusted here to re-skin the app
+ * for a different tenant / company. The values are translated into a Mantine
+ * theme in main.jsx.
  *
- *  - primary:   Hauptfarbe – Buttons, aktive Navigation, primäre Aktionen
- *  - secondary: Sekundärfarbe – Hero-/Header-Flächen, Überschriften
- *  - accent:    Akzentfarbe – Highlights, Hervorhebungen, Badges
+ *  - primary:   Primary color – buttons, active navigation, primary actions
+ *  - secondary: Secondary color – hero/header surfaces, headings
+ *  - accent:    Accent color – highlights, emphasis, badges
  *
- * Farben als HEX (#rrggbb) angeben. Das Logo kann durch eine andere Datei
- * im assets-Ordner ersetzt werden (Import oben anpassen) oder durch eine URL.
+ * Provide colors as HEX (#rrggbb). The logo can be replaced with another file
+ * in the assets folder (adjust the import above) or with a URL.
  */
 export const branding = {
   name: 'AI Facilitator',
-  tagline: 'AI Enablement für die Lufthansa Group',
+  tagline: 'AI Enablement for the Lufthansa Group',
   logo,
   logoAlt: 'Lufthansa Group',
   colors: {

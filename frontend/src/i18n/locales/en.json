@@ -2,7 +2,11 @@
   "app": {
     "checkingAuth": "Checking authentication…",
     "greeting": "Hi, {{name}} 👋",
-    "genericError": "Something went wrong"
+    "genericError": "Something went wrong",
+    "accessDenied": {
+      "title": "No access",
+      "text": "You do not have permission to view this page."
+    }
   },
   "language": {
     "current": "English",
@@ -10,8 +14,8 @@
   },
   "nav": {
     "home": "Home",
-    "grundlagen": "Basics",
-    "bibliothek": "Library",
+    "basics": "Basics",
+    "library": "Library",
     "leaderboard": "Leaderboard",
     "missions": "Missions",
     "training": "Training",
@@ -263,6 +267,38 @@
     "errorChange": "Password could not be changed",
     "successChange": "Password updated successfully"
   },
+  "userManagement": {
+    "title": "User management",
+    "subtitle": "Manage registered users, roles and access rights.",
+    "registeredTitle": "Registered users",
+    "registeredSubtitle": "Search, roles and access maintenance",
+    "searchPlaceholder": "Search...",
+    "loading": "Loading users...",
+    "columnUser": "User",
+    "columnRole": "Role",
+    "columnPoints": "Points",
+    "columnMissions": "Missions",
+    "columnActions": "Actions",
+    "youBadge": "You",
+    "roleSelectAria": "Role for {{name}}",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "deleteModalTitle": "Delete user",
+    "deleteConfirm": "Are you sure you want to delete the account {{name}}?",
+    "deleteHint": "The user and their stored progress will be removed from the database.",
+    "errors": {
+      "loadFailed": "Users could not be loaded.",
+      "lastAdminDowngrade": "The last admin cannot be downgraded.",
+      "roleUpdateFailed": "The role could not be updated.",
+      "selfDelete": "You cannot delete your own account here.",
+      "lastAdminDelete": "The last admin cannot be deleted.",
+      "deleteFailed": "User could not be deleted."
+    },
+    "success": {
+      "roleUpdated": "The role was updated.",
+      "deleted": "User was deleted."
+    }
+  },
   "onboarding": {
     "badge": "ONBOARDING",
     "hubTitle": "Onboarding",
@@ -297,17 +333,19 @@
   "pages": {
     "comingSoon": "Coming soon",
     "comingSoonText": "This area is currently being built. Check back soon – new content for your AI enablement is on the way.",
-    "grundlagen": {
+    "basics": {
       "title": "Basics",
       "description": "The most important AI basics for your day-to-day work in finance"
     },
-    "bibliothek": {
+    "library": {
       "title": "Library",
       "description": "Materials, templates and links for reference"
     },
     "leaderboard": {
       "title": "Leaderboard",
       "description": "Compare your points with your colleagues",
+      "loading": "Loading leaderboard...",
+      "loadError": "The leaderboard could not be loaded.",
       "allTime": "All-time ranking",
       "weekly": "Weekly ranking",
       "history": "Previous weeks",
