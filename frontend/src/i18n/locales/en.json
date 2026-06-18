@@ -339,7 +339,43 @@
     },
     "library": {
       "title": "Library",
-      "description": "Materials, templates and links for reference"
+      "description": "Materials, templates and links for reference",
+      "sectionTitle": "AI Resources for Finance",
+      "sectionSubtitle": "Curated articles, guides and tools to help you use AI effectively and safely in your daily work.",
+      "readMore": "Read more",
+      "read": "Read",
+      "resources": {
+        "llmBasics": {
+          "title": "How LLMs Work",
+          "description": "A plain-language explanation of large language models and why they make mistakes.",
+          "category": "AI Basics"
+        },
+        "prompting": {
+          "title": "Prompting for Finance Professionals",
+          "description": "How to write effective prompts for tasks like summarizing reports or drafting accruals.",
+          "category": "Prompting"
+        },
+        "useCases": {
+          "title": "AI in Accounting: Use Cases",
+          "description": "Real-world examples of AI applied to month-end closing and financial forecasting.",
+          "category": "Use Cases"
+        },
+        "privacy": {
+          "title": "Data Privacy & GDPR with AI",
+          "description": "What finance employees must know before entering company data into AI tools.",
+          "category": "Compliance"
+        },
+        "hallucinations": {
+          "title": "Spotting Hallucinations",
+          "description": "A practical checklist for verifying AI-generated numbers and recommendations.",
+          "category": "AI Basics"
+        },
+        "sap": {
+          "title": "SAP & AI: What's Changing",
+          "description": "Overview of how SAP is integrating AI into finance workflows.",
+          "category": "Tools"
+        }
+      }
     },
     "leaderboard": {
       "title": "Leaderboard",
