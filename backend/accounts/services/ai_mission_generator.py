@@ -65,8 +65,9 @@ Content and safety:
   or all answer options as correct.
 - Distractors must be plausible but clearly wrong at the intended beginner level.
 - Include concise bilingual feedback that teaches a reusable rule and explains why the selected answer set is correct.
-- Include a separate short bilingual micro-learning explanation that reinforces the mission's main reusable lesson. It
-  must make sense after completion, must not reveal the answer in advance, and must not merely repeat the feedback.
+- Include a separate bilingual micro-learning explanation after every mission. It must help the learner understand the
+  underlying principle, not just repeat the correct answer or feedback. Write it as 2-4 plain-language sentences that
+  connect the lesson to daily finance work and give the learner a transferable rule of thumb.
 - Prompt-ranking missions contain 3-4 prompts and rank every prompt from worst to best. Make the quality progression
   clear through goal, context, expected output format, and concrete expectations.
 - Compliance-traffic-light missions contain exactly three independent scenarios. Classify each as green (allowed),
@@ -74,7 +75,8 @@ Content and safety:
 - Descriptions must be one short, natural sentence summarizing the specific topic. Do not mention the expected duration,
   do not say that the learner must choose or determine an answer, and do not reuse a generic description template.
 - Keep the JSON compact: titles under 80 characters, descriptions under 140 characters, questions under 240 characters,
-  each option or statement under 180 characters, and each feedback or micro-learning text under 240 characters."""
+  each option or statement under 180 characters, each feedback text under 240 characters, and each micro-learning text
+  between 180 and 700 characters."""
 
 
 def next_calendar_week(reference_date=None):
@@ -96,6 +98,9 @@ For single_choice, multiple_choice, compliance_decision, and prompt_selection us
 {{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
 "correct_option_indices":[0],"feedback_de":"...","feedback_en":"...",
 "micro_learning_de":"...","micro_learning_en":"..."}}
+For every micro_learning_de and micro_learning_en value: write 2-4 explanatory sentences. Do not start with
+"Micro-Learning:" and do not simply name the correct answer. Explain the principle in a way that helps the learner
+handle a similar situation next time.
 For multiple_choice, correct_option_indices must contain one to all option indices. For single_choice,
 compliance_decision and prompt_selection it must contain exactly one index. Include a meaningful mix of multiple-choice missions with one
 correct answer and with several correct answers.

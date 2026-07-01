@@ -25,13 +25,17 @@ def required_text(value, field):
     return value.strip()
 
 
-def optional_micro_learning(content, fallback_de='', fallback_en=''):
-    de = content.get('micro_learning_de')
-    en = content.get('micro_learning_en')
-    return {
-        'de': de.strip() if isinstance(de, str) and de.strip() else fallback_de,
-        'en': en.strip() if isinstance(en, str) and en.strip() else fallback_en,
+def required_micro_learning(content, field_prefix):
+    micro_learning = {
+        'de': required_text(content.get('micro_learning_de'), f'{field_prefix} micro_learning_de'),
+        'en': required_text(content.get('micro_learning_en'), f'{field_prefix} micro_learning_en'),
     }
+    for language, text in micro_learning.items():
+        if len(text) < 120:
+            raise MissionValidationError(f'{field_prefix} micro_learning_{language} is too short')
+        if len(text) > 900:
+            raise MissionValidationError(f'{field_prefix} micro_learning_{language} is too long')
+    return micro_learning
 
 
 def validate_generated_payload(payload, target_slots):
@@ -101,11 +105,7 @@ def validate_generated_payload(payload, target_slots):
                     }
                     for position, (de, en, color) in enumerate(zip(statements_de, statements_en, colors))
                 ],
-                'micro_learning': optional_micro_learning(
-                    content,
-                    'Pruefe bei der KI-Nutzung immer Daten, Kontext und notwendige Schutzmassnahmen.',
-                    'When using AI, always check the data, context, and necessary safeguards.',
-                ),
+                'micro_learning': required_micro_learning(content, f'mission {index + 1}'),
             }
             options = []
             correct_indices = []
@@ -147,9 +147,7 @@ def validate_generated_payload(payload, target_slots):
                         'en': required_text(content.get('feedback_en'), f'mission {index + 1} feedback_en'),
                     },
                 }
-                normalized_content['micro_learning'] = optional_micro_learning(
-                    content, normalized_content['feedback']['de'], normalized_content['feedback']['en']
-                )
+                normalized_content['micro_learning'] = required_micro_learning(content, f'mission {index + 1}')
             else:
                 raw_correct_indices = content.get('correct_option_indices')
                 if raw_correct_indices is None and content.get('correct_option_index') is not None:
@@ -174,9 +172,7 @@ def validate_generated_payload(payload, target_slots):
                         'en': required_text(content.get('feedback_en'), f'mission {index + 1} feedback_en'),
                     },
                 }
-                normalized_content['micro_learning'] = optional_micro_learning(
-                    content, normalized_content['feedback']['de'], normalized_content['feedback']['en']
-                )
+                normalized_content['micro_learning'] = required_micro_learning(content, f'mission {index + 1}')
 
         normalized.append({
             'scheduled_date': scheduled_date,

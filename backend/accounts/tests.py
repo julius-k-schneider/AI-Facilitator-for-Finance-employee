@@ -800,6 +800,16 @@ class AiMissionServiceTests(TestCase):
                         'options_de': ['Prompt A', 'Prompt B'], 'options_en': ['Prompt A', 'Prompt B'],
                         'correct_option_index': 1,
                         'feedback_de': 'Prompt B ist genauer.', 'feedback_en': 'Prompt B is more precise.',
+                        'micro_learning_de': (
+                            'Ein guter Prompt gibt der AI genug Orientierung, damit sie nicht raten muss. '
+                            'Gerade in Finance-Aufgaben helfen Ziel, Kontext und gewünschtes Format dabei, '
+                            'Ergebnisse später zu prüfen und mit Kolleginnen und Kollegen zu teilen.'
+                        ),
+                        'micro_learning_en': (
+                            'A good prompt gives the AI enough orientation so it does not have to guess. '
+                            'Especially in finance tasks, the goal, context, and desired format make results '
+                            'easier to check and share with colleagues.'
+                        ),
                     },
                 })
         return {'missions': missions}
@@ -822,10 +832,19 @@ class AiMissionServiceTests(TestCase):
         self.assertIn('micro_learning_de', prompt)
         self.assertIn('micro-learning explanation', SYSTEM_PROMPT)
 
-    def test_validator_falls_back_to_feedback_when_micro_learning_is_missing(self):
+    def test_validator_rejects_missing_micro_learning(self):
         start, _ = next_calendar_week()
-        normalized = validate_generated_payload(self.valid_payload({start: 1}), {start: 1})
-        self.assertEqual(normalized[0]['content']['micro_learning']['en'], 'Prompt B is more precise.')
+        payload = self.valid_payload({start: 1})
+        payload['missions'][0]['content'].pop('micro_learning_de')
+        with self.assertRaises(MissionValidationError):
+            validate_generated_payload(payload, {start: 1})
+
+    def test_validator_rejects_too_short_micro_learning(self):
+        start, _ = next_calendar_week()
+        payload = self.valid_payload({start: 1})
+        payload['missions'][0]['content']['micro_learning_de'] = 'Zu kurz.'
+        with self.assertRaises(MissionValidationError):
+            validate_generated_payload(payload, {start: 1})
 
     def test_generation_batches_are_limited_to_one_day(self):
         start, _ = next_calendar_week()
@@ -879,6 +898,15 @@ class AiMissionServiceTests(TestCase):
             'correct_colors': ['green', 'yellow', 'red'],
             'statement_feedback_de': ['Gut', 'Prüfen', 'Verboten'],
             'statement_feedback_en': ['Fine', 'Check', 'Forbidden'],
+            'micro_learning_de': (
+                'Die Ampel ist eine einfache Denkstütze für AI-Nutzung im Arbeitsalltag. '
+                'Grün bedeutet meist unkritisch, gelb braucht zusätzliche Schutzmaßnahmen, '
+                'und rot sollte nicht in ein AI-Tool eingegeben werden.'
+            ),
+            'micro_learning_en': (
+                'The traffic light is a simple thinking aid for AI use at work. Green usually means low risk, '
+                'yellow requires additional safeguards, and red should not be entered into an AI tool.'
+            ),
         }
         normalized = validate_generated_payload(traffic, {start: 1})
         self.assertEqual(normalized[0]['content']['statements'][1]['correct_color'], 'yellow')
