@@ -16,6 +16,11 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Repo root holds the frontend/ sibling of backend/. In the production image the
+# built SPA lives at /app/frontend/dist; Django serves it via WhiteNoise.
+PROJECT_ROOT = BASE_DIR.parent
+FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+
 # Load backend/.env for local development. On Railway the env vars are already
 # present, so the missing file is simply ignored.
 load_dotenv(BASE_DIR / ".env")
@@ -155,16 +160,24 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# The Vite build (base '/static/') is collected alongside Django's own static
+# files and served by WhiteNoise. WHITENOISE_INDEX_FILE lets it resolve the SPA
+# entry point.
+STATICFILES_DIRS = [FRONTEND_DIST] if FRONTEND_DIST.exists() else []
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        # Vite already content-hashes filenames, so compress without re-hashing.
+        # Manifest storage would rewrite asset names and break the references in
+        # the pre-built index.html (which isn't processed through the manifest).
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
+WHITENOISE_INDEX_FILE = True
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

@@ -26,7 +26,7 @@ import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
 import { PROGRESS_EVENT, getUserId } from '../services/progressService'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 function StatCard({ label, value, icon: Icon, color }) {
   return (
