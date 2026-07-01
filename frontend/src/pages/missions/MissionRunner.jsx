@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Alert, Badge, Box, Button, Paper, Stack, Text, Title } from '@mantine/core'
-import { IconArrowLeft, IconTrophy } from '@tabler/icons-react'
+import { IconArrowLeft, IconBulb, IconTrophy } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { submitMission } from '../../services/missionService'
 import { getMissionType } from './missionTypes'
@@ -18,13 +18,18 @@ export default function MissionRunner({ mission, onBack, onCompleted = () => {},
     setError('')
     try {
       if (testMode) {
-        setResult(definition.submitTraining
+        const trainingResult = definition.submitTraining
           ? await definition.submitTraining(mission, answer, language)
-          : definition.evaluateTest(mission, answer))
+          : definition.evaluateTest(mission, answer)
+        setResult({ ...trainingResult, microLearning: mission.test_solution?.micro_learning })
         return
       }
       const data = await submitMission(mission.id, answer, language)
-      setResult({ ...data.result, feedback: data.mission.content.feedback })
+      setResult({
+        ...data.result,
+        feedback: data.mission.content.feedback,
+        microLearning: data.mission.content.micro_learning,
+      })
       onCompleted(data.mission)
     } catch (nextError) {
       setError(nextError.message)
@@ -48,6 +53,9 @@ export default function MissionRunner({ mission, onBack, onCompleted = () => {},
           {typeof result.feedback === 'string' && result.feedback && !definition.ResultDetails && <Text fz="sm" mt={6}>{result.correct ? t('missions.result.correctPrefix') : t('missions.result.wrongPrefix')} {result.feedback}</Text>}
         </Alert>}
         {result && definition.ResultDetails && <definition.ResultDetails mission={mission} result={result} t={t} />}
+        {result?.microLearning && <Alert color="blue" icon={<IconBulb size={20} />} title={t('missions.microLearning.title')}>
+          <Text fz="sm">{result.microLearning}</Text>
+        </Alert>}
         {!result && <Button color="brand" disabled={!definition.isAnswerComplete(answer)} loading={submitting} onClick={submit}>{t('missions.submit')}</Button>}
       </Stack>
     </Paper>

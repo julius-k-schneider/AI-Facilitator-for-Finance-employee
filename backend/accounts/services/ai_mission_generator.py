@@ -65,6 +65,8 @@ Content and safety:
   or all answer options as correct.
 - Distractors must be plausible but clearly wrong at the intended beginner level.
 - Include concise bilingual feedback that teaches a reusable rule and explains why the selected answer set is correct.
+- Include a separate short bilingual micro-learning explanation that reinforces the mission's main reusable lesson. It
+  must make sense after completion, must not reveal the answer in advance, and must not merely repeat the feedback.
 - Prompt-ranking missions contain 3-4 prompts and rank every prompt from worst to best. Make the quality progression
   clear through goal, context, expected output format, and concrete expectations.
 - Compliance-traffic-light missions contain exactly three independent scenarios. Classify each as green (allowed),
@@ -72,7 +74,7 @@ Content and safety:
 - Descriptions must be one short, natural sentence summarizing the specific topic. Do not mention the expected duration,
   do not say that the learner must choose or determine an answer, and do not reuse a generic description template.
 - Keep the JSON compact: titles under 80 characters, descriptions under 140 characters, questions under 240 characters,
-  each option or statement under 180 characters, and each feedback text under 240 characters."""
+  each option or statement under 180 characters, and each feedback or micro-learning text under 240 characters."""
 
 
 def next_calendar_week(reference_date=None):
@@ -92,18 +94,21 @@ Use 10-50 points per mission. Return this structure:
 "content":{{...type-specific fields...}}}}]}}
 For single_choice, multiple_choice, compliance_decision, and prompt_selection use:
 {{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
-"correct_option_indices":[0],"feedback_de":"...","feedback_en":"..."}}
+"correct_option_indices":[0],"feedback_de":"...","feedback_en":"...",
+"micro_learning_de":"...","micro_learning_en":"..."}}
 For multiple_choice, correct_option_indices must contain one to all option indices. For single_choice,
 compliance_decision and prompt_selection it must contain exactly one index. Include a meaningful mix of multiple-choice missions with one
 correct answer and with several correct answers.
 For prompt_ranking use exactly 3-4 bilingual prompts and provide their zero-based order from worst to best:
 {{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
-"correct_order":[0,2,1],"feedback_de":"...","feedback_en":"..."}}
+"correct_order":[0,2,1],"feedback_de":"...","feedback_en":"...",
+"micro_learning_de":"...","micro_learning_en":"..."}}
 For compliance_traffic_light use exactly three bilingual scenarios, one valid color per scenario, and bilingual
 scenario-specific feedback:
 {{"question_de":"...","question_en":"...","statements_de":["...","...","..."],
 "statements_en":["...","...","..."],"correct_colors":["green","yellow","red"],
-"statement_feedback_de":["...","...","..."],"statement_feedback_en":["...","...","..."]}}
+"statement_feedback_de":["...","...","..."],"statement_feedback_en":["...","...","..."],
+"micro_learning_de":"...","micro_learning_en":"..."}}
 The five traffic-light arrays must each contain exactly three items, never more or fewer. The content object must use
 only the fields defined for its selected mission type. Do not add explanations outside the JSON object.
 Across the requested schedule, favor broadly useful beginner topics and vary the scenarios. At least half of the

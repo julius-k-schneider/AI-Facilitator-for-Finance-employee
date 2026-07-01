@@ -44,6 +44,10 @@ class AccountsApiTests(TestCase):
                 'options': [{'de': 'Ja', 'en': 'Yes'}, {'de': 'Nein', 'en': 'No'}],
                 'correct_index': 0,
                 'feedback': {'de': 'Deutsches Feedback', 'en': 'English feedback'},
+                'micro_learning': {
+                    'de': 'Pruefe KI-Ergebnisse immer vor der Weiterverwendung.',
+                    'en': 'Always verify AI output before reusing it.',
+                },
             },
             max_points=points,
             created_by=creator,
@@ -91,6 +95,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(len(response.json()['missions']), 1)
         self.assertEqual(response.json()['missions'][0]['content']['question'], 'Correct?')
         self.assertNotIn('correct_index', response.json()['missions'][0]['content'])
+        self.assertNotIn('micro_learning', response.json()['missions'][0]['content'])
 
     def test_daily_missions_exclude_review_missions(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -137,6 +142,10 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.json()['mission']['title'], 'Test mission')
         self.assertEqual(response.json()['mission']['content']['question'], 'Correct?')
         self.assertEqual(response.json()['mission']['content']['feedback'], 'English feedback')
+        self.assertEqual(
+            response.json()['mission']['content']['micro_learning'],
+            'Always verify AI output before reusing it.',
+        )
 
     def test_multiple_choice_requires_the_exact_set_of_correct_answers(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -810,6 +819,13 @@ class AiMissionServiceTests(TestCase):
         self.assertIn('monthly, quarterly, and year-end reports', SYSTEM_PROMPT)
         self.assertIn('Do not require knowledge of machine-learning algorithms', SYSTEM_PROMPT)
         self.assertIn('practical everyday AI usage', prompt)
+        self.assertIn('micro_learning_de', prompt)
+        self.assertIn('micro-learning explanation', SYSTEM_PROMPT)
+
+    def test_validator_falls_back_to_feedback_when_micro_learning_is_missing(self):
+        start, _ = next_calendar_week()
+        normalized = validate_generated_payload(self.valid_payload({start: 1}), {start: 1})
+        self.assertEqual(normalized[0]['content']['micro_learning']['en'], 'Prompt B is more precise.')
 
     def test_generation_batches_are_limited_to_one_day(self):
         start, _ = next_calendar_week()

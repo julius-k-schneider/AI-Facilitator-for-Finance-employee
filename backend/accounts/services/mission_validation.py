@@ -25,6 +25,15 @@ def required_text(value, field):
     return value.strip()
 
 
+def optional_micro_learning(content, fallback_de='', fallback_en=''):
+    de = content.get('micro_learning_de')
+    en = content.get('micro_learning_en')
+    return {
+        'de': de.strip() if isinstance(de, str) and de.strip() else fallback_de,
+        'en': en.strip() if isinstance(en, str) and en.strip() else fallback_en,
+    }
+
+
 def validate_generated_payload(payload, target_slots):
     if not isinstance(payload, dict) or not isinstance(payload.get('missions'), list):
         raise MissionValidationError('response must contain a missions array')
@@ -92,6 +101,11 @@ def validate_generated_payload(payload, target_slots):
                     }
                     for position, (de, en, color) in enumerate(zip(statements_de, statements_en, colors))
                 ],
+                'micro_learning': optional_micro_learning(
+                    content,
+                    'Pruefe bei der KI-Nutzung immer Daten, Kontext und notwendige Schutzmassnahmen.',
+                    'When using AI, always check the data, context, and necessary safeguards.',
+                ),
             }
             options = []
             correct_indices = []
@@ -133,6 +147,9 @@ def validate_generated_payload(payload, target_slots):
                         'en': required_text(content.get('feedback_en'), f'mission {index + 1} feedback_en'),
                     },
                 }
+                normalized_content['micro_learning'] = optional_micro_learning(
+                    content, normalized_content['feedback']['de'], normalized_content['feedback']['en']
+                )
             else:
                 raw_correct_indices = content.get('correct_option_indices')
                 if raw_correct_indices is None and content.get('correct_option_index') is not None:
@@ -157,6 +174,9 @@ def validate_generated_payload(payload, target_slots):
                         'en': required_text(content.get('feedback_en'), f'mission {index + 1} feedback_en'),
                     },
                 }
+                normalized_content['micro_learning'] = optional_micro_learning(
+                    content, normalized_content['feedback']['de'], normalized_content['feedback']['en']
+                )
 
         normalized.append({
             'scheduled_date': scheduled_date,

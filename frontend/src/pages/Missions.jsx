@@ -24,6 +24,7 @@ const createEmptyForm = () => ({
   type: defaultMissionType, scheduled_date: '', title_de: '', title_en: '',
   description_de: '', description_en: '', question_de: '', question_en: '',
   feedback_de: '', feedback_en: '',
+  micro_learning_de: '', micro_learning_en: '',
   max_points: 100, correct_indices: [0], ...createMissionTypeDefaults(),
 })
 
@@ -72,6 +73,8 @@ function missionToForm(mission) {
     question_en: mission.question_en,
     feedback_de: mission.feedback_de || '',
     feedback_en: mission.feedback_en || '',
+    micro_learning_de: mission.micro_learning_de || '',
+    micro_learning_en: mission.micro_learning_en || '',
     max_points: mission.max_points,
     correct_indices: mission.correct_indices?.length ? mission.correct_indices : [0],
     correct_order: mission.correct_order?.length ? mission.correct_order : (mission.options || []).map((_, index) => index),
@@ -248,6 +251,7 @@ function Creator({ opened, onClose, onCreated }) {
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.descriptionDe')} value={form.description_de} onChange={(e) => setField('description_de', e.target.value)} /><Textarea label={t('missions.creator.descriptionEn')} value={form.description_en} onChange={(e) => setField('description_en', e.target.value)} /></SimpleGrid>
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.questionDe')} value={form.question_de} onChange={(e) => setField('question_de', e.target.value)} /><Textarea label={t('missions.creator.questionEn')} value={form.question_en} onChange={(e) => setField('question_en', e.target.value)} /></SimpleGrid>
           {getMissionType(form.type).hasSharedFeedback && <SimpleGrid cols={2}><Textarea label={t('missions.creator.feedbackDe')} value={form.feedback_de} onChange={(e) => setField('feedback_de', e.target.value)} /><Textarea label={t('missions.creator.feedbackEn')} value={form.feedback_en} onChange={(e) => setField('feedback_en', e.target.value)} /></SimpleGrid>}
+          <SimpleGrid cols={2}><Textarea label={t('missions.creator.microLearningDe')} value={form.micro_learning_de} onChange={(e) => setField('micro_learning_de', e.target.value)} /><Textarea label={t('missions.creator.microLearningEn')} value={form.micro_learning_en} onChange={(e) => setField('micro_learning_en', e.target.value)} /></SimpleGrid>
           {(() => { const Editor = getMissionType(form.type).Editor; return <Editor form={form} setForm={setForm} setOption={setOption} toggleCorrectOption={toggleCorrectOption} t={t} /> })()}
           <NumberInput label={t('missions.creator.points')} min={1} max={1000} value={form.max_points} onChange={(value) => setField('max_points', value)} />
           {error && <Alert color="red">{error}</Alert>}
@@ -289,6 +293,7 @@ function Creator({ opened, onClose, onCreated }) {
               <Text fw={700}>{preview[`question_${language}`]}</Text>
               <MissionSolutionContent mission={preview} language={language} showSolution={showPreviewSolution} />
               {showPreviewSolution && getMissionType(preview.type).hasSharedFeedback && preview[`feedback_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{preview[`feedback_${language}`]}</Text>}
+              {showPreviewSolution && preview[`micro_learning_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.microLearning.title')}: </Text>{preview[`micro_learning_${language}`]}</Text>}
             </Stack>
           </Paper>)}
           </SimpleGrid>
@@ -458,6 +463,7 @@ function MissionReview({ enabled, onPublished }) {
                   <Text fw={700} fz="sm" mb="xs">{mission[`question_${language}`]}</Text>
                   <MissionSolutionContent mission={mission} language={language} />
                   {getMissionType(mission.type).hasSharedFeedback && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{mission[`feedback_${language}`]}</Text>}
+                  {mission[`micro_learning_${language}`] && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.microLearning.title')}: </Text>{mission[`micro_learning_${language}`]}</Text>}
                 </Box>)}
               </SimpleGrid>
               <Group justify="flex-end">

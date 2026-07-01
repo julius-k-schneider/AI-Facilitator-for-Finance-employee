@@ -129,6 +129,9 @@
       "wrong": "Die Antwort war leider nicht richtig. Die Mission ist damit abgeschlossen.",
       "partial": "{{correct}} von {{total}} Aussagen waren richtig. Du erhältst {{points}} Punkte."
     },
+    "microLearning": {
+      "title": "Kurz erklärt"
+    },
     "creator": {
       "button": "Missionen verwalten",
       "title": "Mission erstellen",
@@ -145,6 +148,8 @@
       "questionEn": "Frage (Englisch)",
       "feedbackDe": "Feedback zur Lösung (Deutsch, optional)",
       "feedbackEn": "Feedback zur Lösung (Englisch, optional)",
+      "microLearningDe": "Micro-Learning-Erklärung (Deutsch, optional)",
+      "microLearningEn": "Micro-Learning-Erklärung (Englisch, optional)",
       "answers": "Antwortmöglichkeiten",
       "addAnswer": "Antwort hinzufügen",
       "correctAnswer": "Richtige Antwort",

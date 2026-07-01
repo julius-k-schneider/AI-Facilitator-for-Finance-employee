@@ -266,6 +266,10 @@ def mission_payload(mission, user, language='de', include_content=True):
         }
         if attempt is not None:
             payload['content']['feedback'] = translated_feedback(content, language)
+    if include_content and attempt is not None:
+        micro_learning = translated(content.get('micro_learning', {}), language)
+        if micro_learning:
+            payload.setdefault('content', {})['micro_learning'] = micro_learning
     return payload
 
 
@@ -302,6 +306,8 @@ def mission_schedule_payload(mission, user):
         'generated_by_ai': mission.generated_by_ai,
         'feedback_de': translated(content.get('feedback', {}), 'de'),
         'feedback_en': translated(content.get('feedback', {}), 'en'),
+        'micro_learning_de': translated(content.get('micro_learning', {}), 'de'),
+        'micro_learning_en': translated(content.get('micro_learning', {}), 'en'),
         'created_by': mission.created_by_id,
         'can_delete': can_create_missions(user),
         'can_edit': can_create_missions(user),
@@ -374,6 +380,10 @@ def validate_choice_mission_data(data, allow_past_date=False):
                     }
                     for statement in statements
                 ],
+                'micro_learning': {
+                    'de': str(data.get('micro_learning_de', '')).strip(),
+                    'en': str(data.get('micro_learning_en', '')).strip(),
+                },
             },
             'max_points': max_points,
         }, None
@@ -407,6 +417,10 @@ def validate_choice_mission_data(data, allow_past_date=False):
                 'feedback': {
                     'de': str(data.get('feedback_de', '')).strip(),
                     'en': str(data.get('feedback_en', '')).strip(),
+                },
+                'micro_learning': {
+                    'de': str(data.get('micro_learning_de', '')).strip(),
+                    'en': str(data.get('micro_learning_en', '')).strip(),
                 },
             },
             'max_points': max_points,
@@ -442,6 +456,10 @@ def validate_choice_mission_data(data, allow_past_date=False):
             'feedback': {
                 'de': str(data.get('feedback_de', '')).strip(),
                 'en': str(data.get('feedback_en', '')).strip(),
+            },
+            'micro_learning': {
+                'de': str(data.get('micro_learning_de', '')).strip(),
+                'en': str(data.get('micro_learning_en', '')).strip(),
             },
         },
         'max_points': max_points,
@@ -966,6 +984,8 @@ def generate_training_mission_view(request):
         'statements': content.get('statements', []),
         'feedback_de': translated(content.get('feedback', {}), 'de'),
         'feedback_en': translated(content.get('feedback', {}), 'en'),
+        'micro_learning_de': translated(content.get('micro_learning', {}), 'de'),
+        'micro_learning_en': translated(content.get('micro_learning', {}), 'en'),
         'test_solution': {
             'correct_indices': correct_indices(content),
             'correct_order': content.get('correct_order', []),
