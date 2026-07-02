@@ -124,6 +124,7 @@ class AccountsApiTests(TestCase):
 
         self.assertEqual(first.status_code, 200)
         self.assertEqual(first.json()['result']['score'], 90)
+        self.assertEqual(first.json()['result']['correct_indices'], [0])
         self.assertEqual(first.json()['progress']['total_points'], 130)
         self.assertEqual(second.status_code, 409)
         self.assertEqual(MissionAttempt.objects.filter(user=player, mission=mission).count(), 1)
@@ -843,6 +844,15 @@ class AiMissionServiceTests(TestCase):
         start, _ = next_calendar_week()
         payload = self.valid_payload({start: 1})
         payload['missions'][0]['content']['micro_learning_de'] = 'Zu kurz.'
+        with self.assertRaises(MissionValidationError):
+            validate_generated_payload(payload, {start: 1})
+
+    def test_validator_rejects_feedback_repeated_as_micro_learning(self):
+        start, _ = next_calendar_week()
+        payload = self.valid_payload({start: 1})
+        content = payload['missions'][0]['content']
+        content['feedback_de'] = content['micro_learning_de']
+        content['feedback_en'] = content['micro_learning_en']
         with self.assertRaises(MissionValidationError):
             validate_generated_payload(payload, {start: 1})
 

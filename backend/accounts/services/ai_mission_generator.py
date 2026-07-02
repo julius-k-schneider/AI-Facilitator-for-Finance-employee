@@ -64,10 +64,13 @@ Content and safety:
 - Single-answer types must have exactly one unambiguous correct answer. Multiple-choice missions may have one, several,
   or all answer options as correct.
 - Distractors must be plausible but clearly wrong at the intended beginner level.
-- Include concise bilingual feedback that teaches a reusable rule and explains why the selected answer set is correct.
+- Include concise bilingual feedback of 1-2 sentences that addresses the learner's concrete answer. Explain why the
+  selected answer is correct or incorrect, but do not prefix it with labels such as "Correct", "Incorrect", "Richtig",
+  or "Falsch"; the interface already displays that status.
 - Include a separate bilingual micro-learning explanation after every mission. It must help the learner understand the
   underlying principle, not just repeat the correct answer or feedback. Write it as 2-4 plain-language sentences that
-  connect the lesson to daily finance work and give the learner a transferable rule of thumb.
+  connect the lesson to daily finance work and give the learner a transferable rule of thumb. Feedback answers
+  "Why was this answer correct or incorrect?"; micro-learning answers "What should I apply in a similar situation?"
 - Prompt-ranking missions contain 3-4 prompts and rank every prompt from worst to best. Make the quality progression
   clear through goal, context, expected output format, and concrete expectations.
 - Compliance-traffic-light missions contain exactly three independent scenarios. Classify each as green (allowed),
@@ -100,7 +103,7 @@ For single_choice, multiple_choice, compliance_decision, and prompt_selection us
 "micro_learning_de":"...","micro_learning_en":"..."}}
 For every micro_learning_de and micro_learning_en value: write 2-4 explanatory sentences. Do not start with
 "Micro-Learning:" and do not simply name the correct answer. Explain the principle in a way that helps the learner
-handle a similar situation next time.
+handle a similar situation next time. Do not reuse or paraphrase the feedback as the micro-learning text.
 For multiple_choice, correct_option_indices must contain one to all option indices. For single_choice,
 compliance_decision and prompt_selection it must contain exactly one index. Include a meaningful mix of multiple-choice missions with one
 correct answer and with several correct answers.

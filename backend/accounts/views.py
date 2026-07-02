@@ -734,7 +734,7 @@ def complete_mission_view(request):
         expected_indices = sorted(correct_indices(content))
         score = mission.max_points if selected_indices == expected_indices else 0
         stored_answer = {'selected_indices': selected_indices}
-        result_details = {}
+        result_details = {'correct_indices': expected_indices}
     try:
         attempt = MissionAttempt.objects.create(
             user=request.user,

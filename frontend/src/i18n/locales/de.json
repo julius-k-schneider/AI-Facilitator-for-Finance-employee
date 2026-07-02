@@ -125,12 +125,16 @@
     "result": {
       "correctPrefix": "Richtig.",
       "wrongPrefix": "Falsch.",
-      "correct": "Richtig! Du erhältst {{points}} Punkte.",
-      "wrong": "Die Antwort war leider nicht richtig. Die Mission ist damit abgeschlossen.",
-      "partial": "{{correct}} von {{total}} Aussagen waren richtig. Du erhältst {{points}} Punkte."
+      "correctTitle": "Richtig",
+      "wrongTitle": "Falsch",
+      "partialTitle": "Teilweise richtig",
+      "pointsEarned": "Du erhältst {{points}} Punkte.",
+      "completed": "Die Mission ist abgeschlossen.",
+      "partialSummary": "{{correct}} von {{total}} Aussagen stimmen. Du erhältst {{points}} Punkte.",
+      "explanationLabel": "Warum?"
     },
     "microLearning": {
-      "title": "Kurz erklärt"
+      "title": "Für ähnliche Fälle"
     },
     "creator": {
       "button": "Missionen verwalten",

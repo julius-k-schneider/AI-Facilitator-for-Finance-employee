@@ -125,12 +125,16 @@
     "result": {
       "correctPrefix": "Correct.",
       "wrongPrefix": "Incorrect.",
-      "correct": "Correct! You receive {{points}} points.",
-      "wrong": "Unfortunately, that answer was not correct. The mission is now completed.",
-      "partial": "{{correct}} of {{total}} statements were correct. You receive {{points}} points."
+      "correctTitle": "Correct",
+      "wrongTitle": "Wrong",
+      "partialTitle": "Partly correct",
+      "pointsEarned": "You receive {{points}} points.",
+      "completed": "The mission is complete.",
+      "partialSummary": "{{correct}} of {{total}} statements are correct. You receive {{points}} points.",
+      "explanationLabel": "Why?"
     },
     "microLearning": {
-      "title": "Micro-learning"
+      "title": "For similar situations"
     },
     "creator": {
       "button": "Manage missions",

@@ -1,4 +1,6 @@
+import re
 from datetime import date
+from difflib import SequenceMatcher
 
 from accounts.models import Mission
 
@@ -36,6 +38,21 @@ def required_micro_learning(content, field_prefix):
         if len(text) > 900:
             raise MissionValidationError(f'{field_prefix} micro_learning_{language} is too long')
     return micro_learning
+
+
+def normalized_text(value):
+    return ' '.join(re.findall(r'\w+', value.lower()))
+
+
+def ensure_distinct_explanations(feedback, micro_learning, field_prefix):
+    for language in ('de', 'en'):
+        normalized_feedback = normalized_text(feedback[language])
+        normalized_learning = normalized_text(micro_learning[language])
+        similarity = SequenceMatcher(None, normalized_feedback, normalized_learning).ratio()
+        if normalized_feedback == normalized_learning or similarity >= 0.72:
+            raise MissionValidationError(
+                f'{field_prefix} feedback_{language} and micro_learning_{language} are too similar'
+            )
 
 
 def validate_generated_payload(payload, target_slots):
@@ -107,6 +124,13 @@ def validate_generated_payload(payload, target_slots):
                 ],
                 'micro_learning': required_micro_learning(content, f'mission {index + 1}'),
             }
+            traffic_feedback = {
+                language: ' '.join(statement['feedback'][language] for statement in normalized_content['statements'])
+                for language in ('de', 'en')
+            }
+            ensure_distinct_explanations(
+                traffic_feedback, normalized_content['micro_learning'], f'mission {index + 1}'
+            )
             options = []
             correct_indices = []
         else:
@@ -148,6 +172,11 @@ def validate_generated_payload(payload, target_slots):
                     },
                 }
                 normalized_content['micro_learning'] = required_micro_learning(content, f'mission {index + 1}')
+                ensure_distinct_explanations(
+                    normalized_content['feedback'],
+                    normalized_content['micro_learning'],
+                    f'mission {index + 1}',
+                )
             else:
                 raw_correct_indices = content.get('correct_option_indices')
                 if raw_correct_indices is None and content.get('correct_option_index') is not None:
@@ -173,6 +202,11 @@ def validate_generated_payload(payload, target_slots):
                     },
                 }
                 normalized_content['micro_learning'] = required_micro_learning(content, f'mission {index + 1}')
+                ensure_distinct_explanations(
+                    normalized_content['feedback'],
+                    normalized_content['micro_learning'],
+                    f'mission {index + 1}',
+                )
 
         normalized.append({
             'scheduled_date': scheduled_date,
