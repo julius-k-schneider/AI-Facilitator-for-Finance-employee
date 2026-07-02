@@ -21,7 +21,7 @@ import { PROGRESS_EVENT, getUserId } from '../services/progressService'
 import PageShell from './PageShell'
 import './Leaderboard.css'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 const STAT_CONFIG = [
   { key: 'rank', icon: IconTrophy, color: 'accent' },

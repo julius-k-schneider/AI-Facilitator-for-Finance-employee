@@ -38,6 +38,9 @@ services:
       # Inside the compose network the database is reachable as host "db",
       # not localhost. This overrides DATABASE_URL from .env.
       DATABASE_URL: postgres://app:app@db:5432/app
+      # The Vite proxy forwards /api to http://web:8000, so requests arrive with
+      # Host "web". Allow it (dev only) alongside the usual local hosts.
+      ALLOWED_HOSTS: localhost,127.0.0.1,web
     volumes:
       # Mount source for live reload; mask host's .venv (macOS binaries).
       - ./backend:/app
@@ -53,6 +56,10 @@ services:
       context: ./frontend
     # Dev command: run Vite dev server and expose it to the Docker network.
     command: npm run dev -- --host 0.0.0.0
+    environment:
+      # Inside the compose network the backend is reachable as host "web".
+      # Vite proxies /api there, so the frontend uses same-origin relative URLs.
+      VITE_PROXY_TARGET: http://web:8000
     volumes:
       # Mount frontend source for live reload; keep node_modules inside container.
       - ./frontend:/app

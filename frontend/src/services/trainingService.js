@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 export async function generateTrainingMission(type) {
   const response = await fetch(`${API_BASE}/api/auth/training/generate/`, {

@@ -1,33 +1,33 @@
 # AI-Facilitator-for-Finance-employee
 
-Django + PostgreSQL backend. The standard local workflow runs **everything in
-Docker** (Django + Postgres) and deploys to [Railway](https://railway.app), which
-builds the same `Dockerfile` and provides managed Postgres.
+Django + PostgreSQL backend with a React/Vite frontend. Local development runs
+the two as **separate Docker containers** (with Vite proxying `/api` to Django).
+On [Railway](https://railway.app) they ship as **one service**: the root
+`Dockerfile` builds the frontend and bundles it into the Django image, which
+serves both the API and the SPA (via WhiteNoise) on a single origin.
 
 ## Project layout
 
 ```
 .
-├── docker-compose.yml      # local stack: web (Django) + db (Postgres)
-└── backend/
-    ├── Dockerfile          # app image (local dev + Railway prod)
-    ├── .dockerignore
-    ├── .env                # local secrets (gitignored)
-    ├── .env.example        # template — copy to .env
-    ├── .python-version     # pins Python 3.12
-    ├── railway.json        # Railway: build from Dockerfile
-    ├── requirements.txt
-    ├── manage.py
-    └── config/             # Django project (settings, urls, wsgi, asgi)
-├── frontend/
-│   ├── Dockerfile          # frontend image for local Docker development
-│   ├── package.json        # React/Vite dependencies and scripts
-│   ├── index.html
-│   └── src/
-│       ├── App.jsx         # main React app component
-│       ├── App.css         # main styling for the landing page
-│       └── assets/         # logos, images and frontend assets
-
+├── Dockerfile              # Railway prod image: builds frontend + bundles into Django
+├── railway.json            # Railway: build from the root Dockerfile
+├── docker-compose.yml      # local stack: web (Django) + db (Postgres) + frontend (Vite)
+├── backend/
+│   ├── Dockerfile          # local-dev app image (used by docker-compose)
+│   ├── .dockerignore
+│   ├── .env                # local secrets (gitignored)
+│   ├── .env.example        # template — copy to .env
+│   ├── .python-version     # pins Python 3.12
+│   ├── requirements.txt
+│   ├── manage.py
+│   └── config/             # Django project (settings, urls, wsgi, asgi)
+└── frontend/
+    ├── Dockerfile          # frontend image for local Docker development
+    ├── vite.config.js      # base '/static/' for prod build; dev /api proxy
+    ├── package.json        # React/Vite dependencies and scripts
+    ├── index.html
+    └── src/                # React app (App.jsx, pages, services, assets)
 ```
 
 ## Local development (standard: Docker)
@@ -164,11 +164,13 @@ python -c "from django.core.management.utils import get_random_secret_key as k; 
 
 ## Deploy to Railway
 
-Railway builds the **same `backend/Dockerfile`** (no Nixpacks), so prod matches local.
+The whole app runs as **one service**. The root `Dockerfile` builds the frontend
+and bundles it into the Django image (no Nixpacks), so a single container serves
+both the API and the SPA.
 
 1. **Create the project**: Railway dashboard → *New Project* → *Deploy from GitHub repo*.
-2. **Set the root directory**: Service → *Settings* → *Root Directory* = `backend`
-   (where the `Dockerfile` and `railway.json` live).
+2. **Leave the root directory empty** (repo root). Railway reads the root
+   `railway.json` and builds the root `Dockerfile`. Do **not** set it to `backend`.
 3. **Add Postgres**: project → *New* → *Database* → *Add PostgreSQL*. Railway injects
    `DATABASE_URL` into the service automatically.
 4. **Set service variables** (Service → *Variables*):
@@ -176,16 +178,23 @@ Railway builds the **same `backend/Dockerfile`** (no Nixpacks), so prod matches 
    - `DEBUG` = `False`
    - `ALLOWED_HOSTS` is optional; the app already trusts Railway's
      `RAILWAY_PUBLIC_DOMAIN` automatically.
+   - Uni API keys for mission generation: `KICONNECT_API_KEY` (+ optional
+     `KICONNECT_*` overrides) and the `EMAIL_*` variables for reminders.
    - Optional: `SECURE_HSTS_SECONDS` (e.g. `31536000`) once the site is HTTPS-only.
 5. **Deploy.** The container's start command runs `collectstatic`, then `migrate`,
-   then `gunicorn` (see `backend/Dockerfile`). Static files are served by WhiteNoise.
+   then `gunicorn` (see the root `Dockerfile`). The built SPA and Django static
+   files are served by WhiteNoise under `/static/`.
 6. **Expose it**: Service → *Settings* → *Networking* → *Generate Domain*. Create the
    first admin user via the service shell: `python manage.py createsuperuser`.
+7. **Schedule the cron commands** (optional): add Railway Cron jobs for
+   `generate_weekly_missions` (weekly) and `send_daily_mission_reminders` (daily).
 
 ### How prod differs from local
 
+- Frontend and backend are **one origin** in prod (Django serves the built SPA);
+  locally they are two containers and Vite proxies `/api` to Django.
 - `DATABASE_URL` comes from the Railway Postgres plugin (not Docker compose).
 - The container runs `gunicorn` (prod) instead of `runserver` (dev auto-reload).
 - `DEBUG=False` enables secure cookies, SSL redirect, and SSL-required DB
   connections (see the bottom of `backend/config/settings.py`).
-- Static files are collected at startup and served by WhiteNoise.
+- Static files (SPA + admin) are collected at startup and served by WhiteNoise.
