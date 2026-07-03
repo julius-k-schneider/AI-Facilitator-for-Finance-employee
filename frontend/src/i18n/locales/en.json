@@ -64,32 +64,20 @@
     "title": "Welcome back, {{name}}.",
     "fallbackName": "colleague",
     "subtitle": "Build the AI skills of tomorrow – step by step, with real cases from your day-to-day work in finance.",
-    "ctaContinue": "Continue learning",
-    "ctaMissions": "View missions",
     "locked": {
       "title": "Daily challenges still locked",
       "text": "The daily challenges start as soon as you have completed the onboarding in Basics.",
       "cta": "Go to Basics"
     },
     "stats": {
-      "points": "Points",
-      "weeklyPoints": "Weekly points",
       "missions": "Completed missions",
       "streak": "Daily streak",
-      "rank": "Overall rank",
       "weeklyRank": "Weekly rank"
     },
     "actions": {
-      "onboardingTitle": "Complete the basics",
-      "onboardingText": "Complete onboarding to unlock missions and points.",
       "openMissions": "Open mission",
       "dailyMissionsTitle": "Today's missions",
-      "dailyMissionsText": "Complete your two daily missions and earn points for the leaderboard.",
-      "missionsCompleteTitle": "All missions completed",
-      "missionsCompleteText": "You have successfully completed all currently available missions.",
-      "libraryTitle": "Library",
-      "libraryText": "Open materials, templates and useful reference links.",
-      "openLibrary": "Open library"
+      "dailyMissionsText": "Complete your two daily missions and earn points for the leaderboard."
     }
   },
   "missions": {
