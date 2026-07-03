@@ -64,32 +64,20 @@
     "title": "Willkommen zurück, {{name}}.",
     "fallbackName": "Kollege",
     "subtitle": "Baue die AI-Skills von morgen – Schritt für Schritt, mit echten Cases aus deinem Finance-Alltag.",
-    "ctaContinue": "Weiterlernen",
-    "ctaMissions": "Missionen ansehen",
     "locked": {
       "title": "Daily Challenges noch gesperrt",
       "text": "Die Daily Challenges starten, sobald du das Onboarding in den Grundlagen abgeschlossen hast.",
       "cta": "Zu den Grundlagen"
     },
     "stats": {
-      "points": "Punkte",
-      "weeklyPoints": "Wochenpunkte",
       "missions": "Abgeschlossene Missionen",
       "streak": "Tagesstreak",
-      "rank": "Gesamtrang",
       "weeklyRank": "Wochenrang"
     },
     "actions": {
-      "onboardingTitle": "Grundlagen abschließen",
-      "onboardingText": "Bearbeite das Onboarding, um Missionen und Punkte freizuschalten.",
       "openMissions": "Mission öffnen",
       "dailyMissionsTitle": "Heutige Missionen",
-      "dailyMissionsText": "Bearbeite deine zwei täglichen Missionen und sammle Punkte für die Rangliste.",
-      "missionsCompleteTitle": "Alle Missionen abgeschlossen",
-      "missionsCompleteText": "Du hast alle aktuell verfügbaren Missionen erfolgreich bearbeitet.",
-      "libraryTitle": "Bibliothek",
-      "libraryText": "Öffne Materialien, Vorlagen und Links zum Nachschlagen.",
-      "openLibrary": "Bibliothek öffnen"
+      "dailyMissionsText": "Bearbeite deine zwei täglichen Missionen und sammle Punkte für die Rangliste."
     }
   },
   "missions": {
