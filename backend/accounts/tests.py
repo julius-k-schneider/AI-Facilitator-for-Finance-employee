@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -274,30 +274,47 @@ class AccountsApiTests(TestCase):
         self.assertEqual(send_email_mock.call_args.args[0].title_de, 'Titel')
 
     @patch('accounts.services.email_notifications.send_daily_mission_reminder', return_value=1)
-    def test_daily_mission_reminders_target_only_incomplete_users_once(self, send_mock):
+    def test_daily_mission_reminders_target_only_incomplete_users_once_on_friday(self, send_mock):
         creator = self.create_user('creator-reminder@example.com', Profile.ROLE_CONTENT_CREATOR)
         done_user = self.create_user('done@example.com')
         partial_user = self.create_user('partial@example.com')
         missing_user = self.create_user('missing@example.com')
-        today = timezone.localdate()
-        first = self.create_mission(creator, today)
-        second = self.create_mission(creator, today)
+        friday = date(2026, 6, 19)
+        monday = friday - timedelta(days=4)
+        first = self.create_mission(creator, monday)
+        second = self.create_mission(creator, friday)
         MissionAttempt.objects.create(user=done_user, mission=first, score=10)
         MissionAttempt.objects.create(user=done_user, mission=second, score=10)
         MissionAttempt.objects.create(user=partial_user, mission=first, score=10)
 
-        first_result = send_daily_mission_reminders(today)
-        second_result = send_daily_mission_reminders(today)
+        first_result = send_daily_mission_reminders(friday)
+        second_result = send_daily_mission_reminders(friday)
 
         self.assertEqual(first_result['sent'], 3)
         self.assertEqual(first_result['incomplete_count'], 3)
+        self.assertEqual(first_result['status'], 'sent')
         self.assertEqual(second_result['sent'], 0)
         self.assertEqual(second_result['skipped'], 3)
         self.assertEqual(send_mock.call_count, 3)
+        partial_call = next(call for call in send_mock.call_args_list if call.args[0] == partial_user)
+        self.assertEqual(partial_call.args[3], [second])
         self.assertEqual(
             set(DailyMissionReminder.objects.values_list('user__email', flat=True)),
             {'creator-reminder@example.com', 'partial@example.com', 'missing@example.com'},
         )
+
+    @patch('accounts.services.email_notifications.send_daily_mission_reminder', return_value=1)
+    def test_daily_mission_reminders_skip_non_fridays(self, send_mock):
+        creator = self.create_user('creator-non-friday@example.com', Profile.ROLE_CONTENT_CREATOR)
+        thursday = date(2026, 6, 18)
+        self.create_mission(creator, thursday)
+
+        result = send_daily_mission_reminders(thursday)
+
+        self.assertEqual(result['status'], 'skipped_non_friday')
+        self.assertEqual(result['sent'], 0)
+        send_mock.assert_not_called()
+        self.assertFalse(DailyMissionReminder.objects.exists())
 
     def test_creator_can_create_supported_types_and_edit_from_calendar(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)

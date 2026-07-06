@@ -7,7 +7,7 @@ from accounts.services.email_notifications import send_daily_mission_reminders
 
 
 class Command(BaseCommand):
-    help = 'Sends email reminders to users who have not completed all daily missions.'
+    help = 'Sends Friday email reminders to users who have not completed all missions for the current week.'
 
     def add_arguments(self, parser):
         parser.add_argument('--date', help='Reminder date in YYYY-MM-DD format. Defaults to today.')
@@ -23,7 +23,7 @@ class Command(BaseCommand):
 
         result = send_daily_mission_reminders(reminder_date=reminder_date, dry_run=options['dry_run'])
         self.stdout.write(self.style.SUCCESS(
-            'Daily mission reminders for {date}: missions={mission_count}, incomplete={incomplete_count}, '
+            'Weekly mission reminders for {date}: status={status}, missions={mission_count}, incomplete={incomplete_count}, '
             'sent={sent}, skipped={skipped}, failed={failed}, dry_run={dry_run}'.format(**{
                 **result,
                 'date': result['date'].isoformat(),
