@@ -100,7 +100,26 @@
       "current": "Aktuelle Serie",
       "best": "Bestwert: {{count}}"
     },
+    "tabs": {
+      "today": "Heute",
+      "archive": "Archiv"
+    },
     "status": { "open": "Offen", "completed": "Abgeschlossen" },
+    "archive": {
+      "back": "Zurück zum Archiv",
+      "viewButton": "Ansehen",
+      "filterTitle": "Archiv durchsuchen",
+      "filterText": "Zeigt nur vergangene veröffentlichte Missionen, die du bereits bearbeitet hast. Einsehen vergibt keine Punkte.",
+      "month": "Monat",
+      "typeFilter": "Missionsart",
+      "typeAll": "Alle Arten",
+      "loading": "Archiv wird geladen...",
+      "emptyTitle": "Keine archivierten Missionen gefunden",
+      "emptyText": "In diesem Zeitraum gibt es keine vergangenen bearbeiteten Missionen.",
+      "monthResult": "Archiv für {{month}}",
+      "completedTitle": "Damals abgeschlossen",
+      "score": "{{score}} von {{max}} Punkten"
+    },
     "types": {
       "singleChoice": "Single Choice",
       "multipleChoice": "Multiple Choice",
