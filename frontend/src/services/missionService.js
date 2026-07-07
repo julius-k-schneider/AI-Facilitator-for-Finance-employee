@@ -19,6 +19,8 @@ async function request(path, options = {}) {
 
 export const getDailyMissions = (language) => request(`/api/auth/missions/today/?lang=${language}`)
 
+export const getAvailableMissions = (language) => request(`/api/auth/missions/available/?lang=${language}`)
+
 export const getArchivedMissions = (params = {}) => request(`/api/auth/missions/archive/?${new URLSearchParams(params)}`)
 
 export async function submitMission(missionId, answer, language) {

@@ -12,7 +12,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
 import {
-  approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, getArchivedMissions, getDailyMissions,
+  approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, getArchivedMissions, getAvailableMissions, getDailyMissions,
   getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, updateMission,
   rejectAllReviewMissions,
 } from '../services/missionService'
@@ -90,7 +90,14 @@ function MissionSolutionContent({ mission, language, showSolution = true }) {
 }
 
 function MissionCard({ mission, onOpen, archiveMode = false }) {
-  const { t } = useTranslation()
+  const { i18n, t } = useTranslation()
+  const missionDate = new Date(`${mission.scheduled_date}T12:00:00`)
+  const formattedMissionDate = missionDate.toLocaleDateString(i18n.resolvedLanguage, {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
   return (
     <Paper withBorder radius="lg" p="xl" bg="white">
       <Stack gap="lg" h="100%">
@@ -105,6 +112,10 @@ function MissionCard({ mission, onOpen, archiveMode = false }) {
         <Box style={{ flex: 1 }}>
           <Text fw={700} fz="lg">{mission.title}</Text>
           <Text c="dimmed" fz="sm" mt={5}>{mission.description}</Text>
+          <Group gap={6} mt="sm" align="center">
+            <IconCalendar size={15} style={{ display: 'block', flexShrink: 0 }} />
+            <Text c="dimmed" fz="sm" lh={1}>{formattedMissionDate}</Text>
+          </Group>
         </Box>
         <Group justify="space-between">
           <Badge variant="light" color="secondary">{missionTypeLabel(t, mission.type)}</Badge>
@@ -120,6 +131,24 @@ function MissionCard({ mission, onOpen, archiveMode = false }) {
       </Stack>
     </Paper>
   )
+}
+
+function MissionList({ missions, loading, error, emptyTitle, emptyText, onSelect }) {
+  const { t } = useTranslation()
+  if (loading) return <Text c="dimmed">{t('missions.loading')}</Text>
+  if (error) return <Alert color="red">{error}</Alert>
+  if (missions.length === 0) {
+    return (
+      <Paper withBorder radius="lg" p={48} bg="white">
+        <Stack align="center">
+          <ThemeIcon size={58} radius="xl" variant="light"><IconCalendar size={28} /></ThemeIcon>
+          <Text fw={700}>{emptyTitle}</Text>
+          <Text c="dimmed" ta="center">{emptyText}</Text>
+        </Stack>
+      </Paper>
+    )
+  }
+  return <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">{missions.map((mission) => <MissionCard key={mission.id} mission={mission} onOpen={onSelect} />)}</SimpleGrid>
 }
 
 function Calendar({ month, setMonth, schedule, selectedDate, selectedWeekStart, onSelect, weekMode = false }) {
@@ -569,8 +598,9 @@ export default function Missions({ user }) {
   const { t, i18n } = useTranslation()
   const { progress } = useUserProgress(user)
   const [missions, setMissions] = useState([])
+  const [availableMissions, setAvailableMissions] = useState([])
   const [canCreate, setCanCreate] = useState(false)
-  const [activeMissionId, setActiveMissionId] = useState(null)
+  const [activeMission, setActiveMission] = useState(null)
   const [activeArchiveMission, setActiveArchiveMission] = useState(null)
   const [activeTab, setActiveTab] = useState('today')
   const [archiveMonth, setArchiveMonth] = useState(defaultArchiveMonth)
@@ -578,17 +608,25 @@ export default function Missions({ user }) {
   const [testMissionId, setTestMissionId] = useState(null)
   const [creatorOpen, setCreatorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [availableLoading, setAvailableLoading] = useState(true)
   const [error, setError] = useState('')
+  const [availableError, setAvailableError] = useState('')
   const language = (i18n.resolvedLanguage || i18n.language || 'de').split('-')[0] === 'en' ? 'en' : 'de'
   const activeArchiveMissionId = activeArchiveMission?.id
   const activeArchiveMissionDate = activeArchiveMission?.scheduled_date
   const activeArchiveMissionType = activeArchiveMission?.type
-  const activeMission = missions.find((mission) => mission.id === activeMissionId)
+  const activeMissionId = activeMission?.id
+  const activeMissionDate = activeMission?.scheduled_date
+  const activeMissionType = activeMission?.type
   const testMission = createTestMissions(language).find((mission) => mission.id === testMissionId)
 
   const load = useCallback((showLoading = true) => {
     if (showLoading) setLoading(true)
     getDailyMissions(language).then((data) => { setMissions(data.missions || []); setCanCreate(Boolean(data.can_create)); setError('') }).catch((nextError) => setError(nextError.message)).finally(() => setLoading(false))
+  }, [language])
+  const loadAvailable = useCallback((showLoading = true) => {
+    if (showLoading) setAvailableLoading(true)
+    getAvailableMissions(language).then((data) => { setAvailableMissions(data.missions || []); setAvailableError('') }).catch((nextError) => setAvailableError(nextError.message)).finally(() => setAvailableLoading(false))
   }, [language])
   const setTab = (value) => {
     const nextTab = value || 'today'
@@ -612,6 +650,18 @@ export default function Missions({ user }) {
     return () => { active = false }
   }, [language])
   useEffect(() => {
+    let active = true
+    getAvailableMissions(language)
+      .then((data) => {
+        if (!active) return
+        setAvailableMissions(data.missions || [])
+        setAvailableError('')
+      })
+      .catch((nextError) => active && setAvailableError(nextError.message))
+      .finally(() => active && setAvailableLoading(false))
+    return () => { active = false }
+  }, [language])
+  useEffect(() => {
     if (!activeArchiveMissionId || !activeArchiveMissionDate) return undefined
     let active = true
     const params = {
@@ -629,10 +679,37 @@ export default function Missions({ user }) {
       .catch(() => {})
     return () => { active = false }
   }, [activeArchiveMissionId, activeArchiveMissionDate, activeArchiveMissionType, language])
+  useEffect(() => {
+    if (!activeMissionId || !activeMissionDate) return undefined
+    if (!activeMission?.completed) {
+      const translatedMission = [...missions, ...availableMissions].find((mission) => mission.id === activeMissionId)
+      if (translatedMission) setActiveMission(translatedMission)
+      return undefined
+    }
+    let active = true
+    const params = {
+      from: activeMissionDate,
+      to: activeMissionDate,
+      lang: language,
+    }
+    if (activeMissionType) params.type = activeMissionType
+    getArchivedMissions(params)
+      .then((data) => {
+        if (!active) return
+        const translatedMission = (data.missions || []).find((mission) => mission.id === activeMissionId)
+        if (translatedMission) setActiveMission(translatedMission)
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [activeMissionId, activeMissionDate, activeMissionType, activeMission?.completed, missions, availableMissions, language])
 
   if (testMission) return <MissionRunner mission={testMission} language={language} testMode onBack={() => setTestMissionId(null)} onCompleted={() => {}} />
   if (activeArchiveMission) return <MissionRunner mission={activeArchiveMission} language={language} readOnly showSubmit={false} onBack={() => { setActiveArchiveMission(null); setActiveTab('archive') }} backLabel={t('missions.archive.back')} />
-  if (activeMission) return <MissionRunner mission={activeMission} language={language} onBack={() => { setActiveMissionId(null); load() }} onCompleted={(completed) => setMissions((current) => current.map((mission) => mission.id === completed.id ? completed : mission))} />
+  if (activeMission) return <MissionRunner mission={activeMission} language={language} onBack={() => { setActiveMission(null); load(); loadAvailable(false) }} onCompleted={(completed) => {
+    setActiveMission(completed)
+    setMissions((current) => current.map((mission) => mission.id === completed.id ? completed : mission))
+    setAvailableMissions((current) => current.filter((mission) => mission.id !== completed.id))
+  }} />
 
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
@@ -651,12 +728,16 @@ export default function Missions({ user }) {
       <Tabs value={activeTab} onChange={setTab}>
         <Tabs.List mb="lg">
           <Tabs.Tab value="today" leftSection={<IconTargetArrow size={16} />}>{t('missions.tabs.today')}</Tabs.Tab>
+          <Tabs.Tab value="available" leftSection={<IconCalendar size={16} />}>{t('missions.tabs.available')}</Tabs.Tab>
           <Tabs.Tab value="archive" leftSection={<IconCalendar size={16} />}>{t('missions.tabs.archive')}</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="today">
-          {loading ? <Text c="dimmed">{t('missions.loading')}</Text> : error ? <Alert color="red">{error}</Alert> : missions.length === 0 ? <Paper withBorder radius="lg" p={48} bg="white"><Stack align="center"><ThemeIcon size={58} radius="xl" variant="light"><IconCalendar size={28} /></ThemeIcon><Text fw={700}>{t('missions.emptyTitle')}</Text><Text c="dimmed" ta="center">{t('missions.emptyText')}</Text></Stack></Paper> : <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">{missions.map((mission) => <MissionCard key={mission.id} mission={mission} onOpen={(selected) => setActiveMissionId(selected.id)} />)}</SimpleGrid>}
+          <MissionList missions={missions} loading={loading} error={error} emptyTitle={t('missions.todayEmptyTitle')} emptyText={t('missions.todayEmptyText')} onSelect={setActiveMission} />
           <MissionReview enabled={canCreate} onPublished={() => load(false)} />
           {user?.role === 'admin' && <MissionTestArea language={language} onSelect={(selected) => setTestMissionId(selected.id)} />}
+        </Tabs.Panel>
+        <Tabs.Panel value="available">
+          <MissionList missions={availableMissions} loading={availableLoading} error={availableError} emptyTitle={t('missions.availableEmptyTitle')} emptyText={t('missions.availableEmptyText')} onSelect={setActiveMission} />
         </Tabs.Panel>
         <Tabs.Panel value="archive">
           <ArchiveTab

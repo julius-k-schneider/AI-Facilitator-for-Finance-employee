@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -83,19 +83,45 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()['user']['role'], Profile.ROLE_ADMIN)
 
+    def completed_at_on(self, day):
+        return timezone.make_aware(datetime.combine(day, time(hour=12)))
+
     def test_daily_missions_only_include_today_and_hide_correct_answer(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         player = self.create_user('player@example.com')
-        self.create_mission(creator)
-        self.create_mission(creator, timezone.localdate() + timedelta(days=1))
+        today = timezone.localdate()
+        today_mission = self.create_mission(creator, today)
+        self.create_mission(creator, today - timedelta(days=6))
+        self.create_mission(creator, today - timedelta(days=7))
+        self.create_mission(creator, today + timedelta(days=1))
         self.client.force_login(player)
 
         response = self.client.get('/api/auth/missions/today/?lang=en', secure=True)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()['missions']), 1)
-        self.assertEqual(response.json()['missions'][0]['content']['question'], 'Correct?')
-        self.assertNotIn('correct_index', response.json()['missions'][0]['content'])
-        self.assertNotIn('micro_learning', response.json()['missions'][0]['content'])
+        missions = response.json()['missions']
+        self.assertEqual([mission['id'] for mission in missions], [today_mission.id])
+        self.assertEqual(missions[0]['content']['question'], 'Correct?')
+        self.assertNotIn('correct_index', missions[0]['content'])
+        self.assertNotIn('micro_learning', missions[0]['content'])
+
+    def test_available_missions_include_previous_six_days_but_not_today_or_expired(self):
+        creator = self.create_user('creator-available@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('player-available@example.com')
+        today = timezone.localdate()
+        self.create_mission(creator, today)
+        yesterday = self.create_mission(creator, today - timedelta(days=1))
+        available_old = self.create_mission(creator, today - timedelta(days=6))
+        completed_available = self.create_mission(creator, today - timedelta(days=2))
+        self.create_mission(creator, today - timedelta(days=7))
+        self.create_mission(creator, today + timedelta(days=1))
+        MissionAttempt.objects.create(
+            user=player, mission=completed_available, answer={'selected_indices': [0]}, score=100,
+        )
+        self.client.force_login(player)
+
+        response = self.client.get('/api/auth/missions/available/?lang=en', secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([mission['id'] for mission in response.json()['missions']], [yesterday.id, available_old.id])
 
     def test_daily_missions_exclude_review_missions(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -108,6 +134,20 @@ class AccountsApiTests(TestCase):
 
         response = self.client.get('/api/auth/missions/today/', secure=True)
         self.assertEqual([item['id'] for item in response.json()['missions']], [published.id])
+
+    def test_archive_includes_completed_missions_even_inside_availability_window(self):
+        creator = self.create_user('creator-archive@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('player-archive@example.com')
+        today = timezone.localdate()
+        available_old = self.create_mission(creator, today - timedelta(days=6))
+        expired = self.create_mission(creator, today - timedelta(days=7))
+        MissionAttempt.objects.create(user=player, mission=available_old, answer={'selected_indices': [0]}, score=100)
+        MissionAttempt.objects.create(user=player, mission=expired, answer={'selected_indices': [0]}, score=100)
+        self.client.force_login(player)
+
+        response = self.client.get('/api/auth/missions/archive/', secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([mission['id'] for mission in response.json()['missions']], [expired.id, available_old.id])
 
     def test_mission_can_only_be_completed_once_and_points_are_server_calculated(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -128,6 +168,26 @@ class AccountsApiTests(TestCase):
         self.assertEqual(first.json()['progress']['total_points'], 130)
         self.assertEqual(second.status_code, 409)
         self.assertEqual(MissionAttempt.objects.filter(user=player, mission=mission).count(), 1)
+
+    def test_available_old_mission_can_be_completed_but_expired_mission_cannot(self):
+        creator = self.create_user('creator-availability@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('player-availability@example.com')
+        today = timezone.localdate()
+        available_old = self.create_mission(creator, today - timedelta(days=6), points=70)
+        expired = self.create_mission(creator, today - timedelta(days=7), points=80)
+        self.client.force_login(player)
+
+        available_response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': available_old.id, 'answer': 0,
+        }, content_type='application/json', secure=True)
+        expired_response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': expired.id, 'answer': 0,
+        }, content_type='application/json', secure=True)
+
+        self.assertEqual(available_response.status_code, 200)
+        self.assertEqual(available_response.json()['result']['score'], 70)
+        self.assertEqual(expired_response.status_code, 404)
+        self.assertFalse(MissionAttempt.objects.filter(user=player, mission=expired).exists())
 
     def test_completed_mission_response_uses_requested_language(self):
         creator = self.create_user('creator-language@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -711,7 +771,7 @@ class AccountsApiTests(TestCase):
         entry = next(item for item in response.json()['entries'] if item['email'] == 'leader@example.com')
         self.assertEqual(entry['total_points'], 130)
 
-    def test_streak_tracks_complete_days_grace_period_and_personal_best(self):
+    def test_streak_tracks_only_missions_completed_on_scheduled_date(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         player = self.create_user('player@example.com')
         today = timezone.localdate()
@@ -720,9 +780,10 @@ class AccountsApiTests(TestCase):
             missions = [self.create_mission(creator, day), self.create_mission(creator, day)]
             if completed:
                 for mission in missions:
-                    MissionAttempt.objects.create(
+                    attempt = MissionAttempt.objects.create(
                         user=player, mission=mission, answer={'selected_indices': [0]}, score=mission.max_points,
                     )
+                    MissionAttempt.objects.filter(id=attempt.id).update(completed_at=self.completed_at_on(day))
             return missions
 
         create_day(today - timedelta(days=4), True)
@@ -748,6 +809,24 @@ class AccountsApiTests(TestCase):
         entry = next(item for item in leaderboard if item['email'] == 'player@example.com')
         self.assertEqual(entry['current_streak'], 2)
         self.assertEqual(entry['max_streak'], 2)
+
+    def test_catch_up_missions_do_not_create_streak(self):
+        creator = self.create_user('creator-catchup@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('player-catchup@example.com')
+        today = timezone.localdate()
+        old_missions = [
+            self.create_mission(creator, today - timedelta(days=1)),
+            self.create_mission(creator, today - timedelta(days=1)),
+        ]
+        for mission in old_missions:
+            MissionAttempt.objects.create(
+                user=player, mission=mission, answer={'selected_indices': [0]}, score=mission.max_points,
+            )
+        self.client.force_login(player)
+
+        progress = self.client.get('/api/auth/progress/', secure=True).json()['progress']
+        self.assertEqual(progress['current_streak'], 0)
+        self.assertEqual(progress['max_streak'], 0)
 
     def test_weekly_leaderboard_only_counts_attempts_from_current_week(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)

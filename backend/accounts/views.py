@@ -25,6 +25,12 @@ from .services.personal_agent import personal_agent_reply
 
 User = get_user_model()
 VALID_ROLES = {choice for choice, _ in Profile.ROLE_CHOICES}
+MISSION_AVAILABILITY_DAYS = 7
+
+
+def mission_availability_window(reference_date=None):
+    today = reference_date or timezone.localdate()
+    return today - timedelta(days=MISSION_AVAILABILITY_DAYS - 1), today
 
 
 def parse_json(request):
@@ -77,9 +83,15 @@ def streak_payload(user):
     ).values_list('id', 'scheduled_date'):
         missions_by_date.setdefault(scheduled_date, set()).add(mission_id)
 
-    attempted_ids = set(
-        MissionAttempt.objects.filter(user=user).values_list('mission_id', flat=True)
-    )
+    attempted_ids = {
+        mission_id
+        for mission_id, scheduled_date, completed_at in MissionAttempt.objects.filter(
+            user=user,
+            mission__status=Mission.STATUS_PUBLISHED,
+            mission__scheduled_date__lte=today,
+        ).values_list('mission_id', 'mission__scheduled_date', 'completed_at')
+        if timezone.localtime(completed_at).date() == scheduled_date
+    }
     completed_dates = {
         scheduled_date
         for scheduled_date, mission_ids in missions_by_date.items()
@@ -694,13 +706,14 @@ def complete_mission_view(request):
 
     data = parse_json(request)
     language = 'en' if data.get('language') == 'en' else 'de'
+    available_from, available_to = mission_availability_window()
     mission = Mission.objects.filter(
         id=data.get('mission_id'),
-        scheduled_date=timezone.localdate(),
+        scheduled_date__range=(available_from, available_to),
         status=Mission.STATUS_PUBLISHED,
     ).first()
     if mission is None:
-        return JsonResponse({'error': 'mission not available today'}, status=404)
+        return JsonResponse({'error': 'mission not available'}, status=404)
     if MissionAttempt.objects.filter(user=request.user, mission=mission).exists():
         return JsonResponse({'error': 'mission already completed'}, status=409)
 
@@ -803,12 +816,32 @@ def daily_missions_view(request):
 
 
 @require_http_methods(['GET'])
+def available_missions_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    language = request.GET.get('lang', 'de')
+    available_from, available_to = mission_availability_window()
+    attempted_ids = MissionAttempt.objects.filter(user=request.user).values_list('mission_id', flat=True)
+    missions = Mission.objects.filter(
+        scheduled_date__gte=available_from,
+        scheduled_date__lt=available_to,
+        status=Mission.STATUS_PUBLISHED,
+    ).exclude(id__in=attempted_ids).prefetch_related('attempts').order_by('-scheduled_date', 'created_at', 'id')
+    return JsonResponse({
+        'from': available_from.isoformat(),
+        'to': (available_to - timedelta(days=1)).isoformat(),
+        'missions': [mission_payload(mission, request.user, language) for mission in missions],
+        'can_create': can_create_missions(request.user),
+    })
+
+
+@require_http_methods(['GET'])
 def mission_archive_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'authentication required'}, status=401)
 
     language = 'en' if request.GET.get('lang') == 'en' else 'de'
-    today = timezone.localdate()
     date_from = parse_iso_date(request.GET.get('from')) if request.GET.get('from') else None
     date_to = parse_iso_date(request.GET.get('to')) if request.GET.get('to') else None
     mission_type = request.GET.get('type')
@@ -825,7 +858,6 @@ def mission_archive_view(request):
     attempted_ids = MissionAttempt.objects.filter(user=request.user).values_list('mission_id', flat=True)
     missions = Mission.objects.filter(
         id__in=attempted_ids,
-        scheduled_date__lt=today,
         status=Mission.STATUS_PUBLISHED,
     ).prefetch_related(Prefetch(
         'attempts',
@@ -835,7 +867,7 @@ def mission_archive_view(request):
     if date_from:
         missions = missions.filter(scheduled_date__gte=date_from)
     if date_to:
-        missions = missions.filter(scheduled_date__lte=min(date_to, today - timedelta(days=1)))
+        missions = missions.filter(scheduled_date__lte=date_to)
     if mission_type:
         missions = missions.filter(mission_type=mission_type)
 
