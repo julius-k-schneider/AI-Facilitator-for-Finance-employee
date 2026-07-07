@@ -77,17 +77,21 @@
     "actions": {
       "openMissions": "Mission öffnen",
       "dailyMissionsTitle": "Heutige Missionen",
-      "dailyMissionsText": "Bearbeite deine zwei täglichen Missionen und sammle Punkte für die Rangliste."
+      "dailyMissionsText": "Bearbeite die heutigen Missionen oder hole verfügbare Missionen der letzten Tage nach."
     }
   },
   "missions": {
     "badge": "DAILY MISSIONS",
     "title": "Heutige Missionen",
-    "description": "Jeden Tag warten bis zu zwei neue Aufgaben auf dich. Jede Mission kann genau einmal abgeschlossen werden.",
+    "description": "Jeden Tag warten bis zu zwei neue Aufgaben auf dich. Verpasste Missionen bleiben sieben Kalendertage verfügbar.",
     "points": "Punkte",
     "loading": "Missionen werden geladen...",
-    "emptyTitle": "Heute sind noch keine Missionen geplant",
-    "emptyText": "Sobald Missionen für heute veröffentlicht wurden, erscheinen sie hier.",
+    "emptyTitle": "Keine Missionen gefunden",
+    "emptyText": "Sobald Missionen verfügbar sind, erscheinen sie hier.",
+    "todayEmptyTitle": "Heute sind noch keine Missionen geplant",
+    "todayEmptyText": "Sobald Missionen für heute veröffentlicht wurden, erscheinen sie hier.",
+    "availableEmptyTitle": "Keine verfügbaren Missionen zum Nachholen",
+    "availableEmptyText": "Missionen aus den letzten sechs Tagen erscheinen hier, solange sie noch bearbeitet werden können.",
     "startButton": "Mission starten",
     "completedButton": "Abgeschlossen",
     "back": "Zurück zu den Missionen",
@@ -102,6 +106,7 @@
     },
     "tabs": {
       "today": "Heute",
+      "available": "Verfügbar",
       "archive": "Archiv"
     },
     "status": { "open": "Offen", "completed": "Abgeschlossen" },

@@ -77,17 +77,21 @@
     "actions": {
       "openMissions": "Open mission",
       "dailyMissionsTitle": "Today's missions",
-      "dailyMissionsText": "Complete your two daily missions and earn points for the leaderboard."
+      "dailyMissionsText": "Complete today's missions or catch up on available missions from recent days."
     }
   },
   "missions": {
     "badge": "DAILY MISSIONS",
     "title": "Today's missions",
-    "description": "Up to two new tasks await you every day. Each mission can be completed exactly once.",
+    "description": "Up to two new tasks await you every day. Missed missions stay available for seven calendar days.",
     "points": "points",
     "loading": "Loading missions...",
-    "emptyTitle": "No missions are scheduled for today",
-    "emptyText": "Missions will appear here as soon as they are published for today.",
+    "emptyTitle": "No missions found",
+    "emptyText": "Missions will appear here as soon as they are available.",
+    "todayEmptyTitle": "No missions are scheduled for today",
+    "todayEmptyText": "Missions will appear here as soon as they are published for today.",
+    "availableEmptyTitle": "No available catch-up missions",
+    "availableEmptyText": "Missions from the last six days appear here while they can still be completed.",
     "startButton": "Start mission",
     "completedButton": "Completed",
     "back": "Back to missions",
@@ -102,6 +106,7 @@
     },
     "tabs": {
       "today": "Today",
+      "available": "Available",
       "archive": "Archive"
     },
     "status": { "open": "Open", "completed": "Completed" },
