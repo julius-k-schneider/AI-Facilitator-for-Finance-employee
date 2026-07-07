@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import IntegrityError, transaction
+from django.db.models import Prefetch
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -229,8 +230,14 @@ def traffic_light_feedback(statement, language):
     return f'{prefix}: {labels[language].get(color, color)}.'
 
 
+def user_mission_attempt(mission, user):
+    if hasattr(mission, 'user_attempts'):
+        return mission.user_attempts[0] if mission.user_attempts else None
+    return mission.attempts.filter(user=user).first()
+
+
 def mission_payload(mission, user, language='de', include_content=True):
-    attempt = mission.attempts.filter(user=user).first()
+    attempt = user_mission_attempt(mission, user)
     content = mission.content or {}
     payload = {
         'id': mission.id,
@@ -270,6 +277,23 @@ def mission_payload(mission, user, language='de', include_content=True):
         micro_learning = translated(content.get('micro_learning', {}), language)
         if micro_learning:
             payload.setdefault('content', {})['micro_learning'] = micro_learning
+    return payload
+
+
+def mission_archive_payload(mission, user, language='de'):
+    payload = mission_payload(mission, user, language)
+    attempt = user_mission_attempt(mission, user)
+    if attempt is not None:
+        payload['attempt'] = {
+            'answer': attempt.answer,
+            'score': attempt.score,
+            'completed_at': attempt.completed_at.isoformat(),
+        }
+        payload['result'] = {
+            'score': attempt.score,
+            'max_points': mission.max_points,
+            'correct': attempt.score == mission.max_points,
+        }
     return payload
 
 
@@ -775,6 +799,48 @@ def daily_missions_view(request):
         'date': today.isoformat(),
         'missions': [mission_payload(mission, request.user, language) for mission in missions],
         'can_create': can_create_missions(request.user),
+    })
+
+
+@require_http_methods(['GET'])
+def mission_archive_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    language = 'en' if request.GET.get('lang') == 'en' else 'de'
+    today = timezone.localdate()
+    date_from = parse_iso_date(request.GET.get('from')) if request.GET.get('from') else None
+    date_to = parse_iso_date(request.GET.get('to')) if request.GET.get('to') else None
+    mission_type = request.GET.get('type')
+
+    if request.GET.get('from') and date_from is None:
+        return JsonResponse({'error': 'from must be a valid ISO date'}, status=400)
+    if request.GET.get('to') and date_to is None:
+        return JsonResponse({'error': 'to must be a valid ISO date'}, status=400)
+    if date_from and date_to and date_to < date_from:
+        return JsonResponse({'error': 'to must be on or after from'}, status=400)
+    if mission_type and mission_type not in {choice for choice, _ in Mission.TYPE_CHOICES}:
+        return JsonResponse({'error': 'unsupported mission type'}, status=400)
+
+    attempted_ids = MissionAttempt.objects.filter(user=request.user).values_list('mission_id', flat=True)
+    missions = Mission.objects.filter(
+        id__in=attempted_ids,
+        scheduled_date__lt=today,
+        status=Mission.STATUS_PUBLISHED,
+    ).prefetch_related(Prefetch(
+        'attempts',
+        queryset=MissionAttempt.objects.filter(user=request.user),
+        to_attr='user_attempts',
+    ))
+    if date_from:
+        missions = missions.filter(scheduled_date__gte=date_from)
+    if date_to:
+        missions = missions.filter(scheduled_date__lte=min(date_to, today - timedelta(days=1)))
+    if mission_type:
+        missions = missions.filter(mission_type=mission_type)
+
+    return JsonResponse({
+        'missions': [mission_archive_payload(mission, request.user, language) for mission in missions],
     })
 
 

@@ -100,7 +100,26 @@
       "current": "Current streak",
       "best": "Best: {{count}}"
     },
+    "tabs": {
+      "today": "Today",
+      "archive": "Archive"
+    },
     "status": { "open": "Open", "completed": "Completed" },
+    "archive": {
+      "back": "Back to archive",
+      "viewButton": "View",
+      "filterTitle": "Browse archive",
+      "filterText": "Shows only past published missions you have already completed. Viewing them does not award points.",
+      "month": "Month",
+      "typeFilter": "Mission type",
+      "typeAll": "All types",
+      "loading": "Loading archive...",
+      "emptyTitle": "No archived missions found",
+      "emptyText": "There are no past completed missions in this period.",
+      "monthResult": "Archive for {{month}}",
+      "completedTitle": "Completed at the time",
+      "score": "{{score}} of {{max}} points"
+    },
     "types": {
       "singleChoice": "Single choice",
       "multipleChoice": "Multiple choice",
