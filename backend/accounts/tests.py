@@ -86,6 +86,9 @@ class AccountsApiTests(TestCase):
     def completed_at_on(self, day):
         return timezone.make_aware(datetime.combine(day, time(hour=12)))
 
+    def local_datetime(self, day, hour=10, minute=0):
+        return timezone.make_aware(datetime.combine(day, time(hour=hour, minute=minute)))
+
     def test_daily_missions_only_include_today_and_hide_correct_answer(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         player = self.create_user('player@example.com')
@@ -104,15 +107,17 @@ class AccountsApiTests(TestCase):
         self.assertNotIn('correct_index', missions[0]['content'])
         self.assertNotIn('micro_learning', missions[0]['content'])
 
-    def test_available_missions_include_previous_six_days_but_not_today_or_expired(self):
+    @patch('accounts.views.timezone.now')
+    def test_available_missions_include_open_week_missions_but_not_today_completed_or_expired(self, now_mock):
         creator = self.create_user('creator-available@example.com', Profile.ROLE_CONTENT_CREATOR)
         player = self.create_user('player-available@example.com')
-        today = timezone.localdate()
+        today = date(2026, 7, 8)  # Wednesday
+        now_mock.return_value = self.local_datetime(today, 10)
         self.create_mission(creator, today)
         yesterday = self.create_mission(creator, today - timedelta(days=1))
-        available_old = self.create_mission(creator, today - timedelta(days=6))
+        monday = self.create_mission(creator, today - timedelta(days=2))
         completed_available = self.create_mission(creator, today - timedelta(days=2))
-        self.create_mission(creator, today - timedelta(days=7))
+        self.create_mission(creator, date(2026, 7, 5))
         self.create_mission(creator, today + timedelta(days=1))
         MissionAttempt.objects.create(
             user=player, mission=completed_available, answer={'selected_indices': [0]}, score=100,
@@ -121,7 +126,41 @@ class AccountsApiTests(TestCase):
 
         response = self.client.get('/api/auth/missions/available/?lang=en', secure=True)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([mission['id'] for mission in response.json()['missions']], [yesterday.id, available_old.id])
+        self.assertEqual([mission['id'] for mission in response.json()['missions']], [yesterday.id, monday.id])
+
+    @patch('accounts.views.timezone.now')
+    def test_previous_week_missions_remain_available_until_next_monday_noon(self, now_mock):
+        creator = self.create_user('creator-monday@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('player-monday@example.com')
+        now_mock.return_value = self.local_datetime(date(2026, 7, 13), 11, 59)
+        friday = self.create_mission(creator, date(2026, 7, 10))
+        sunday = self.create_mission(creator, date(2026, 7, 12))
+        self.create_mission(creator, date(2026, 7, 13))
+        self.client.force_login(player)
+
+        response = self.client.get('/api/auth/missions/available/?lang=en', secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([mission['id'] for mission in response.json()['missions']], [sunday.id, friday.id])
+
+    @patch('accounts.views.timezone.now')
+    def test_all_missions_from_one_week_expire_at_next_monday_noon(self, now_mock):
+        creator = self.create_user('creator-week-deadline@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.create_user('player-week-deadline@example.com')
+        now_mock.return_value = self.local_datetime(date(2026, 7, 13), 11, 59)
+        monday = self.create_mission(creator, date(2026, 7, 6))
+        thursday = self.create_mission(creator, date(2026, 7, 9))
+        sunday = self.create_mission(creator, date(2026, 7, 12))
+        self.client.force_login(player)
+
+        before_deadline = self.client.get('/api/auth/missions/available/?lang=en', secure=True)
+        self.assertEqual(
+            [mission['id'] for mission in before_deadline.json()['missions']],
+            [sunday.id, thursday.id, monday.id],
+        )
+
+        now_mock.return_value = self.local_datetime(date(2026, 7, 13), 12, 0)
+        after_deadline = self.client.get('/api/auth/missions/available/?lang=en', secure=True)
+        self.assertEqual(after_deadline.json()['missions'], [])
 
     def test_daily_missions_exclude_review_missions(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -169,25 +208,33 @@ class AccountsApiTests(TestCase):
         self.assertEqual(second.status_code, 409)
         self.assertEqual(MissionAttempt.objects.filter(user=player, mission=mission).count(), 1)
 
-    def test_available_old_mission_can_be_completed_but_expired_mission_cannot(self):
+    @patch('accounts.views.timezone.now')
+    def test_previous_week_mission_can_be_completed_before_monday_noon_but_not_after(self, now_mock):
         creator = self.create_user('creator-availability@example.com', Profile.ROLE_CONTENT_CREATOR)
         player = self.create_user('player-availability@example.com')
-        today = timezone.localdate()
-        available_old = self.create_mission(creator, today - timedelta(days=6), points=70)
-        expired = self.create_mission(creator, today - timedelta(days=7), points=80)
+        now_mock.return_value = self.local_datetime(date(2026, 7, 13), 11, 59)
+        friday = self.create_mission(creator, date(2026, 7, 10), points=70)
+        expired = self.create_mission(creator, date(2026, 7, 5), points=80)
+        deadline_mission = self.create_mission(creator, date(2026, 7, 11), points=60)
         self.client.force_login(player)
 
         available_response = self.client.post('/api/auth/progress/complete/', {
-            'mission_id': available_old.id, 'answer': 0,
+            'mission_id': friday.id, 'answer': 0,
         }, content_type='application/json', secure=True)
         expired_response = self.client.post('/api/auth/progress/complete/', {
             'mission_id': expired.id, 'answer': 0,
+        }, content_type='application/json', secure=True)
+        now_mock.return_value = self.local_datetime(date(2026, 7, 13), 12, 0)
+        deadline_response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': deadline_mission.id, 'answer': 0,
         }, content_type='application/json', secure=True)
 
         self.assertEqual(available_response.status_code, 200)
         self.assertEqual(available_response.json()['result']['score'], 70)
         self.assertEqual(expired_response.status_code, 404)
+        self.assertEqual(deadline_response.status_code, 404)
         self.assertFalse(MissionAttempt.objects.filter(user=player, mission=expired).exists())
+        self.assertFalse(MissionAttempt.objects.filter(user=player, mission=deadline_mission).exists())
 
     def test_completed_mission_response_uses_requested_language(self):
         creator = self.create_user('creator-language@example.com', Profile.ROLE_CONTENT_CREATOR)
