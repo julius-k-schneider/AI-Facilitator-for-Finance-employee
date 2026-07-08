@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Alert, Badge, Box, Button, Group, Modal, NumberInput, Paper, Select,
-  SimpleGrid, Stack, Switch, Tabs, Text, Textarea, TextInput, ThemeIcon, Title,
+  ActionIcon, Alert, Badge, Box, Button, Group, Modal, NumberInput, Paper, Select,
+  SegmentedControl, SimpleGrid, Stack, Switch, Tabs, Text, Textarea, TextInput, ThemeIcon, Title,
 } from '@mantine/core'
 import {
   IconArrowRight, IconCalendar, IconCheck, IconChevronLeft,
@@ -37,6 +37,46 @@ function monthRange(month) {
     from: isoDate(new Date(month.getFullYear(), month.getMonth(), 1)),
     to: isoDate(new Date(month.getFullYear(), month.getMonth() + 1, 0)),
   }
+}
+
+function weekRange(date) {
+  const start = mondayOf(date)
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  return { from: isoDate(start), to: isoDate(end) }
+}
+
+function archiveRange(mode, month, date) {
+  if (mode === 'day') {
+    const value = isoDate(date)
+    return { from: value, to: value }
+  }
+  if (mode === 'week') return weekRange(date)
+  return monthRange(month)
+}
+
+function addDays(date, days) {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function appLocale(language) {
+  return language === 'en' ? 'en-US' : 'de-DE'
+}
+
+function formatArchiveRange(mode, month, range, language) {
+  const locale = appLocale(language)
+  if (mode === 'month') {
+    return month.toLocaleDateString(locale, { month: 'long', year: 'numeric' })
+  }
+  const dateOptions = mode === 'day'
+    ? { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }
+    : { day: '2-digit', month: '2-digit', year: 'numeric' }
+  const from = new Date(`${range.from}T12:00:00`).toLocaleDateString(locale, dateOptions)
+  if (mode === 'day') return from
+  const to = new Date(`${range.to}T12:00:00`).toLocaleDateString(locale, dateOptions)
+  return `${from} - ${to}`
 }
 
 function mondayOf(date) {
@@ -526,15 +566,64 @@ function defaultArchiveMonth() {
   return new Date()
 }
 
+function ArchivePeriodPicker({ mode, month, setMonth, date, setDate, label, valueLabel, onMove }) {
+  const inputRef = useRef(null)
+  const inputValue = mode === 'month'
+    ? `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`
+    : isoDate(date)
+  const openPicker = () => {
+    if (inputRef.current?.showPicker) inputRef.current.showPicker()
+    else inputRef.current?.click()
+  }
+
+  return (
+    <Stack gap={5} className="archive-period-picker">
+      <Text fz="sm" fw={600}>{label}</Text>
+      <Group gap={0} wrap="nowrap" className="archive-period-control">
+        <ActionIcon variant="subtle" size={40} className="archive-period-step" aria-label="Previous period" onClick={() => onMove(-1)}>
+          <IconChevronLeft size={18} />
+        </ActionIcon>
+        <Box className="archive-period-value">
+          <Button variant="subtle" h={40} fullWidth className="archive-period-button" leftSection={<IconCalendar size={16} />} onClick={openPicker}>
+            {valueLabel}
+          </Button>
+          <input
+            ref={inputRef}
+            className="archive-period-native-input"
+            type={mode === 'month' ? 'month' : 'date'}
+            value={inputValue}
+            onChange={(event) => {
+              if (!event.target.value) return
+              if (mode === 'month') {
+                const [year, monthIndex] = event.target.value.split('-').map(Number)
+                if (year && monthIndex) setMonth(new Date(year, monthIndex - 1, 1))
+              } else {
+                setDate(new Date(`${event.target.value}T12:00:00`))
+              }
+            }}
+            tabIndex={-1}
+          />
+        </Box>
+        <ActionIcon variant="subtle" size={40} className="archive-period-step" aria-label="Next period" onClick={() => onMove(1)}>
+          <IconChevronRight size={18} />
+        </ActionIcon>
+      </Group>
+    </Stack>
+  )
+}
+
 function ArchiveTab({ language, month, setMonth, type, setType, onSelect }) {
-  const { i18n, t } = useTranslation()
+  const { t } = useTranslation()
+  const [mode, setMode] = useState('month')
+  const [date, setDate] = useState(new Date())
   const [missions, setMissions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const range = archiveRange(mode, month, date)
+  const rangeLabel = formatArchiveRange(mode, month, range, language)
 
   useEffect(() => {
     let active = true
-    const range = monthRange(month)
     const params = {
       from: range.from,
       to: range.to,
@@ -550,27 +639,47 @@ function ArchiveTab({ language, month, setMonth, type, setType, onSelect }) {
       .catch((nextError) => active && setError(nextError.message))
       .finally(() => active && setLoading(false))
     return () => { active = false }
-  }, [month, type, language])
+  }, [range.from, range.to, type, language])
+
+  const moveRange = (direction) => {
+    if (mode === 'month') {
+      setMonth(new Date(month.getFullYear(), month.getMonth() + direction, 1))
+    } else {
+      setDate((current) => addDays(current, direction * (mode === 'week' ? 7 : 1)))
+    }
+  }
 
   return <Stack gap="lg">
     <Paper withBorder radius="lg" p="lg" bg="white">
-      <Group justify="space-between" align="flex-end">
+      <Group justify="space-between" align="flex-start" gap="lg">
         <Box>
           <Text fw={700}>{t('missions.archive.filterTitle')}</Text>
           <Text fz="sm" c="dimmed">{t('missions.archive.filterText')}</Text>
         </Box>
-        <Group gap="sm">
-          <Button variant="light" px="xs" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><IconChevronLeft size={18} /></Button>
-          <TextInput
-            type="month"
-            label={t('missions.archive.month')}
-            value={`${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`}
-            onChange={(event) => {
-              const [year, monthIndex] = event.target.value.split('-').map(Number)
-              if (year && monthIndex) setMonth(new Date(year, monthIndex - 1, 1))
-            }}
+        <div className="archive-filter-grid">
+          <Stack gap={5} className="archive-mode-field">
+            <Text fz="sm" fw={600}>{t('missions.archive.viewMode')}</Text>
+            <SegmentedControl
+              value={mode}
+              className="archive-mode-control"
+              data={[
+                { value: 'month', label: t('missions.archive.modeMonth') },
+                { value: 'week', label: t('missions.archive.modeWeek') },
+                { value: 'day', label: t('missions.archive.modeDay') },
+              ]}
+              onChange={setMode}
+            />
+          </Stack>
+          <ArchivePeriodPicker
+            mode={mode}
+            month={month}
+            setMonth={setMonth}
+            date={date}
+            setDate={setDate}
+            label={mode === 'month' ? t('missions.archive.month') : mode === 'week' ? t('missions.archive.week') : t('missions.archive.day')}
+            valueLabel={rangeLabel}
+            onMove={moveRange}
           />
-          <Button variant="light" px="xs" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><IconChevronRight size={18} /></Button>
           <Select
             label={t('missions.archive.typeFilter')}
             value={type}
@@ -580,13 +689,13 @@ function ArchiveTab({ language, month, setMonth, type, setType, onSelect }) {
             ]}
             onChange={(value) => setType(value || 'all')}
           />
-        </Group>
+        </div>
       </Group>
     </Paper>
     {loading ? <Text c="dimmed">{t('missions.archive.loading')}</Text> : error ? <Alert color="red">{error}</Alert> : missions.length === 0 ? (
       <Paper withBorder radius="lg" p={48} bg="white"><Stack align="center"><ThemeIcon size={58} radius="xl" variant="light"><IconCalendar size={28} /></ThemeIcon><Text fw={700}>{t('missions.archive.emptyTitle')}</Text><Text c="dimmed" ta="center">{t('missions.archive.emptyText')}</Text></Stack></Paper>
     ) : <>
-      <Text fz="sm" c="dimmed">{t('missions.archive.monthResult', { month: month.toLocaleDateString(i18n.resolvedLanguage, { month: 'long', year: 'numeric' }) })}</Text>
+      <Text fz="sm" c="dimmed">{t('missions.archive.rangeResult', { range: rangeLabel })}</Text>
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
         {missions.map((mission) => <MissionCard key={mission.id} mission={mission} archiveMode onOpen={onSelect} />)}
       </SimpleGrid>

@@ -5,6 +5,98 @@
 .mission-calendar-count { padding: 1px 6px; border-radius: 999px; background: var(--mantine-color-brand-0); color: var(--mantine-color-brand-8); font-size: 10px; font-weight: 700; }
 .mission-calendar-count.is-full { background: var(--mantine-color-green-0); color: var(--mantine-color-green-8); }
 
+.archive-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(190px, 220px) minmax(300px, 390px) minmax(210px, 250px);
+  gap: 16px;
+  align-items: end;
+}
+
+.archive-mode-field,
+.archive-period-picker {
+  min-width: 0;
+}
+
+.archive-mode-field > .mantine-Text-root,
+.archive-period-picker > .mantine-Text-root,
+.archive-filter-grid .mantine-InputWrapper-label {
+  width: 100%;
+  text-align: center;
+}
+
+.archive-mode-control {
+  height: 40px;
+}
+
+.archive-mode-control .mantine-SegmentedControl-root {
+  height: 40px;
+}
+
+.archive-mode-control .mantine-SegmentedControl-label {
+  min-height: 32px;
+  padding-inline: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.archive-period-control {
+  height: 40px;
+  border: 1px solid var(--mantine-color-gray-4);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.archive-period-step {
+  width: 42px;
+  height: 38px;
+  color: var(--mantine-color-brand-7);
+  border-radius: 0;
+}
+
+.archive-period-step:hover {
+  background: var(--mantine-color-brand-0);
+}
+
+.archive-period-value {
+  position: relative;
+  min-width: 0;
+  width: min(300px, 42vw);
+  border-inline: 1px solid var(--mantine-color-gray-2);
+}
+
+.archive-period-button {
+  color: var(--ink);
+  font-weight: 600;
+  border-radius: 0;
+}
+
+.archive-period-button:hover {
+  background: var(--mantine-color-gray-0);
+}
+
+.archive-period-value .mantine-Button-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archive-period-native-input {
+  position: absolute;
+  inset: auto 0 0 auto;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.archive-filter-grid .mantine-Input-input,
+.archive-filter-grid .mantine-Select-input {
+  min-height: 40px;
+  border-radius: 8px;
+}
+
 .mission-manager-modal {
   max-width: calc(100vw - 48px);
   max-height: calc(100vh - 48px);
@@ -30,6 +122,15 @@
 }
 
 @media (max-width: 48em) {
+  .archive-filter-grid {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .archive-period-value {
+    width: 100%;
+  }
+
   .mission-manager-modal {
     max-width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
