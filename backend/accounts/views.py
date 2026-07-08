@@ -32,6 +32,10 @@ def mission_week_start(scheduled_date):
     return scheduled_date - timedelta(days=scheduled_date.weekday())
 
 
+def is_business_day(scheduled_date):
+    return scheduled_date.weekday() < 5
+
+
 def mission_availability_deadline(scheduled_date):
     deadline_date = mission_week_start(scheduled_date) + timedelta(days=7)
     deadline_time = time(hour=MISSION_AVAILABILITY_DEADLINE_HOUR)
@@ -40,7 +44,11 @@ def mission_availability_deadline(scheduled_date):
 
 def mission_is_available(mission, reference_time=None):
     now = timezone.localtime(reference_time or timezone.now())
-    return mission.scheduled_date <= now.date() and now < mission_availability_deadline(mission.scheduled_date)
+    return (
+        is_business_day(mission.scheduled_date)
+        and mission.scheduled_date <= now.date()
+        and now < mission_availability_deadline(mission.scheduled_date)
+    )
 
 
 def mission_availability_start(reference_time=None):
@@ -388,6 +396,8 @@ def validate_choice_mission_data(data, allow_past_date=False):
     }
     if not scheduled_date or (not allow_past_date and scheduled_date < timezone.localdate()):
         return None, 'scheduled date must be today or later'
+    if not is_business_day(scheduled_date):
+        return None, 'scheduled date must be a weekday'
     if mission_type not in allowed_types:
         return None, 'unsupported mission type'
 
@@ -820,10 +830,13 @@ def daily_missions_view(request):
 
     language = request.GET.get('lang', 'de')
     today = timezone.localdate()
-    missions = Mission.objects.filter(
-        scheduled_date=today,
-        status=Mission.STATUS_PUBLISHED,
-    ).prefetch_related('attempts')[:2]
+    if is_business_day(today):
+        missions = Mission.objects.filter(
+            scheduled_date=today,
+            status=Mission.STATUS_PUBLISHED,
+        ).prefetch_related('attempts')[:2]
+    else:
+        missions = Mission.objects.none()
     return JsonResponse({
         'date': today.isoformat(),
         'missions': [mission_payload(mission, request.user, language) for mission in missions],

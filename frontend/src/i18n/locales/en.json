@@ -202,7 +202,7 @@
       "generate": "Generate selected week",
       "selectWeek": "Select week for generation",
       "selectWeekButton": "Select week",
-      "selectWeekDescription": "Select a Monday-to-Sunday week in the calendar. Existing missions remain visible for each day.",
+      "selectWeekDescription": "Select a week through Monday to Friday in the calendar. Existing missions remain visible for each day.",
       "selectedWeek": "Selected: {{start}} to {{end}}",
       "approveAll": "Approve all",
       "rejectAll": "Reject all",
