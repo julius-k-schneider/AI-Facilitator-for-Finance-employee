@@ -87,6 +87,11 @@ function mondayOf(date) {
   return result
 }
 
+function isBusinessDay(date) {
+  const day = date.getDay()
+  return day >= 1 && day <= 5
+}
+
 function nextWeekStart() {
   const monday = mondayOf(new Date())
   monday.setDate(monday.getDate() + 7)
@@ -210,11 +215,13 @@ function Calendar({ month, setMonth, schedule, selectedDate, selectedWeekStart, 
         {cells.map((day, index) => {
           if (!day) return <div key={`empty-${index}`} />
           const value = isoDate(new Date(month.getFullYear(), month.getMonth(), day))
+          const dateValue = new Date(`${value}T12:00:00`)
+          const weekend = !isBusinessDay(dateValue)
           const count = schedule[value] || 0
-          const weekStart = isoDate(mondayOf(new Date(`${value}T12:00:00`)))
-          const selected = weekMode ? selectedWeekStart === weekStart : selectedDate === value
-          const disabled = weekMode && weekStart < currentWeekStart()
-          return <button key={value} type="button" disabled={disabled} className={`mission-calendar-day${selected ? ' is-selected' : ''}`} onClick={() => onSelect(weekMode ? weekStart : value)}>
+          const weekStart = isoDate(mondayOf(dateValue))
+          const selected = weekMode ? selectedWeekStart === weekStart && !weekend : selectedDate === value
+          const disabled = weekMode ? weekStart < currentWeekStart() || weekend : weekend
+          return <button key={value} type="button" disabled={disabled} className={`mission-calendar-day${weekend ? ' is-weekend' : ''}${selected ? ' is-selected' : ''}`} onClick={() => onSelect(weekMode ? weekStart : value)}>
             <span>{day}</span>{count > 0 && <span className={`mission-calendar-count${count >= 2 ? ' is-full' : ''}`}>{count}/2</span>}
           </button>
         })}
@@ -315,7 +322,16 @@ function Creator({ opened, onClose, onCreated }) {
         <Stack gap="md">
           {editingId && <Group justify="space-between"><Badge variant="light" color="brand">{t('missions.creator.editing')}</Badge><Button variant="subtle" size="xs" onClick={resetForm}>{t('missions.creator.cancelEdit')}</Button></Group>}
           <Select label={t('missions.creator.type')} value={form.type} data={missionTypes.map((definition) => ({ value: definition.id, label: t(`missions.types.${definition.labelKey}`) }))} onChange={setType} />
-          <TextInput type="date" label={t('missions.creator.date')} value={form.scheduled_date} min={editingId ? undefined : isoDate(new Date())} onChange={(event) => setField('scheduled_date', event.target.value)} />
+          <TextInput
+            type="date"
+            label={t('missions.creator.date')}
+            value={form.scheduled_date}
+            min={editingId ? undefined : isoDate(new Date())}
+            onChange={(event) => {
+              const value = event.target.value
+              if (!value || isBusinessDay(new Date(`${value}T12:00:00`))) setField('scheduled_date', value)
+            }}
+          />
           <SimpleGrid cols={2}><TextInput label={t('missions.creator.titleDe')} value={form.title_de} onChange={(e) => setField('title_de', e.target.value)} /><TextInput label={t('missions.creator.titleEn')} value={form.title_en} onChange={(e) => setField('title_en', e.target.value)} /></SimpleGrid>
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.descriptionDe')} value={form.description_de} onChange={(e) => setField('description_de', e.target.value)} /><Textarea label={t('missions.creator.descriptionEn')} value={form.description_en} onChange={(e) => setField('description_en', e.target.value)} /></SimpleGrid>
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.questionDe')} value={form.question_de} onChange={(e) => setField('question_de', e.target.value)} /><Textarea label={t('missions.creator.questionEn')} value={form.question_en} onChange={(e) => setField('question_en', e.target.value)} /></SimpleGrid>
@@ -447,7 +463,7 @@ function MissionReview({ enabled, onPublished }) {
       if (action === 'regenerate') await regenerateMission(mission.id)
       if (action === 'reject') await rejectMission(mission.id)
       setMessage(t(`missions.review.${action}Success`))
-      await loadReview()
+      await Promise.all([loadReview(), loadGenerationSchedule()])
       if (action === 'approve') onPublished()
     } catch (nextError) {
       setError(nextError.message)
@@ -465,7 +481,7 @@ function MissionReview({ enabled, onPublished }) {
       const data = action === 'approve' ? await approveAllReviewMissions(generationWeek) : await rejectAllReviewMissions(generationWeek)
       const count = action === 'approve' ? data.approved_count : data.rejected_count
       setMessage(t(`missions.review.${action}AllSuccess`, { count }))
-      await loadReview()
+      await Promise.all([loadReview(), loadGenerationSchedule()])
       if (action === 'approve') onPublished()
     } catch (nextError) {
       setError(nextError.message)
