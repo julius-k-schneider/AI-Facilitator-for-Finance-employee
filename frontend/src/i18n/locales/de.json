@@ -368,7 +368,43 @@
     },
     "library": {
       "title": "Bibliothek",
-      "description": "Materialien, Vorlagen und Links zum Nachschlagen"
+      "description": "Materialien, Vorlagen und Links zum Nachschlagen",
+      "sectionTitle": "AI-Ressourcen für Finance",
+      "sectionSubtitle": "Kuratierte Artikel, Leitfäden und Tools, um AI effektiv und sicher in der täglichen Arbeit einzusetzen.",
+      "readMore": "Mehr lesen",
+      "read": "Gelesen",
+      "resources": {
+        "llmBasics": {
+          "title": "Wie funktionieren LLMs?",
+          "description": "Eine verständliche Erklärung großer Sprachmodelle und warum sie Fehler machen.",
+          "category": "AI Grundlagen"
+        },
+        "prompting": {
+          "title": "Prompts für Finance-Profis",
+          "description": "Wie man effektive Prompts schreibt für Aufgaben wie Berichts-Zusammenfassungen.",
+          "category": "Prompting"
+        },
+        "useCases": {
+          "title": "AI im Rechnungswesen: Anwendungsfälle",
+          "description": "Praxisbeispiele für den Einsatz von AI beim Monatsabschluss und der Finanzplanung.",
+          "category": "Anwendungsfälle"
+        },
+        "privacy": {
+          "title": "Datenschutz & DSGVO mit AI",
+          "description": "Was Finanzangestellte wissen müssen, bevor sie Unternehmensdaten in AI-Tools eingeben.",
+          "category": "Compliance"
+        },
+        "hallucinations": {
+          "title": "Halluzinationen erkennen",
+          "description": "Praktische Checkliste zur Überprüfung von AI-generierten Zahlen und Empfehlungen.",
+          "category": "AI Grundlagen"
+        },
+        "sap": {
+          "title": "SAP & AI: Was sich ändert",
+          "description": "Überblick darüber, wie SAP AI in Finance-Workflows integriert.",
+          "category": "Tools"
+        }
+      }
     },
     "leaderboard": {
       "title": "Rangliste",
