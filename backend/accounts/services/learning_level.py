@@ -27,3 +27,10 @@ def get_learning_level(user):
         return Mission.DIFFICULTY_INTERMEDIATE
 
     return Mission.DIFFICULTY_BEGINNER
+
+
+def get_user_learning_profile(user):
+    return {
+        "role": user.profile.role,
+        "difficulty": get_learning_level(user),
+    }

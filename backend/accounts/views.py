@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -20,6 +21,7 @@ from .services.ai_mission_generator import (
 from .services.ai_chat_challenge import chat_reply, evaluate_final_answers, generate_chat_challenge
 from .services.email_notifications import send_published_mission_email, send_published_mission_emails
 from .services.personal_agent import personal_agent_reply
+from .services.learning_level import get_user_learning_profile
 
 
 User = get_user_model()
@@ -749,10 +751,19 @@ def daily_missions_view(request):
 
     language = request.GET.get('lang', 'de')
     today = timezone.localdate()
+    learning_profile = get_user_learning_profile(request.user)
+    user_role = learning_profile['role']
+    user_difficulty = learning_profile['difficulty']
+
     missions = Mission.objects.filter(
         scheduled_date=today,
         status=Mission.STATUS_PUBLISHED,
+        difficulty=user_difficulty,
+    ).filter(
+        Q(target_role=Mission.ROLE_ALL) |
+        Q(target_role=user_role)
     ).prefetch_related('attempts')[:2]
+
     return JsonResponse({
         'date': today.isoformat(),
         'missions': [mission_payload(mission, request.user, language) for mission in missions],
