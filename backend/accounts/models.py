@@ -73,6 +73,23 @@ class Mission(models.Model):
         (STATUS_PUBLISHED, 'Published'),
         (STATUS_REJECTED, 'Rejected'),
     ]
+    ROLE_ALL = 'all'
+
+    TARGET_ROLE_CHOICES = [
+        (ROLE_ALL, 'All Roles'),
+        (Profile.ROLE_ACCOUNTANT, 'Accountant'),
+        (Profile.ROLE_CONTROLLER, 'Controller'),
+    ]
+
+    DIFFICULTY_BEGINNER = 'beginner'
+    DIFFICULTY_INTERMEDIATE = 'intermediate'
+    DIFFICULTY_ADVANCED = 'advanced'
+
+    DIFFICULTY_CHOICES = [
+        (DIFFICULTY_BEGINNER, 'Beginner'),
+        (DIFFICULTY_INTERMEDIATE, 'Intermediate'),
+        (DIFFICULTY_ADVANCED, 'Advanced'),
+    ]
 
     mission_type = models.CharField(max_length=32, choices=TYPE_CHOICES)
     scheduled_date = models.DateField(db_index=True)
@@ -84,6 +101,17 @@ class Mission(models.Model):
     max_points = models.PositiveIntegerField(default=100)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PUBLISHED, db_index=True)
     generated_by_ai = models.BooleanField(default=False)
+    target_role = models.CharField(
+        max_length=32,
+        choices=TARGET_ROLE_CHOICES,
+        default=ROLE_ALL,
+    )
+
+    difficulty = models.CharField(
+        max_length=20,
+        choices=DIFFICULTY_CHOICES,
+        default=DIFFICULTY_BEGINNER,
+    )
     generation_batch_id = models.UUIDField(null=True, blank=True, db_index=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
