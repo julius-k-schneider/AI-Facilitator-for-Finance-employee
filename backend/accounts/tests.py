@@ -776,7 +776,13 @@ class AiMissionServiceTests(TestCase):
         Profile.objects.create(user=user, role=Profile.ROLE_CONTENT_CREATOR)
         return user
 
-    def valid_payload(self, target_slots):
+    def valid_payload(
+        self,
+        target_slots,
+        requested_type=None,
+        target_role='all',
+        difficulty='beginner',
+    ):
         missions = []
         for scheduled_date, count in target_slots.items():
             for index in range(count):
