@@ -22,6 +22,7 @@ from .services.ai_chat_challenge import chat_reply, evaluate_final_answers, gene
 from .services.email_notifications import send_published_mission_email, send_published_mission_emails
 from .services.personal_agent import personal_agent_reply
 from .services.learning_level import get_user_learning_profile
+from .services.recommendation_engine import get_learning_insights
 
 
 User = get_user_model()
@@ -644,6 +645,15 @@ def progress_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'authentication required'}, status=401)
     return JsonResponse({'progress': progress_payload(ensure_profile(request.user))})
+
+@require_http_methods(['GET'])
+def learning_insights_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    return JsonResponse({
+        'insights': get_learning_insights(request.user),
+    })
 
 
 @require_http_methods(['POST'])

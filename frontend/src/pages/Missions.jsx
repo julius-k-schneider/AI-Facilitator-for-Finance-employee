@@ -12,7 +12,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
 import {
-  approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, getDailyMissions,
+  approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, getDailyMissions, getLearningInsights,
   getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, updateMission,
   rejectAllReviewMissions,
 } from '../services/missionService'
@@ -54,6 +54,13 @@ function nextWeekStart() {
 
 function currentWeekStart() {
   return isoDate(mondayOf(new Date()))
+}
+
+function selectedLanguage(i18n) {
+  return (i18n.resolvedLanguage || i18n.language || 'de')
+    .split('-')[0] === 'en'
+    ? 'en'
+    : 'de'
 }
 
 function missionTypeLabel(t, type) {
@@ -153,6 +160,7 @@ function Calendar({ month, setMonth, schedule, selectedDate, selectedWeekStart, 
 
 function Creator({ opened, onClose, onCreated }) {
   const { i18n, t } = useTranslation()
+  const language = selectedLanguage(i18n)
   const [form, setForm] = useState(createEmptyForm)
   const [month, setMonth] = useState(new Date())
   const [schedule, setSchedule] = useState({})
@@ -263,8 +271,9 @@ function Creator({ opened, onClose, onCreated }) {
             {missionsForDate.map((mission) => <Paper key={mission.id} withBorder radius="md" p="sm">
               <Group justify="space-between" align="flex-start" wrap="nowrap">
                 <Box>
-                  <Text fw={700}>{mission.title_de}</Text>
-                  <Text fz="sm" c="dimmed">{mission.title_en}</Text>
+                  <Text fw={700}>
+                    {mission[`title_${language}`]}
+                  </Text>
                 </Box>
                 <Group gap={4} wrap="nowrap">
                   <Button variant="subtle" size="compact-sm" aria-label={t('missions.creator.view')} onClick={() => { setShowPreviewSolution(false); setPreview(mission) }}><IconEye size={17} /></Button>
@@ -280,18 +289,43 @@ function Creator({ opened, onClose, onCreated }) {
       <Modal opened={Boolean(preview)} onClose={() => { setPreview(null); setShowPreviewSolution(false) }} title={t('missions.creator.previewTitle')} size="lg" centered>
         {preview && <Stack gap="md">
           <Switch checked={showPreviewSolution} onChange={(event) => setShowPreviewSolution(event.currentTarget.checked)} label={t('missions.creator.showSolution')} />
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
-          {[['de', 'Deutsch'], ['en', 'English']].map(([language, label]) => <Paper key={language} withBorder radius="md" p="md">
+          <Paper withBorder radius="md" p="md">
             <Stack gap="sm">
-              <Badge variant="light">{label}</Badge>
-              <Title order={4}>{preview[`title_${language}`]}</Title>
-              <Text fz="sm" c="dimmed">{preview[`description_${language}`]}</Text>
-              <Text fw={700}>{preview[`question_${language}`]}</Text>
-              <MissionSolutionContent mission={preview} language={language} showSolution={showPreviewSolution} />
-              {showPreviewSolution && getMissionType(preview.type).hasSharedFeedback && preview[`feedback_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{preview[`feedback_${language}`]}</Text>}
-            </Stack>
-          </Paper>)}
-          </SimpleGrid>
+              <Badge variant="light">
+                {language === 'en' ? 'English' : 'Deutsch'}
+              </Badge>
+
+              <Title order={4}>
+                {preview[`title_${language}`]}
+              </Title>
+
+              <Text fz="sm" c="dimmed">
+                {preview[`description_${language}`]}
+              </Text>
+
+              <Text fw={700}>
+                {preview[`question_${language}`]}
+              </Text>
+
+              <MissionSolutionContent
+                mission={preview}
+                language={language}
+                showSolution={showPreviewSolution}
+              />
+
+              {showPreviewSolution &&
+                getMissionType(preview.type).hasSharedFeedback &&
+                preview[`feedback_${language}`] && (
+                  <Text fz="sm">
+                    <Text span fw={700}>
+                      {t('missions.review.feedback')}:{' '}
+                    </Text>
+                    {preview[`feedback_${language}`]}
+                  </Text>
+                )}
+              </Stack>
+            </Paper>  
+
           {preview.can_edit && !preview.has_attempts && <Button variant="light" leftSection={<IconEdit size={16} />} onClick={() => editMission(preview)}>{t('missions.creator.edit')}</Button>}
         </Stack>}
       </Modal>
@@ -301,6 +335,7 @@ function Creator({ opened, onClose, onCreated }) {
 
 function MissionReview({ enabled, onPublished }) {
   const { i18n, t } = useTranslation()
+  const language = selectedLanguage(i18n)
   const [missions, setMissions] = useState([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -446,20 +481,37 @@ function MissionReview({ enabled, onPublished }) {
                     <Badge color="secondary" variant="light">{missionTypeLabel(t, mission.type)}</Badge>
                     <Text fz="sm" c="dimmed">{new Date(`${mission.scheduled_date}T12:00:00`).toLocaleDateString(i18n.resolvedLanguage)}</Text>
                   </Group>
-                  <Text fw={700} fz="lg">{mission.title_de}</Text>
-                  <Text c="dimmed" fz="sm">{mission.title_en}</Text>
+                  <Text fw={700} fz="lg">
+                    {mission[`title_${language}`]}
+                  </Text>
                 </Box>
                 <Badge color="accent" variant="light">{mission.max_points} {t('missions.points')}</Badge>
               </Group>
-              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-                {[['de', 'Deutsch'], ['en', 'English']].map(([language, label]) => <Box key={language}>
-                  <Text fz="xs" fw={700} c="dimmed" tt="uppercase" mb={5}>{label}</Text>
-                  <Text fz="sm" c="dimmed" mb="xs">{mission[`description_${language}`]}</Text>
-                  <Text fw={700} fz="sm" mb="xs">{mission[`question_${language}`]}</Text>
-                  <MissionSolutionContent mission={mission} language={language} />
-                  {getMissionType(mission.type).hasSharedFeedback && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{mission[`feedback_${language}`]}</Text>}
-                </Box>)}
-              </SimpleGrid>
+              <Box>
+                <Text fz="xs" fw={700} c="dimmed" tt="uppercase" mb={5}>
+                  {language === 'en' ? 'English' : 'Deutsch'}
+                </Text>
+
+                <Text fz="sm" c="dimmed" mb="xs">
+                  {mission[`description_${language}`]}
+                </Text>
+
+                <Text fw={700} fz="sm" mb="xs">
+                  {mission[`question_${language}`]}
+                </Text>
+
+                <MissionSolutionContent mission={mission} language={language} />
+
+                {getMissionType(mission.type).hasSharedFeedback && (
+                  <Text fz="sm" mt="sm">
+                    <Text span fw={700}>
+                      {t('missions.review.feedback')}:{' '}
+                    </Text>
+                    {mission[`feedback_${language}`]}
+                  </Text>
+                )}
+              </Box>
+              
               <Group justify="flex-end">
                 <Button color="red" variant="subtle" leftSection={<IconX size={16} />} loading={activeAction === `reject-${mission.id}`} onClick={() => runAction(mission, 'reject')}>{t('missions.review.reject')}</Button>
                 <Button color="secondary" variant="light" leftSection={<IconRefresh size={16} />} loading={activeAction === `regenerate-${mission.id}`} onClick={() => runAction(mission, 'regenerate')}>{t('missions.review.regenerate')}</Button>
@@ -491,13 +543,14 @@ export default function Missions({ user }) {
   const { t, i18n } = useTranslation()
   const { progress } = useUserProgress(user)
   const [missions, setMissions] = useState([])
+  const [learningInsights, setLearningInsights] = useState(null)
   const [canCreate, setCanCreate] = useState(false)
   const [activeMissionId, setActiveMissionId] = useState(null)
   const [testMissionId, setTestMissionId] = useState(null)
   const [creatorOpen, setCreatorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const language = (i18n.resolvedLanguage || i18n.language || 'de').split('-')[0] === 'en' ? 'en' : 'de'
+  const language = selectedLanguage(i18n)
   const activeMission = missions.find((mission) => mission.id === activeMissionId)
   const testMission = createTestMissions(language).find((mission) => mission.id === testMissionId)
 
@@ -505,19 +558,34 @@ export default function Missions({ user }) {
     if (showLoading) setLoading(true)
     getDailyMissions(language).then((data) => { setMissions(data.missions || []); setCanCreate(Boolean(data.can_create)); setError('') }).catch((nextError) => setError(nextError.message)).finally(() => setLoading(false))
   }, [language])
+
   useEffect(() => {
-    let active = true
-    getDailyMissions(language)
-      .then((data) => {
-        if (!active) return
-        setMissions(data.missions || [])
-        setCanCreate(Boolean(data.can_create))
-        setError('')
-      })
-      .catch((nextError) => active && setError(nextError.message))
-      .finally(() => active && setLoading(false))
-    return () => { active = false }
-  }, [language])
+  let active = true
+
+  Promise.all([
+    getDailyMissions(language),
+    getLearningInsights(),
+  ])
+    .then(([missionsData, insightsData]) => {
+      if (!active) return
+
+
+      setMissions(missionsData.missions || [])
+      setCanCreate(Boolean(missionsData.can_create))
+      setLearningInsights(insightsData.insights || null)
+      setError('')
+    })
+    .catch((nextError) => {
+      if (active) setError(nextError.message)
+    })
+    .finally(() => {
+      if (active) setLoading(false)
+    })
+
+  return () => {
+    active = false
+  }
+}, [language])
 
   if (testMission) return <MissionRunner mission={testMission} language={language} testMode onBack={() => setTestMissionId(null)} onCompleted={() => {}} />
   if (activeMission) return <MissionRunner mission={activeMission} language={language} onBack={() => { setActiveMissionId(null); load() }} onCompleted={(completed) => setMissions((current) => current.map((mission) => mission.id === completed.id ? completed : mission))} />
@@ -536,6 +604,79 @@ export default function Missions({ user }) {
           {canCreate && <Button color="brand" leftSection={<IconPlus size={18} />} onClick={() => setCreatorOpen(true)}>{t('missions.creator.button')}</Button>}
         </Group>
       </Group>
+      {learningInsights && (
+        <Paper withBorder radius="lg" p="xl" bg="white" mb="xl">
+          <Stack gap="lg">
+            <Group justify="space-between" align="flex-start">
+              <Group align="flex-start" wrap="nowrap">
+                <ThemeIcon size={46} radius="md" variant="light" color="brand">
+                  <IconSparkles size={24} />
+                </ThemeIcon>
+
+                <Box>
+                  <Text fw={700} fz="xl">
+                    {language === 'en' ? 'Your Learning Profile' : 'Dein Lernprofil'}
+                  </Text>
+
+                  <Text c="dimmed" fz="sm">
+                    {language === 'en'
+                      ? 'Personalized insights based on your mission performance.'
+                      : 'Personalisierte Einblicke basierend auf deinen Missionsergebnissen.'}
+                  </Text>
+                </Box>
+              </Group>
+
+              <Badge variant="light" color="brand" size="lg">
+                {learningInsights.level}
+              </Badge>
+            </Group>
+
+            <SimpleGrid cols={{ base: 1, md: 3 }} spacing="lg">
+              <Box>
+                <Text fz="xs" fw={700} c="dimmed" tt="uppercase">
+                  {language === 'en' ? 'Strengths' : 'Stärken'}
+                </Text>
+
+                <Text mt={5}>
+                  {learningInsights.strengths?.length
+                    ? learningInsights.strengths.join(', ')
+                    : language === 'en'
+                      ? 'Complete more missions to identify your strengths.'
+                      : 'Absolviere weitere Missionen, um deine Stärken zu erkennen.'}
+                </Text>
+              </Box>
+
+              <Box>
+                <Text fz="xs" fw={700} c="dimmed" tt="uppercase">
+                  {language === 'en' ? 'Needs improvement' : 'Verbesserungspotenzial'}
+                </Text>
+
+                <Text mt={5}>
+                  {learningInsights.weaknesses?.length
+                    ? learningInsights.weaknesses.join(', ')
+                    : language === 'en'
+                      ? 'No improvement area identified yet.'
+                      : 'Noch kein Verbesserungsbereich erkannt.'}
+                </Text>
+              </Box>
+
+              <Box>
+                <Text fz="xs" fw={700} c="dimmed" tt="uppercase">
+                  {language === 'en' ? 'Recommended next step' : 'Empfohlener nächster Schritt'}
+                </Text>
+
+                <Text mt={5}>
+                  {learningInsights.recommended_next_step?.recommendation
+                    || (language === 'en'
+                      ? 'Complete at least three missions to unlock a personalized recommendation.'
+                      : 'Absolviere mindestens drei Missionen, um eine persönliche Empfehlung zu erhalten.')}
+                </Text>
+              </Box>
+            </SimpleGrid>
+          </Stack>
+        </Paper>
+      )}
+
       {loading ? <Text c="dimmed">{t('missions.loading')}</Text> : error ? <Alert color="red">{error}</Alert> : missions.length === 0 ? <Paper withBorder radius="lg" p={48} bg="white"><Stack align="center"><ThemeIcon size={58} radius="xl" variant="light"><IconCalendar size={28} /></ThemeIcon><Text fw={700}>{t('missions.emptyTitle')}</Text><Text c="dimmed" ta="center">{t('missions.emptyText')}</Text></Stack></Paper> : <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">{missions.map((mission) => <MissionCard key={mission.id} mission={mission} onOpen={(selected) => setActiveMissionId(selected.id)} />)}</SimpleGrid>}
       <MissionReview enabled={canCreate} onPublished={() => load(false)} />
       <Creator opened={creatorOpen} onClose={() => setCreatorOpen(false)} onCreated={load} />

@@ -19,6 +19,8 @@ async function request(path, options = {}) {
 
 export const getDailyMissions = (language) => request(`/api/auth/missions/today/?lang=${language}`)
 
+export const getLearningInsights = () => request('/api/auth/learning-insights/')
+
 export async function submitMission(missionId, answer, language) {
   const data = await request('/api/auth/progress/complete/', {
     method: 'POST',
