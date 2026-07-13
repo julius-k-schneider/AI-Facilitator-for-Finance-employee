@@ -1,11 +1,10 @@
 import json
 import os
 import uuid
-from datetime import date, timedelta
-
+from datetime import date, datetime, time, timedelta
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -27,6 +26,38 @@ from .services.recommendation_engine import get_learning_insights
 
 User = get_user_model()
 VALID_ROLES = {choice for choice, _ in Profile.ROLE_CHOICES}
+MISSION_AVAILABILITY_DEADLINE_HOUR = 12
+
+
+def mission_week_start(scheduled_date):
+    return scheduled_date - timedelta(days=scheduled_date.weekday())
+
+
+def is_business_day(scheduled_date):
+    return scheduled_date.weekday() < 5
+
+
+def mission_availability_deadline(scheduled_date):
+    deadline_date = mission_week_start(scheduled_date) + timedelta(days=7)
+    deadline_time = time(hour=MISSION_AVAILABILITY_DEADLINE_HOUR)
+    return timezone.make_aware(datetime.combine(deadline_date, deadline_time), timezone.get_current_timezone())
+
+
+def mission_is_available(mission, reference_time=None):
+    now = timezone.localtime(reference_time or timezone.now())
+    return (
+        is_business_day(mission.scheduled_date)
+        and mission.scheduled_date <= now.date()
+        and now < mission_availability_deadline(mission.scheduled_date)
+    )
+
+
+def mission_availability_start(reference_time=None):
+    now = timezone.localtime(reference_time or timezone.now())
+    current_week_start = mission_week_start(now.date())
+    if now.weekday() == 0 and now.time() < time(hour=MISSION_AVAILABILITY_DEADLINE_HOUR):
+        return current_week_start - timedelta(days=7)
+    return current_week_start
 
 
 def parse_json(request):
@@ -79,9 +110,15 @@ def streak_payload(user):
     ).values_list('id', 'scheduled_date'):
         missions_by_date.setdefault(scheduled_date, set()).add(mission_id)
 
-    attempted_ids = set(
-        MissionAttempt.objects.filter(user=user).values_list('mission_id', flat=True)
-    )
+    attempted_ids = {
+        mission_id
+        for mission_id, scheduled_date, completed_at in MissionAttempt.objects.filter(
+            user=user,
+            mission__status=Mission.STATUS_PUBLISHED,
+            mission__scheduled_date__lte=today,
+        ).values_list('mission_id', 'mission__scheduled_date', 'completed_at')
+        if timezone.localtime(completed_at).date() == scheduled_date
+    }
     completed_dates = {
         scheduled_date
         for scheduled_date, mission_ids in missions_by_date.items()
@@ -232,8 +269,14 @@ def traffic_light_feedback(statement, language):
     return f'{prefix}: {labels[language].get(color, color)}.'
 
 
+def user_mission_attempt(mission, user):
+    if hasattr(mission, 'user_attempts'):
+        return mission.user_attempts[0] if mission.user_attempts else None
+    return mission.attempts.filter(user=user).first()
+
+
 def mission_payload(mission, user, language='de', include_content=True):
-    attempt = mission.attempts.filter(user=user).first()
+    attempt = user_mission_attempt(mission, user)
     content = mission.content or {}
     payload = {
         'id': mission.id,
@@ -269,6 +312,27 @@ def mission_payload(mission, user, language='de', include_content=True):
         }
         if attempt is not None:
             payload['content']['feedback'] = translated_feedback(content, language)
+    if include_content and attempt is not None:
+        micro_learning = translated(content.get('micro_learning', {}), language)
+        if micro_learning:
+            payload.setdefault('content', {})['micro_learning'] = micro_learning
+    return payload
+
+
+def mission_archive_payload(mission, user, language='de'):
+    payload = mission_payload(mission, user, language)
+    attempt = user_mission_attempt(mission, user)
+    if attempt is not None:
+        payload['attempt'] = {
+            'answer': attempt.answer,
+            'score': attempt.score,
+            'completed_at': attempt.completed_at.isoformat(),
+        }
+        payload['result'] = {
+            'score': attempt.score,
+            'max_points': mission.max_points,
+            'correct': attempt.score == mission.max_points,
+        }
     return payload
 
 
@@ -305,6 +369,8 @@ def mission_schedule_payload(mission, user):
         'generated_by_ai': mission.generated_by_ai,
         'feedback_de': translated(content.get('feedback', {}), 'de'),
         'feedback_en': translated(content.get('feedback', {}), 'en'),
+        'micro_learning_de': translated(content.get('micro_learning', {}), 'de'),
+        'micro_learning_en': translated(content.get('micro_learning', {}), 'en'),
         'created_by': mission.created_by_id,
         'can_delete': can_create_missions(user),
         'can_edit': can_create_missions(user),
@@ -329,10 +395,19 @@ def validate_choice_mission_data(data, allow_past_date=False):
         Mission.TYPE_PROMPT_RANKING,
         Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT,
     }
-    if not scheduled_date or (not allow_past_date and scheduled_date < timezone.localdate()):
+    
+    scheduled_date = parse_iso_date(data.get('scheduled_date'))
+    mission_type = data.get('type')
+
+    if not scheduled_date:
         return None, 'scheduled date must be today or later'
-    if mission_type not in allowed_types:
-        return None, 'unsupported mission type'
+
+    if not is_business_day(scheduled_date):
+        return None, 'scheduled date must be a weekday'
+
+    if not allow_past_date and scheduled_date < timezone.localdate():
+        return None, 'scheduled date must be today or later'
+    
 
     required_text = (
         'title_de', 'title_en', 'description_de', 'description_en', 'question_de', 'question_en',
@@ -377,6 +452,10 @@ def validate_choice_mission_data(data, allow_past_date=False):
                     }
                     for statement in statements
                 ],
+                'micro_learning': {
+                    'de': str(data.get('micro_learning_de', '')).strip(),
+                    'en': str(data.get('micro_learning_en', '')).strip(),
+                },
             },
             'max_points': max_points,
         }, None
@@ -410,6 +489,10 @@ def validate_choice_mission_data(data, allow_past_date=False):
                 'feedback': {
                     'de': str(data.get('feedback_de', '')).strip(),
                     'en': str(data.get('feedback_en', '')).strip(),
+                },
+                'micro_learning': {
+                    'de': str(data.get('micro_learning_de', '')).strip(),
+                    'en': str(data.get('micro_learning_en', '')).strip(),
                 },
             },
             'max_points': max_points,
@@ -445,6 +528,10 @@ def validate_choice_mission_data(data, allow_past_date=False):
             'feedback': {
                 'de': str(data.get('feedback_de', '')).strip(),
                 'en': str(data.get('feedback_en', '')).strip(),
+            },
+            'micro_learning': {
+                'de': str(data.get('micro_learning_de', '')).strip(),
+                'en': str(data.get('micro_learning_en', '')).strip(),
             },
         },
         'max_points': max_points,
@@ -666,11 +753,10 @@ def complete_mission_view(request):
     language = 'en' if data.get('language') == 'en' else 'de'
     mission = Mission.objects.filter(
         id=data.get('mission_id'),
-        scheduled_date=timezone.localdate(),
         status=Mission.STATUS_PUBLISHED,
     ).first()
-    if mission is None:
-        return JsonResponse({'error': 'mission not available today'}, status=404)
+    if mission is None or not mission_is_available(mission):
+        return JsonResponse({'error': 'mission not available'}, status=404)
     if MissionAttempt.objects.filter(user=request.user, mission=mission).exists():
         return JsonResponse({'error': 'mission already completed'}, status=409)
 
@@ -728,7 +814,7 @@ def complete_mission_view(request):
         expected_indices = sorted(correct_indices(content))
         score = mission.max_points if selected_indices == expected_indices else 0
         stored_answer = {'selected_indices': selected_indices}
-        result_details = {}
+        result_details = {'correct_indices': expected_indices}
     try:
         attempt = MissionAttempt.objects.create(
             user=request.user,
@@ -773,11 +859,92 @@ def daily_missions_view(request):
         Q(target_role=Mission.ROLE_ALL) |
         Q(target_role=user_role)
     ).prefetch_related('attempts')[:2]
+    if is_business_day(today):
+        learning_profile = get_user_learning_profile(request.user)
+        user_role = learning_profile['role']
+        user_difficulty = learning_profile['difficulty']
 
+        missions = Mission.objects.filter(
+            scheduled_date=today,
+            status=Mission.STATUS_PUBLISHED,
+            difficulty=user_difficulty,
+        ).filter(
+            Q(target_role=Mission.ROLE_ALL) |
+            Q(target_role=user_role)
+        ).prefetch_related('attempts')[:2]
+    else:
+        missions = Mission.objects.none()    
+
+
+
+    
     return JsonResponse({
         'date': today.isoformat(),
         'missions': [mission_payload(mission, request.user, language) for mission in missions],
         'can_create': can_create_missions(request.user),
+    })
+
+
+@require_http_methods(['GET'])
+def available_missions_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    language = request.GET.get('lang', 'de')
+    today = timezone.localdate()
+    available_from = mission_availability_start()
+    attempted_ids = MissionAttempt.objects.filter(user=request.user).values_list('mission_id', flat=True)
+    candidates = Mission.objects.filter(
+        scheduled_date__gte=available_from,
+        scheduled_date__lt=today,
+        status=Mission.STATUS_PUBLISHED,
+    ).exclude(id__in=attempted_ids).prefetch_related('attempts').order_by('-scheduled_date', 'created_at', 'id')
+    missions = [mission for mission in candidates if mission_is_available(mission)]
+    return JsonResponse({
+        'from': available_from.isoformat(),
+        'to': (today - timedelta(days=1)).isoformat(),
+        'missions': [mission_payload(mission, request.user, language) for mission in missions],
+        'can_create': can_create_missions(request.user),
+    })
+
+
+@require_http_methods(['GET'])
+def mission_archive_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    language = 'en' if request.GET.get('lang') == 'en' else 'de'
+    date_from = parse_iso_date(request.GET.get('from')) if request.GET.get('from') else None
+    date_to = parse_iso_date(request.GET.get('to')) if request.GET.get('to') else None
+    mission_type = request.GET.get('type')
+
+    if request.GET.get('from') and date_from is None:
+        return JsonResponse({'error': 'from must be a valid ISO date'}, status=400)
+    if request.GET.get('to') and date_to is None:
+        return JsonResponse({'error': 'to must be a valid ISO date'}, status=400)
+    if date_from and date_to and date_to < date_from:
+        return JsonResponse({'error': 'to must be on or after from'}, status=400)
+    if mission_type and mission_type not in {choice for choice, _ in Mission.TYPE_CHOICES}:
+        return JsonResponse({'error': 'unsupported mission type'}, status=400)
+
+    attempted_ids = MissionAttempt.objects.filter(user=request.user).values_list('mission_id', flat=True)
+    missions = Mission.objects.filter(
+        id__in=attempted_ids,
+        status=Mission.STATUS_PUBLISHED,
+    ).prefetch_related(Prefetch(
+        'attempts',
+        queryset=MissionAttempt.objects.filter(user=request.user),
+        to_attr='user_attempts',
+    ))
+    if date_from:
+        missions = missions.filter(scheduled_date__gte=date_from)
+    if date_to:
+        missions = missions.filter(scheduled_date__lte=date_to)
+    if mission_type:
+        missions = missions.filter(mission_type=mission_type)
+
+    return JsonResponse({
+        'missions': [mission_archive_payload(mission, request.user, language) for mission in missions],
     })
 
 
@@ -987,6 +1154,8 @@ def generate_training_mission_view(request):
         'statements': content.get('statements', []),
         'feedback_de': translated(content.get('feedback', {}), 'de'),
         'feedback_en': translated(content.get('feedback', {}), 'en'),
+        'micro_learning_de': translated(content.get('micro_learning', {}), 'de'),
+        'micro_learning_en': translated(content.get('micro_learning', {}), 'en'),
         'test_solution': {
             'correct_indices': correct_indices(content),
             'correct_order': content.get('correct_order', []),

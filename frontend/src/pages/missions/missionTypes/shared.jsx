@@ -5,13 +5,30 @@ import { IconPlus } from '@tabler/icons-react'
 export const emptyOptions = () => [{ de: '', en: '' }, { de: '', en: '' }]
 
 export function ChoiceRunner({ mission, answer, setAnswer, result, multiple = false }) {
+  const correctIndices = result?.correct_indices || mission.test_solution?.correct_indices || []
+  const completedControlStyles = result ? {
+    root: { opacity: 1 },
+    body: { opacity: 1 },
+    label: { color: 'var(--mantine-color-text)', opacity: 1 },
+  } : undefined
+  const optionState = (index) => {
+    if (!result) return {}
+    const selected = multiple ? answer.includes(index) : answer === index
+    if (correctIndices.includes(index)) {
+      return { bg: 'green.0', style: { borderColor: 'var(--mantine-color-green-6)', borderWidth: 2 } }
+    }
+    if (selected) {
+      return { bg: 'red.0', style: { borderColor: 'var(--mantine-color-red-6)', borderWidth: 2 } }
+    }
+    return {}
+  }
   if (multiple) {
     return <Checkbox.Group value={answer.map(String)} onChange={(values) => setAnswer(values.map(Number))}>
-      <Stack gap="sm">{mission.content.options.map((option, index) => <Paper key={`${index}-${option}`} withBorder radius="md" p="md"><Checkbox value={String(index)} label={option} disabled={Boolean(result)} /></Paper>)}</Stack>
+      <Stack gap="sm">{mission.content.options.map((option, index) => <Paper key={`${index}-${option}`} withBorder radius="md" p="md" {...optionState(index)}><Checkbox value={String(index)} label={option} disabled={Boolean(result)} styles={completedControlStyles} /></Paper>)}</Stack>
     </Checkbox.Group>
   }
   return <Radio.Group value={answer === null ? '' : String(answer)} onChange={(value) => setAnswer(Number(value))}>
-    <Stack gap="sm">{mission.content.options.map((option, index) => <Paper key={`${index}-${option}`} withBorder radius="md" p="md"><Radio value={String(index)} label={option} disabled={Boolean(result)} /></Paper>)}</Stack>
+    <Stack gap="sm">{mission.content.options.map((option, index) => <Paper key={`${index}-${option}`} withBorder radius="md" p="md" {...optionState(index)}><Radio value={String(index)} label={option} disabled={Boolean(result)} styles={completedControlStyles} /></Paper>)}</Stack>
   </Radio.Group>
 }
 
@@ -36,7 +53,7 @@ export function evaluateChoiceTest(mission, answer, multiple = false) {
   const expected = [...mission.test_solution.correct_indices].sort()
   const correct = selected.length === expected.length && selected.every((value, index) => value === expected[index])
   const feedback = mission.test_solution.feedback || `${mission.content.options.filter((_, index) => expected.includes(index)).join(', ')}`
-  return { correct, score: correct ? mission.max_points : 0, max_points: mission.max_points, feedback }
+  return { correct, score: correct ? mission.max_points : 0, max_points: mission.max_points, correct_indices: expected, feedback }
 }
 
 export function choiceDefinition({ id, labelKey, multiple = false, example }) {

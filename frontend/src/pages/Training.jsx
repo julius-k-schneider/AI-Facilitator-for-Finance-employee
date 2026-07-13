@@ -43,6 +43,7 @@ function localizeMission(raw, language) {
       correct_order: raw.test_solution?.correct_order || [],
       correct_colors: raw.test_solution?.correct_colors || [],
       feedback: statementFeedback.length ? statementFeedback : feedback,
+      micro_learning: raw[`micro_learning_${language}`],
     },
   }
 }

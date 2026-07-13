@@ -64,42 +64,34 @@
     "title": "Welcome back, {{name}}.",
     "fallbackName": "colleague",
     "subtitle": "Build the AI skills of tomorrow – step by step, with real cases from your day-to-day work in finance.",
-    "ctaContinue": "Continue learning",
-    "ctaMissions": "View missions",
     "locked": {
       "title": "Daily challenges still locked",
       "text": "The daily challenges start as soon as you have completed the onboarding in Basics.",
       "cta": "Go to Basics"
     },
     "stats": {
-      "points": "Points",
-      "weeklyPoints": "Weekly points",
       "missions": "Completed missions",
       "streak": "Daily streak",
-      "rank": "Overall rank",
       "weeklyRank": "Weekly rank"
     },
     "actions": {
-      "onboardingTitle": "Complete the basics",
-      "onboardingText": "Complete onboarding to unlock missions and points.",
       "openMissions": "Open mission",
       "dailyMissionsTitle": "Today's missions",
-      "dailyMissionsText": "Complete your two daily missions and earn points for the leaderboard.",
-      "missionsCompleteTitle": "All missions completed",
-      "missionsCompleteText": "You have successfully completed all currently available missions.",
-      "libraryTitle": "Library",
-      "libraryText": "Open materials, templates and useful reference links.",
-      "openLibrary": "Open library"
+      "dailyMissionsText": "Complete today's missions or catch up on available missions from recent days."
     }
   },
   "missions": {
     "badge": "DAILY MISSIONS",
     "title": "Today's missions",
-    "description": "Up to two new tasks await you every day. Each mission can be completed exactly once.",
+    "description": "Up to two new tasks await you every day. Missed missions stay available until Monday 12:00 noon of the following week.",
     "points": "points",
     "loading": "Loading missions...",
-    "emptyTitle": "No missions are scheduled for today",
-    "emptyText": "Missions will appear here as soon as they are published for today.",
+    "emptyTitle": "No missions found",
+    "emptyText": "Missions will appear here as soon as they are available.",
+    "todayEmptyTitle": "No missions are scheduled for today",
+    "todayEmptyText": "Missions will appear here as soon as they are published for today.",
+    "availableEmptyTitle": "No available catch-up missions",
+    "availableEmptyText": "Uncompleted missions appear here until Monday 12:00 noon of the following week.",
     "startButton": "Start mission",
     "completedButton": "Completed",
     "back": "Back to missions",
@@ -112,7 +104,35 @@
       "current": "Current streak",
       "best": "Best: {{count}}"
     },
+    "tabs": {
+      "today": "Today",
+      "available": "Available",
+      "archive": "Archive"
+    },
     "status": { "open": "Open", "completed": "Completed" },
+    "archive": {
+      "back": "Back to archive",
+      "viewButton": "View",
+      "filterTitle": "Browse archive",
+      "filterText": "Shows only past published missions you have already completed. Viewing them does not award points.",
+      "month": "Month",
+      "period": "Period",
+      "week": "Week",
+      "day": "Day",
+      "modeMonth": "Month",
+      "modeWeek": "Week",
+      "modeDay": "Day",
+      "viewMode": "View",
+      "typeFilter": "Mission type",
+      "typeAll": "All types",
+      "loading": "Loading archive...",
+      "emptyTitle": "No archived missions found",
+      "emptyText": "There are no past completed missions in this period.",
+      "monthResult": "Archive for {{month}}",
+      "rangeResult": "Archive for {{range}}",
+      "completedTitle": "Completed at the time",
+      "score": "{{score}} of {{max}} points"
+    },
     "types": {
       "singleChoice": "Single choice",
       "multipleChoice": "Multiple choice",
@@ -125,9 +145,16 @@
     "result": {
       "correctPrefix": "Correct.",
       "wrongPrefix": "Incorrect.",
-      "correct": "Correct! You receive {{points}} points.",
-      "wrong": "Unfortunately, that answer was not correct. The mission is now completed.",
-      "partial": "{{correct}} of {{total}} statements were correct. You receive {{points}} points."
+      "correctTitle": "Correct",
+      "wrongTitle": "Wrong",
+      "partialTitle": "Partly correct",
+      "pointsEarned": "You receive {{points}} points.",
+      "completed": "The mission is complete.",
+      "partialSummary": "{{correct}} of {{total}} statements are correct. You receive {{points}} points.",
+      "explanationLabel": "Why?"
+    },
+    "microLearning": {
+      "title": "For similar situations"
     },
     "creator": {
       "button": "Manage missions",
@@ -145,6 +172,8 @@
       "questionEn": "Question (English)",
       "feedbackDe": "Solution feedback (German, optional)",
       "feedbackEn": "Solution feedback (English, optional)",
+      "microLearningDe": "Micro-learning explanation (German, optional)",
+      "microLearningEn": "Micro-learning explanation (English, optional)",
       "answers": "Answer options",
       "addAnswer": "Add answer",
       "correctAnswer": "Correct answer",
@@ -173,7 +202,7 @@
       "generate": "Generate selected week",
       "selectWeek": "Select week for generation",
       "selectWeekButton": "Select week",
-      "selectWeekDescription": "Select a Monday-to-Sunday week in the calendar. Existing missions remain visible for each day.",
+      "selectWeekDescription": "Select a week through Monday to Friday in the calendar. Existing missions remain visible for each day.",
       "selectedWeek": "Selected: {{start}} to {{end}}",
       "approveAll": "Approve all",
       "rejectAll": "Reject all",

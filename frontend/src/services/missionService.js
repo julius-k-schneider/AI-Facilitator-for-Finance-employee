@@ -1,6 +1,6 @@
 import { PROGRESS_EVENT } from './progressService'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -20,6 +20,13 @@ async function request(path, options = {}) {
 export const getDailyMissions = (language) => request(`/api/auth/missions/today/?lang=${language}`)
 
 export const getLearningInsights = () => request('/api/auth/learning-insights/')
+
+export const getAvailableMissions = (language) =>
+  request(`/api/auth/missions/available/?lang=${language}`)
+
+export const getArchivedMissions = (params = {}) =>
+  request(`/api/auth/missions/archive/?${new URLSearchParams(params)}`)
+
 
 export async function submitMission(missionId, answer, language) {
   const data = await request('/api/auth/progress/complete/', {

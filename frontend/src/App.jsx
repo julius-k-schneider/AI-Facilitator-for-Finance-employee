@@ -17,7 +17,7 @@ import Training from './pages/Training'
 import Profile from './pages/Profile'
 import UserManagement from './pages/UserManagement'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '', role: 'accountant' }
 
 function AccessDenied() {

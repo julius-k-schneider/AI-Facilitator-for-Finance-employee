@@ -64,42 +64,34 @@
     "title": "Willkommen zurück, {{name}}.",
     "fallbackName": "Kollege",
     "subtitle": "Baue die AI-Skills von morgen – Schritt für Schritt, mit echten Cases aus deinem Finance-Alltag.",
-    "ctaContinue": "Weiterlernen",
-    "ctaMissions": "Missionen ansehen",
     "locked": {
       "title": "Daily Challenges noch gesperrt",
       "text": "Die Daily Challenges starten, sobald du das Onboarding in den Grundlagen abgeschlossen hast.",
       "cta": "Zu den Grundlagen"
     },
     "stats": {
-      "points": "Punkte",
-      "weeklyPoints": "Wochenpunkte",
       "missions": "Abgeschlossene Missionen",
       "streak": "Tagesstreak",
-      "rank": "Gesamtrang",
       "weeklyRank": "Wochenrang"
     },
     "actions": {
-      "onboardingTitle": "Grundlagen abschließen",
-      "onboardingText": "Bearbeite das Onboarding, um Missionen und Punkte freizuschalten.",
       "openMissions": "Mission öffnen",
       "dailyMissionsTitle": "Heutige Missionen",
-      "dailyMissionsText": "Bearbeite deine zwei täglichen Missionen und sammle Punkte für die Rangliste.",
-      "missionsCompleteTitle": "Alle Missionen abgeschlossen",
-      "missionsCompleteText": "Du hast alle aktuell verfügbaren Missionen erfolgreich bearbeitet.",
-      "libraryTitle": "Bibliothek",
-      "libraryText": "Öffne Materialien, Vorlagen und Links zum Nachschlagen.",
-      "openLibrary": "Bibliothek öffnen"
+      "dailyMissionsText": "Bearbeite die heutigen Missionen oder hole verfügbare Missionen der letzten Tage nach."
     }
   },
   "missions": {
     "badge": "DAILY MISSIONS",
     "title": "Heutige Missionen",
-    "description": "Jeden Tag warten bis zu zwei neue Aufgaben auf dich. Jede Mission kann genau einmal abgeschlossen werden.",
+    "description": "Jeden Tag warten bis zu zwei neue Aufgaben auf dich. Verpasste Missionen bleiben bis Montag 12:00 Uhr der Folgewoche verfügbar.",
     "points": "Punkte",
     "loading": "Missionen werden geladen...",
-    "emptyTitle": "Heute sind noch keine Missionen geplant",
-    "emptyText": "Sobald Missionen für heute veröffentlicht wurden, erscheinen sie hier.",
+    "emptyTitle": "Keine Missionen gefunden",
+    "emptyText": "Sobald Missionen verfügbar sind, erscheinen sie hier.",
+    "todayEmptyTitle": "Heute sind noch keine Missionen geplant",
+    "todayEmptyText": "Sobald Missionen für heute veröffentlicht wurden, erscheinen sie hier.",
+    "availableEmptyTitle": "Keine verfügbaren Missionen zum Nachholen",
+    "availableEmptyText": "Noch nicht bearbeitete Missionen erscheinen hier bis Montag 12:00 Uhr der Folgewoche.",
     "startButton": "Mission starten",
     "completedButton": "Abgeschlossen",
     "back": "Zurück zu den Missionen",
@@ -112,7 +104,35 @@
       "current": "Aktuelle Serie",
       "best": "Bestwert: {{count}}"
     },
+    "tabs": {
+      "today": "Heute",
+      "available": "Verfügbar",
+      "archive": "Archiv"
+    },
     "status": { "open": "Offen", "completed": "Abgeschlossen" },
+    "archive": {
+      "back": "Zurück zum Archiv",
+      "viewButton": "Ansehen",
+      "filterTitle": "Archiv durchsuchen",
+      "filterText": "Zeigt nur vergangene veröffentlichte Missionen, die du bereits bearbeitet hast. Einsehen vergibt keine Punkte.",
+      "month": "Monat",
+      "period": "Zeitraum",
+      "week": "Woche",
+      "day": "Tag",
+      "modeMonth": "Monat",
+      "modeWeek": "Woche",
+      "modeDay": "Tag",
+      "viewMode": "Ansicht",
+      "typeFilter": "Missionsart",
+      "typeAll": "Alle Arten",
+      "loading": "Archiv wird geladen...",
+      "emptyTitle": "Keine archivierten Missionen gefunden",
+      "emptyText": "In diesem Zeitraum gibt es keine vergangenen bearbeiteten Missionen.",
+      "monthResult": "Archiv für {{month}}",
+      "rangeResult": "Archiv für {{range}}",
+      "completedTitle": "Damals abgeschlossen",
+      "score": "{{score}} von {{max}} Punkten"
+    },
     "types": {
       "singleChoice": "Single Choice",
       "multipleChoice": "Multiple Choice",
@@ -125,9 +145,16 @@
     "result": {
       "correctPrefix": "Richtig.",
       "wrongPrefix": "Falsch.",
-      "correct": "Richtig! Du erhältst {{points}} Punkte.",
-      "wrong": "Die Antwort war leider nicht richtig. Die Mission ist damit abgeschlossen.",
-      "partial": "{{correct}} von {{total}} Aussagen waren richtig. Du erhältst {{points}} Punkte."
+      "correctTitle": "Richtig",
+      "wrongTitle": "Falsch",
+      "partialTitle": "Teilweise richtig",
+      "pointsEarned": "Du erhältst {{points}} Punkte.",
+      "completed": "Die Mission ist abgeschlossen.",
+      "partialSummary": "{{correct}} von {{total}} Aussagen stimmen. Du erhältst {{points}} Punkte.",
+      "explanationLabel": "Warum?"
+    },
+    "microLearning": {
+      "title": "Für ähnliche Fälle"
     },
     "creator": {
       "button": "Missionen verwalten",
@@ -145,6 +172,8 @@
       "questionEn": "Frage (Englisch)",
       "feedbackDe": "Feedback zur Lösung (Deutsch, optional)",
       "feedbackEn": "Feedback zur Lösung (Englisch, optional)",
+      "microLearningDe": "Micro-Learning-Erklärung (Deutsch, optional)",
+      "microLearningEn": "Micro-Learning-Erklärung (Englisch, optional)",
       "answers": "Antwortmöglichkeiten",
       "addAnswer": "Antwort hinzufügen",
       "correctAnswer": "Richtige Antwort",
@@ -173,7 +202,7 @@
       "generate": "Ausgewählte Woche generieren",
       "selectWeek": "Woche für die Generierung auswählen",
       "selectWeekButton": "Wochenauswahl",
-      "selectWeekDescription": "Wähle im Kalender eine Woche von Montag bis Sonntag. Bestehende Missionen werden weiterhin pro Tag angezeigt.",
+      "selectWeekDescription": "Wähle im Kalender eine Woche über Montag bis Freitag. Bestehende Missionen werden weiterhin pro Tag angezeigt.",
       "selectedWeek": "Ausgewählt: {{start}} bis {{end}}",
       "approveAll": "Alle freigeben",
       "rejectAll": "Alle verwerfen",

@@ -13,9 +13,6 @@ import {
 } from '@mantine/core'
 import {
   IconArrowRight,
-  IconBolt,
-  IconBooks,
-  IconCalendarStats,
   IconChecklist,
   IconFlame,
   IconLock,
@@ -26,7 +23,7 @@ import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
 import { PROGRESS_EVENT, getUserId } from '../services/progressService'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 function StatCard({ label, value, icon: Icon, color }) {
   return (
@@ -42,36 +39,10 @@ function StatCard({ label, value, icon: Icon, color }) {
   )
 }
 
-function ActionCard({ icon: Icon, title, text, action, onClick, color = 'brand', disabled = false }) {
-  return (
-    <Paper withBorder radius="lg" p="xl" bg="white">
-      <Stack gap="lg" h="100%" justify="space-between">
-        <Group gap="md" wrap="nowrap" align="flex-start">
-          <ThemeIcon size={48} radius="md" variant="light" color={color}><Icon size={25} /></ThemeIcon>
-          <Box>
-            <Text fw={700} fz="lg" c="secondary.9">{title}</Text>
-            <Text fz="sm" c="dimmed" mt={4}>{text}</Text>
-          </Box>
-        </Group>
-        <Button
-          variant="light"
-          color={color}
-          rightSection={<IconArrowRight size={17} />}
-          onClick={onClick}
-          disabled={disabled}
-          w="fit-content"
-        >
-          {action}
-        </Button>
-      </Stack>
-    </Paper>
-  )
-}
-
 export default function Home({ user, navigate }) {
   const { t } = useTranslation()
   const { progress } = useUserProgress(user)
-  const [leaderboardStats, setLeaderboardStats] = useState({ totalRank: null, weeklyRank: null, weeklyPoints: 0 })
+  const [weeklyRank, setWeeklyRank] = useState(null)
   const onboardingDone = Boolean(user?.onboarding_completed)
   const currentUserId = getUserId(user)
 
@@ -82,15 +53,10 @@ export default function Home({ user, navigate }) {
         .then((response) => response.ok ? response.json() : Promise.reject())
         .then((data) => {
           if (!active) return
-          const totalEntry = (data.entries || []).find((item) => String(item.user_id) === currentUserId)
           const weeklyEntry = (data.weekly_entries || []).find((item) => String(item.user_id) === currentUserId)
-          setLeaderboardStats({
-            totalRank: totalEntry?.rank ?? null,
-            weeklyRank: weeklyEntry?.rank ?? null,
-            weeklyPoints: weeklyEntry?.total_points ?? 0,
-          })
+          setWeeklyRank(weeklyEntry?.rank ?? null)
         })
-        .catch(() => active && setLeaderboardStats({ totalRank: null, weeklyRank: null, weeklyPoints: 0 }))
+        .catch(() => active && setWeeklyRank(null))
     }
 
     loadRank()
@@ -111,49 +77,37 @@ export default function Home({ user, navigate }) {
         <Text fz="lg" c="dimmed" maw={700}>{t('home.subtitle')}</Text>
       </Stack>
 
-      {!onboardingDone && (
-        <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} mb="xl" bg="white">
-          <Group justify="space-between" align="center" wrap="wrap" gap="md">
-            <Group gap="md" wrap="nowrap" align="flex-start">
-              <ThemeIcon size={44} radius="md" variant="light" color="accent"><IconLock size={22} /></ThemeIcon>
-              <Box>
-                <Text fw={700} c="secondary.9">{t('home.locked.title')}</Text>
-                <Text fz="sm" c="dimmed" maw={520}>{t('home.locked.text')}</Text>
-              </Box>
-            </Group>
-            <Button color="brand" rightSection={<IconArrowRight size={18} />} onClick={() => navigate('basics')}>
-              {t('home.locked.cta')}
-            </Button>
+      <Paper withBorder radius="lg" p={{ base: 'xl', md: 40 }} mb="xl" bg="white">
+        <Stack gap="xl">
+          <Group gap="lg" wrap="nowrap" align="flex-start">
+            <ThemeIcon size={64} radius="md" variant="light" color={onboardingDone ? 'brand' : 'accent'}>
+              {onboardingDone ? <IconTargetArrow size={34} /> : <IconLock size={34} />}
+            </ThemeIcon>
+            <Box>
+              <Title order={2} fz={{ base: 22, md: 26 }} c="secondary.9">
+                {onboardingDone ? t('home.actions.dailyMissionsTitle') : t('home.locked.title')}
+              </Title>
+              <Text c="dimmed" mt={4} maw={640}>
+                {onboardingDone ? t('home.actions.dailyMissionsText') : t('home.locked.text')}
+              </Text>
+            </Box>
           </Group>
-        </Paper>
-      )}
+          <Button
+            size="md"
+            color={onboardingDone ? 'brand' : 'accent'}
+            rightSection={<IconArrowRight size={18} />}
+            onClick={() => navigate(onboardingDone ? 'missions' : 'basics')}
+            w="fit-content"
+          >
+            {onboardingDone ? t('home.actions.openMissions') : t('home.locked.cta')}
+          </Button>
+        </Stack>
+      </Paper>
 
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 6 }} spacing="lg" mb="xl">
-        <StatCard label={t('home.stats.points')} value={progress.totalPoints} icon={IconBolt} color="brand" />
-        <StatCard label={t('home.stats.weeklyPoints')} value={leaderboardStats.weeklyPoints} icon={IconCalendarStats} color="brand" />
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
         <StatCard label={t('home.stats.missions')} value={progress.completedMissionCount} icon={IconChecklist} color="accent" />
         <StatCard label={t('home.stats.streak')} value={progress.currentStreak} icon={IconFlame} color="orange" />
-        <StatCard label={t('home.stats.rank')} value={leaderboardStats.totalRank ? `#${leaderboardStats.totalRank}` : '-'} icon={IconTrophy} color="secondary" />
-        <StatCard label={t('home.stats.weeklyRank')} value={leaderboardStats.weeklyRank ? `#${leaderboardStats.weeklyRank}` : '-'} icon={IconTrophy} color="accent" />
-      </SimpleGrid>
-
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-        <ActionCard
-          icon={onboardingDone ? IconTargetArrow : IconLock}
-          title={onboardingDone ? t('home.actions.dailyMissionsTitle') : t('home.actions.onboardingTitle')}
-          text={onboardingDone ? t('home.actions.dailyMissionsText') : t('home.actions.onboardingText')}
-          action={onboardingDone ? t('home.actions.openMissions') : t('home.locked.cta')}
-          onClick={() => onboardingDone ? navigate('missions') : navigate('basics')}
-          color={onboardingDone ? 'brand' : 'accent'}
-        />
-        <ActionCard
-          icon={IconBooks}
-          title={t('home.actions.libraryTitle')}
-          text={t('home.actions.libraryText')}
-          action={t('home.actions.openLibrary')}
-          onClick={() => navigate('library')}
-          color="secondary"
-        />
+        <StatCard label={t('home.stats.weeklyRank')} value={weeklyRank ? `#${weeklyRank}` : '-'} icon={IconTrophy} color="secondary" />
       </SimpleGrid>
     </Box>
   )

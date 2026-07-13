@@ -16,7 +16,7 @@ import {
 import { IconLock } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 function Field({ label, value }) {
   return (
