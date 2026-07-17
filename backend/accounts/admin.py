@@ -10,13 +10,11 @@ class ProfileAdmin(admin.ModelAdmin):
     search_fields = ('user__username', 'user__email')
     readonly_fields = ('onboarding_completed_at', 'progress_updated_at')
 
-
 @admin.register(Mission)
 class MissionAdmin(admin.ModelAdmin):
-    list_display = ('title_de', 'mission_type', 'scheduled_date', 'status', 'generated_by_ai', 'max_points', 'created_by')
-    list_filter = ('status', 'generated_by_ai', 'mission_type', 'scheduled_date')
+    list_display = ('title_de', 'mission_type', 'target_role', 'difficulty', 'scheduled_date', 'status', 'generated_by_ai', 'max_points', 'created_by')
+    list_filter = ('status','generated_by_ai', 'mission_type','target_role', 'difficulty', 'scheduled_date')
     search_fields = ('title_de', 'title_en')
-
 
 @admin.register(MissionAttempt)
 class MissionAttemptAdmin(admin.ModelAdmin):

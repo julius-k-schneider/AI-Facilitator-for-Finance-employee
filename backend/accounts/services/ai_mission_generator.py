@@ -44,8 +44,8 @@ Target learner:
 - The goal is confidence and immediate benefit in daily work, not technical AI specialization.
 
 Difficulty and learning design:
-- Keep every mission beginner-friendly to lower-intermediate. A finance professional without AI training must be able
-  to solve it from the question and common workplace judgment alone.
+- Adapt every mission to the requested difficulty level. Beginner missions should build confidence, intermediate missions should
+require practical application, and advanced missions should involve more complex evaluation, risk identification, and critical judgment.
 - Create a small, actionable learning nugget that takes 3-8 minutes and feels useful rather than academic.
 - Use plain business language. Explain unavoidable AI terms in the question or feedback.
 - Test one clear learning objective at a time. Avoid trick questions, subtle semantic distinctions, and options that
@@ -91,12 +91,30 @@ def next_calendar_week(reference_date=None):
     start = today + timedelta(days=7 - today.weekday())
     return start, start + timedelta(days=6)
 
-
-def build_user_prompt(target_slots, requested_type=None):
+def build_user_prompt(target_slots, requested_type=None, target_role='all', difficulty='beginner'):
     schedule = ', '.join(f'{day.isoformat()}: {count}' for day, count in sorted(target_slots.items()))
     type_requirement = f'Every mission must use exactly the type {requested_type}.' if requested_type else ''
+    role_contexts = {
+        'all': 'The missions should be useful for both accountants and controllers in a finance organization.',
+        'accountant': 'The missions should focus on accountant tasks such as closing activities, accruals, correction bookings, reconciliations, journal entries, and safe SAP-related workflows.',
+        'controller': 'The missions should focus on controller tasks such as reporting, budget vs. actual analysis, variance analysis, forecasting, KPI interpretation, and management insights.',
+    }
+
+    difficulty_contexts = {
+        'beginner': 'Keep the missions simple, confidence-building, and suitable for employees with little or no AI experience.',
+        'intermediate': 'Use slightly more realistic finance scenarios and require applying AI usage principles, not just recognizing definitions.',
+        'advanced': 'Use more complex scenarios where the learner must evaluate prompts, question AI outputs, identify risks, and choose stronger next steps.',
+    }
+
+    role_context = role_contexts.get(target_role, role_contexts['all'])
+    difficulty_context = difficulty_contexts.get(difficulty, difficulty_contexts['beginner'])
     return f"""Create exactly the requested missions for this schedule: {schedule}.
 {type_requirement}
+Target role: {target_role}.
+{role_context}
+
+Difficulty: {difficulty}.
+{difficulty_context}
 Use 10-50 points per mission. Return this structure:
 {{"missions":[{{"date":"YYYY-MM-DD","type":"single_choice|multiple_choice|compliance_decision|prompt_selection|prompt_ranking|compliance_traffic_light",
 "title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,
@@ -123,7 +141,7 @@ scenario-specific feedback:
 "micro_learning_de":"...","micro_learning_en":"..."}}
 The five traffic-light arrays must each contain exactly three items, never more or fewer. The content object must use
 only the fields defined for its selected mission type. Do not add explanations outside the JSON object.
-Across the requested schedule, favor broadly useful beginner topics and vary the scenarios. At least half of the
+Across the requested schedule, favor broadly useful topics appropriate to the requested difficulty and vary the scenarios. At least half of the
 missions should focus on practical everyday AI usage such as prompting, checking outputs, confidentiality, or human
 review. Include prompt_ranking and compliance_traffic_light regularly when enough slots are available. Use advanced
 finance or AI terminology only when the term is explained within the mission.
@@ -154,7 +172,7 @@ def extract_json(content):
         raise AiMissionGenerationError('AI returned invalid JSON, likely due to a truncated response') from error_value
 
 
-def call_ai(target_slots, requested_type=None):
+def call_ai(target_slots, requested_type=None, target_role='all', difficulty='beginner'):
     api_key = os.environ.get('KICONNECT_API_KEY', '').strip()
     model = os.environ.get('KICONNECT_MODEL', '').strip()
     base_url = os.environ.get('KICONNECT_BASE_URL', 'https://chat.kiconnect.nrw/api/v1').rstrip('/')
@@ -166,7 +184,7 @@ def call_ai(target_slots, requested_type=None):
         'model': model,
         'messages': [
             {'role': 'system', 'content': SYSTEM_PROMPT},
-            {'role': 'user', 'content': build_user_prompt(target_slots, requested_type)},
+            {'role': 'user', 'content': build_user_prompt(target_slots, requested_type, target_role, difficulty)},
         ],
         'temperature': 0.4,
         'max_tokens': max(1000, int(os.environ.get('KICONNECT_MAX_TOKENS', DEFAULT_MAX_TOKENS))),
@@ -213,12 +231,16 @@ def call_ai(target_slots, requested_type=None):
         logger.exception('KICOnnect mission generation failed')
         raise AiMissionGenerationError('AI service is currently unavailable') from exception
 
-
-def generate_candidates(target_slots, requested_type=None):
+def generate_candidates(target_slots, requested_type=None, target_role='all', difficulty='beginner'):
     if not target_slots:
         return []
     try:
-        payload = call_ai(target_slots, requested_type) if requested_type else call_ai(target_slots)
+        payload = call_ai(
+            target_slots,
+            requested_type=requested_type,
+            target_role=target_role,
+            difficulty=difficulty,
+        )
         candidates = validate_generated_payload(payload, target_slots)
         if requested_type and any(candidate['mission_type'] != requested_type for candidate in candidates):
             raise MissionValidationError(f'AI did not return the requested type {requested_type}')
@@ -244,12 +266,13 @@ def split_target_slots(target_slots, max_missions=MAX_MISSIONS_PER_REQUEST):
     return batches
 
 
-def generate_candidate_batch(target_slots):
+def generate_candidate_batch(target_slots, target_role='all', difficulty='beginner'):
     retries = max(0, int(os.environ.get('KICONNECT_GENERATION_RETRIES', DEFAULT_GENERATION_RETRIES)))
     last_error = None
     for attempt in range(retries + 1):
         try:
-            return generate_candidates(target_slots)
+            return generate_candidates(target_slots, target_role=target_role, difficulty=difficulty,
+            )
         except AiMissionGenerationError as exception:
             last_error = exception
             if attempt < retries:
@@ -259,17 +282,29 @@ def generate_candidate_batch(target_slots):
     raise last_error
 
 
-def generate_candidates_parallel(target_slots):
+def generate_candidates_parallel(target_slots, target_role='all', difficulty='beginner'):
     batches = split_target_slots(target_slots)
     if len(batches) <= 1:
-        return generate_candidate_batch(target_slots)
+        return generate_candidate_batch(
+            target_slots,
+            target_role=target_role,
+            difficulty=difficulty,
+        )
     workers = max(1, min(
         len(batches),
         int(os.environ.get('KICONNECT_GENERATION_WORKERS', DEFAULT_GENERATION_WORKERS)),
     ))
     candidates = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {executor.submit(generate_candidate_batch, batch): batch for batch in batches}
+        futures = {
+            executor.submit(
+                generate_candidate_batch,
+                batch,
+                target_role,
+                difficulty,
+            ): batch
+            for batch in batches
+        }
         for future in as_completed(futures):
             candidates.extend(future.result())
     return sorted(candidates, key=lambda candidate: candidate['scheduled_date'])
@@ -286,7 +321,14 @@ def apply_candidate(mission, candidate):
     mission.max_points = candidate['max_points']
 
 
-def generate_next_week(created_by, force=False, reference_date=None, week_start=None):
+def generate_next_week(
+    created_by,
+    force=False,
+    reference_date=None,
+    week_start=None,
+    target_role=Mission.ROLE_ALL,
+    difficulty=Mission.DIFFICULTY_BEGINNER,
+):
     if week_start is None:
         week_start, week_end = next_calendar_week(reference_date)
     else:
@@ -300,6 +342,8 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
         occupied_missions = Mission.objects.filter(
             scheduled_date=day,
             status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
+            target_role=target_role,
+            difficulty=difficulty,
         )
         if force:
             occupied_missions = occupied_missions.exclude(status=Mission.STATUS_REVIEW, generated_by_ai=True)
@@ -307,15 +351,25 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
         if occupied < 2:
             target_slots[day] = 2 - occupied
 
-    candidates = generate_candidates_parallel(target_slots)
+    candidates = generate_candidates_parallel(
+        target_slots,
+        target_role=target_role,
+        difficulty=difficulty,
+    )
     with transaction.atomic():
-        missions = Mission.objects.select_for_update().filter(scheduled_date__range=(week_start, week_end))
+        missions = Mission.objects.select_for_update().filter(
+            scheduled_date__range=(week_start, week_end),
+            target_role=target_role,
+            difficulty=difficulty,
+        )
         if force:
             missions.filter(status=Mission.STATUS_REVIEW, generated_by_ai=True).delete()
         for day, expected_count in target_slots.items():
             occupied = Mission.objects.filter(
                 scheduled_date=day,
                 status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
+                target_role=target_role,
+                difficulty=difficulty,
             ).count()
             if occupied + expected_count > 2:
                 raise AiMissionGenerationError(
@@ -329,6 +383,8 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
                 status=Mission.STATUS_REVIEW,
                 generated_by_ai=True,
                 generation_batch_id=batch_id,
+                target_role=target_role,
+                difficulty=difficulty,
             )
             apply_candidate(mission, candidate)
             mission.save()
@@ -336,10 +392,51 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
     return created, week_start, week_end
 
 
+
+def generate_next_week_all_difficulties(
+    created_by,
+    force=False,
+    reference_date=None,
+    week_start=None,
+    target_role=Mission.ROLE_ALL,
+):
+    created_missions = []
+    resolved_week_start = None
+    resolved_week_end = None
+
+    difficulties = [
+        Mission.DIFFICULTY_BEGINNER,
+        Mission.DIFFICULTY_INTERMEDIATE,
+        Mission.DIFFICULTY_ADVANCED,
+    ]
+
+    for difficulty in difficulties:
+        missions, current_week_start, current_week_end = generate_next_week(
+            created_by=created_by,
+            force=force,
+            reference_date=reference_date,
+            week_start=week_start,
+            target_role=target_role,
+            difficulty=difficulty,
+        )
+
+        created_missions.extend(missions)
+        resolved_week_start = current_week_start
+        resolved_week_end = current_week_end
+
+    return created_missions, resolved_week_start, resolved_week_end
+
+
+
+
 def regenerate_review_mission(mission, requested_by):
     if mission.status != Mission.STATUS_REVIEW or not mission.generated_by_ai:
         raise AiMissionGenerationError('Only AI review missions can be regenerated')
-    candidate = generate_candidates({mission.scheduled_date: 1})[0]
+    candidate = generate_candidates(
+        {mission.scheduled_date: 1},
+        target_role=mission.target_role,
+        difficulty=mission.difficulty,
+    )[0]
     with transaction.atomic():
         locked = Mission.objects.select_for_update().get(id=mission.id)
         apply_candidate(locked, candidate)

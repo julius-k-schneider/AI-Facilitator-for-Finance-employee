@@ -19,9 +19,14 @@ async function request(path, options = {}) {
 
 export const getDailyMissions = (language) => request(`/api/auth/missions/today/?lang=${language}`)
 
-export const getAvailableMissions = (language) => request(`/api/auth/missions/available/?lang=${language}`)
+export const getLearningInsights = () => request('/api/auth/learning-insights/')
 
-export const getArchivedMissions = (params = {}) => request(`/api/auth/missions/archive/?${new URLSearchParams(params)}`)
+export const getAvailableMissions = (language) =>
+  request(`/api/auth/missions/available/?lang=${language}`)
+
+export const getArchivedMissions = (params = {}) =>
+  request(`/api/auth/missions/archive/?${new URLSearchParams(params)}`)
+
 
 export async function submitMission(missionId, answer, language) {
   const data = await request('/api/auth/progress/complete/', {
@@ -70,10 +75,24 @@ export const rejectAllReviewMissions = (weekStart) => request('/api/auth/mission
   body: JSON.stringify({ week_start: weekStart }),
 })
 
-export const generateNextWeekMissions = (weekStart, force = false) => request('/api/auth/missions/generate-next-week/', {
+
+export const generateNextWeekMissions = (
+  weekStart,
+  force = false,
+  targetRole = 'all',
+  difficulty = 'beginner',
+) => request('/api/auth/missions/generate-next-week/', {
   method: 'POST',
-  body: JSON.stringify({ force, week_start: weekStart }),
+  body: JSON.stringify({
+    force,
+    week_start: weekStart,
+    target_role: targetRole,
+    difficulty,
+  }),
 })
+
+
+
 
 export const approveMission = (missionId) => request(`/api/auth/missions/${missionId}/approve/`, {
   method: 'POST',

@@ -2,10 +2,9 @@ import json
 import os
 import uuid
 from datetime import date, datetime, time, timedelta
-
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -15,12 +14,14 @@ from .models import AgentChat, Mission, MissionAttempt, Profile, WeeklyLeaderboa
 from .services.ai_mission_generator import (
     AiMissionGenerationError,
     generate_training_candidate,
-    generate_next_week,
+    generate_next_week_all_difficulties,
     regenerate_review_mission,
 )
 from .services.ai_chat_challenge import chat_reply, evaluate_final_answers, generate_chat_challenge
 from .services.email_notifications import send_published_mission_email, send_published_mission_emails
 from .services.personal_agent import personal_agent_reply
+from .services.learning_level import get_user_learning_profile
+from .services.recommendation_engine import get_learning_insights
 
 
 User = get_user_model()
@@ -341,6 +342,8 @@ def mission_schedule_payload(mission, user):
         'id': mission.id,
         'type': mission.mission_type,
         'scheduled_date': mission.scheduled_date.isoformat(),
+        'target_role': mission.target_role,
+        'difficulty': mission.difficulty,
         'title_de': mission.title_de,
         'title_en': mission.title_en,
         'description_de': mission.description_de,
@@ -394,12 +397,19 @@ def validate_choice_mission_data(data, allow_past_date=False):
         Mission.TYPE_PROMPT_RANKING,
         Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT,
     }
-    if not scheduled_date or (not allow_past_date and scheduled_date < timezone.localdate()):
+    
+    scheduled_date = parse_iso_date(data.get('scheduled_date'))
+    mission_type = data.get('type')
+
+    if not scheduled_date:
         return None, 'scheduled date must be today or later'
+
     if not is_business_day(scheduled_date):
         return None, 'scheduled date must be a weekday'
-    if mission_type not in allowed_types:
-        return None, 'unsupported mission type'
+
+    if not allow_past_date and scheduled_date < timezone.localdate():
+        return None, 'scheduled date must be today or later'
+    
 
     required_text = (
         'title_de', 'title_en', 'description_de', 'description_en', 'question_de', 'question_en',
@@ -725,6 +735,15 @@ def progress_view(request):
         return JsonResponse({'error': 'authentication required'}, status=401)
     return JsonResponse({'progress': progress_payload(ensure_profile(request.user))})
 
+@require_http_methods(['GET'])
+def learning_insights_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+
+    return JsonResponse({
+        'insights': get_learning_insights(request.user),
+    })
+
 
 @require_http_methods(['POST'])
 @csrf_exempt
@@ -830,13 +849,37 @@ def daily_missions_view(request):
 
     language = request.GET.get('lang', 'de')
     today = timezone.localdate()
+    learning_profile = get_user_learning_profile(request.user)
+    user_role = learning_profile['role']
+    user_difficulty = learning_profile['difficulty']
+
+    missions = Mission.objects.filter(
+        scheduled_date=today,
+        status=Mission.STATUS_PUBLISHED,
+        difficulty=user_difficulty,
+    ).filter(
+        Q(target_role=Mission.ROLE_ALL) |
+        Q(target_role=user_role)
+    ).prefetch_related('attempts')[:2]
     if is_business_day(today):
+        learning_profile = get_user_learning_profile(request.user)
+        user_role = learning_profile['role']
+        user_difficulty = learning_profile['difficulty']
+
         missions = Mission.objects.filter(
             scheduled_date=today,
             status=Mission.STATUS_PUBLISHED,
+            difficulty=user_difficulty,
+        ).filter(
+            Q(target_role=Mission.ROLE_ALL) |
+            Q(target_role=user_role)
         ).prefetch_related('attempts')[:2]
     else:
-        missions = Mission.objects.none()
+        missions = Mission.objects.none()    
+
+
+
+    
     return JsonResponse({
         'date': today.isoformat(),
         'missions': [mission_payload(mission, request.user, language) for mission in missions],
@@ -1010,17 +1053,36 @@ def approve_all_review_missions_view(request):
             review_query
         )
         review_counts = {}
+
         for mission in review_missions:
-            review_counts[mission.scheduled_date] = review_counts.get(mission.scheduled_date, 0) + 1
-        for scheduled_date, review_count in review_counts.items():
+            key = (
+                mission.scheduled_date,
+                mission.target_role,
+                mission.difficulty,
+            )
+            review_counts[key] = review_counts.get(key, 0) + 1
+
+        for (
+            scheduled_date,
+            target_role,
+            difficulty,
+        ), review_count in review_counts.items():
             published_count = Mission.objects.filter(
                 scheduled_date=scheduled_date,
                 status=Mission.STATUS_PUBLISHED,
+                target_role=target_role,
+                difficulty=difficulty,
             ).count()
+
             if published_count + review_count > 2:
                 return JsonResponse({
-                    'error': f'{scheduled_date.isoformat()} would have more than two published missions',
+                    'error': (
+                        f'{scheduled_date.isoformat()} would have more than two '
+                        f'published missions for role {target_role} '
+                        f'and difficulty {difficulty}'
+                    ),
                 }, status=409)
+
         reviewed_at = timezone.now()
         mission_ids = [mission.id for mission in review_missions]
         Mission.objects.filter(id__in=mission_ids).update(
@@ -1063,30 +1125,58 @@ def reject_all_review_missions_view(request):
 def generate_next_week_missions_view(request):
     if not can_create_missions(request.user):
         return JsonResponse({'error': 'permission denied'}, status=403)
+
     data = parse_json(request)
     force = bool(data.get('force', False))
+    target_role = data.get('target_role', Mission.ROLE_ALL)
+
+    valid_roles = {'all', 'accountant', 'controller'}
+
+    if target_role not in valid_roles:
+        return JsonResponse({'error': 'invalid target_role'}, status=400)
+
     raw_week_start = data.get('week_start')
     week_start = parse_iso_date(raw_week_start) if raw_week_start else None
+
     if raw_week_start and week_start is None:
-        return JsonResponse({'error': 'week_start must be a valid ISO date'}, status=400)
+        return JsonResponse(
+            {'error': 'week_start must be a valid ISO date'},
+            status=400,
+        )
+
     today = timezone.localdate()
     current_week_start = today - timedelta(days=today.weekday())
-    if week_start is not None and (week_start.weekday() != 0 or week_start < current_week_start):
-        return JsonResponse({'error': 'week_start must be the current or a future Monday'}, status=400)
+
+    if week_start is not None and (
+        week_start.weekday() != 0
+        or week_start < current_week_start
+    ):
+        return JsonResponse(
+            {'error': 'week_start must be the current or a future Monday'},
+            status=400,
+        )
+
     try:
-        missions, week_start, week_end = generate_next_week(
-            request.user,
+        missions, week_start, week_end = generate_next_week_all_difficulties(
+            created_by=request.user,
             force=force,
             week_start=week_start,
+            target_role=target_role,
         )
     except AiMissionGenerationError as error_value:
         return JsonResponse({'error': str(error_value)}, status=503)
+
     return JsonResponse({
         'created_count': len(missions),
         'week_start': week_start.isoformat(),
         'week_end': week_end.isoformat(),
-        'missions': [mission_schedule_payload(mission, request.user) for mission in missions],
+        'missions': [
+            mission_schedule_payload(mission, request.user)
+            for mission in missions
+        ],
     })
+
+
 
 
 @require_http_methods(['POST'])
@@ -1328,7 +1418,10 @@ def approve_mission_view(request, mission_id):
         published_count = Mission.objects.filter(
             scheduled_date=mission.scheduled_date,
             status=Mission.STATUS_PUBLISHED,
+            target_role=mission.target_role,
+            difficulty=mission.difficulty,
         ).count()
+
         if published_count >= 2:
             return JsonResponse({'error': 'this date already has two published missions'}, status=409)
         mission.status = Mission.STATUS_PUBLISHED

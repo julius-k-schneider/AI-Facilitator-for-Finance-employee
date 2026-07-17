@@ -14,6 +14,7 @@ urlpatterns = [
     path('onboarding/progress/', views.onboarding_progress_view, name='onboarding_progress'),
     path('onboarding/complete/', views.onboarding_complete_view, name='onboarding_complete'),
     path('progress/', views.progress_view, name='progress'),
+    path('learning-insights/', views.learning_insights_view, name='learning-insights'),
     path('progress/complete/', views.complete_mission_view, name='complete_mission'),
     path('missions/today/', views.daily_missions_view, name='daily_missions'),
     path('missions/available/', views.available_missions_view, name='available_missions'),
