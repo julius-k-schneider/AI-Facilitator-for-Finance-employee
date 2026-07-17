@@ -549,61 +549,127 @@ function Creator({ opened, onClose, onCreated }) {
 function MissionReview({ enabled, onPublished }) {
   const { i18n, t } = useTranslation()
   const language = selectedLanguage(i18n)
+
   const [missions, setMissions] = useState([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [activeAction, setActiveAction] = useState('')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+
   const [weekSelectionOpen, setWeekSelectionOpen] = useState(false)
-  const [generationMonth, setGenerationMonth] = useState(() => new Date(`${nextWeekStart()}T12:00:00`))
+  const [generationMonth, setGenerationMonth] = useState(
+    () => new Date(`${nextWeekStart()}T12:00:00`),
+  )
   const [generationWeek, setGenerationWeek] = useState(nextWeekStart)
+
+  // Role used when generating new missions.
+  const [selectedRole, setSelectedRole] = useState('all')
+
+  // Role used only to filter the missions displayed in the review.
+  const [reviewRole, setReviewRole] = useState('all')
+
   const [generationSchedule, setGenerationSchedule] = useState({})
+
+  const roleOptions = [
+    {
+      value: 'all',
+      label: language === 'en' ? 'All Roles' : 'Alle Rollen',
+    },
+    {
+      value: 'accountant',
+      label: language === 'en' ? 'Accountant' : 'Buchhaltung',
+    },
+    {
+      value: 'controller',
+      label: language === 'en' ? 'Controller' : 'Controlling',
+    },
+  ]
 
   const loadGenerationSchedule = useCallback(() => {
     const range = monthRange(generationMonth)
+
     return getMissionSchedule(range.from, range.to)
-      .then((data) => setGenerationSchedule(data.dates || {}))
-      .catch(() => setGenerationSchedule({}))
+      .then((data) => {
+        setGenerationSchedule(data.dates || {})
+      })
+      .catch(() => {
+        setGenerationSchedule({})
+      })
   }, [generationMonth])
 
   useEffect(() => {
     if (!enabled) return undefined
+
     loadGenerationSchedule()
+
     return undefined
   }, [enabled, loadGenerationSchedule])
 
   const loadReview = useCallback(() => {
-    if (!enabled) return
+    if (!enabled) return undefined
+
     setLoading(true)
+
     return getReviewMissions(generationWeek)
-      .then((data) => { setMissions(data.missions || []); setError('') })
-      .catch((nextError) => setError(nextError.message))
-      .finally(() => setLoading(false))
+      .then((data) => {
+        setMissions(data.missions || [])
+        setError('')
+      })
+      .catch((nextError) => {
+        setError(nextError.message)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [enabled, generationWeek])
 
   useEffect(() => {
     if (!enabled) return undefined
+
     let active = true
+
     getReviewMissions(generationWeek)
       .then((data) => {
         if (!active) return
+
         setMissions(data.missions || [])
         setError('')
       })
-      .catch((nextError) => active && setError(nextError.message))
-      .finally(() => active && setLoading(false))
-    return () => { active = false }
+      .catch((nextError) => {
+        if (active) setError(nextError.message)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
   }, [enabled, generationWeek])
 
   const generate = async () => {
     setGenerating(true)
     setError('')
     setMessage('')
+
     try {
-      const data = await generateNextWeekMissions( generationWeek, false, selectedRole, )
-      setMessage(t('missions.review.generated', { count: data.created_count }))
-      await Promise.all([loadReview(), loadGenerationSchedule()])
+      const data = await generateNextWeekMissions(
+        generationWeek,
+        false,
+        selectedRole,
+      )
+
+      setMessage(
+        t('missions.review.generated', {
+          count: data.created_count,
+        }),
+      )
+
+      await Promise.all([
+        loadReview(),
+        loadGenerationSchedule(),
+      ])
     } catch (nextError) {
       setError(nextError.message)
     } finally {
@@ -612,17 +678,44 @@ function MissionReview({ enabled, onPublished }) {
   }
 
   const runAction = async (mission, action) => {
-    if (action === 'reject' && !window.confirm(t('missions.review.rejectConfirm', { title: mission.title_de }))) return
+    if (
+      action === 'reject'
+      && !window.confirm(
+        t('missions.review.rejectConfirm', {
+          title: mission.title_de,
+        }),
+      )
+    ) {
+      return
+    }
+
     setActiveAction(`${action}-${mission.id}`)
     setError('')
     setMessage('')
+
     try {
-      if (action === 'approve') await approveMission(mission.id)
-      if (action === 'regenerate') await regenerateMission(mission.id)
-      if (action === 'reject') await rejectMission(mission.id)
+      if (action === 'approve') {
+        await approveMission(mission.id)
+      }
+
+      if (action === 'regenerate') {
+        await regenerateMission(mission.id)
+      }
+
+      if (action === 'reject') {
+        await rejectMission(mission.id)
+      }
+
       setMessage(t(`missions.review.${action}Success`))
-      await Promise.all([loadReview(), loadGenerationSchedule()])
-      if (action === 'approve') onPublished()
+
+      await Promise.all([
+        loadReview(),
+        loadGenerationSchedule(),
+      ])
+
+      if (action === 'approve') {
+        onPublished()
+      }
     } catch (nextError) {
       setError(nextError.message)
     } finally {
@@ -631,16 +724,44 @@ function MissionReview({ enabled, onPublished }) {
   }
 
   const runBulkAction = async (action) => {
-    if (action === 'reject' && !window.confirm(t('missions.review.rejectAllConfirm', { count: missions.length }))) return
+    if (
+      action === 'reject'
+      && !window.confirm(
+        t('missions.review.rejectAllConfirm', {
+          count: missions.length,
+        }),
+      )
+    ) {
+      return
+    }
+
     setActiveAction(`${action}-all`)
     setError('')
     setMessage('')
+
     try {
-      const data = action === 'approve' ? await approveAllReviewMissions(generationWeek) : await rejectAllReviewMissions(generationWeek)
-      const count = action === 'approve' ? data.approved_count : data.rejected_count
-      setMessage(t(`missions.review.${action}AllSuccess`, { count }))
-      await Promise.all([loadReview(), loadGenerationSchedule()])
-      if (action === 'approve') onPublished()
+      const data = action === 'approve'
+        ? await approveAllReviewMissions(generationWeek)
+        : await rejectAllReviewMissions(generationWeek)
+
+      const count = action === 'approve'
+        ? data.approved_count
+        : data.rejected_count
+
+      setMessage(
+        t(`missions.review.${action}AllSuccess`, {
+          count,
+        }),
+      )
+
+      await Promise.all([
+        loadReview(),
+        loadGenerationSchedule(),
+      ])
+
+      if (action === 'approve') {
+        onPublished()
+      }
     } catch (nextError) {
       setError(nextError.message)
     } finally {
@@ -648,150 +769,476 @@ function MissionReview({ enabled, onPublished }) {
     }
   }
 
+  const difficultyOrder = {
+    beginner: 0,
+    intermediate: 1,
+    advanced: 2,
+  }
+
+  const sortedMissions = [...missions].sort((a, b) => {
+    const dateComparison = a.scheduled_date.localeCompare(
+      b.scheduled_date,
+    )
+
+    if (dateComparison !== 0) {
+      return dateComparison
+    }
+
+    const difficultyComparison =
+      (difficultyOrder[a.difficulty] ?? 99)
+      - (difficultyOrder[b.difficulty] ?? 99)
+
+    if (difficultyComparison !== 0) {
+      return difficultyComparison
+    }
+
+    return (a.target_role || '').localeCompare(
+      b.target_role || '',
+    )
+  })
+
+  const filteredMissions = sortedMissions.filter((mission) => {
+    if (reviewRole === 'all') {
+      return true
+    }
+
+    return mission.target_role === reviewRole
+  })
+
   if (!enabled) return null
+
   return (
-    <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} bg="white" mt="xl">
+    <Paper
+      withBorder
+      radius="lg"
+      p={{ base: 'lg', md: 'xl' }}
+      bg="white"
+      mt="xl"
+    >
       <Stack gap="lg">
-        <Group justify="space-between" align="flex-start">
+
+        <SimpleGrid
+          cols={{ base: 1, md: 2 }}
+          spacing="xl"
+          verticalSpacing="lg"
+        >
           <Group align="flex-start" wrap="nowrap">
-            <ThemeIcon size={44} radius="md" variant="light" color="accent"><IconSparkles size={23} /></ThemeIcon>
+            <ThemeIcon
+              size={44}
+              radius="md"
+              variant="light"
+              color="accent"
+            >
+              <IconSparkles size={23} />
+            </ThemeIcon>
+
             <Box>
-              <Title order={2} fz="xl">{t('missions.review.title')}</Title>
-              <Text c="dimmed" fz="sm" mt={3}>{t('missions.review.description')}</Text>
+              <Title order={2} fz="xl">
+                {t('missions.review.title')}
+              </Title>
+
+              <Text c="dimmed" fz="sm" mt={3}>
+                {t('missions.review.description')}
+              </Text>
             </Box>
           </Group>
-          <Stack gap="xs" align="stretch">
-            <Button color="brand" leftSection={<IconSparkles size={17} />} loading={generating} onClick={generate}>
+
+          <Stack
+            gap="xs"
+            align="stretch"
+            maw={360}
+            w="100%"
+            ml={{ base: 0, md: 'auto' }}
+          >
+            <Select
+              label={
+                language === 'en'
+                  ? 'Generate missions for'
+                  : 'Missionen generieren für'
+              }
+              value={selectedRole}
+              data={roleOptions}
+              onChange={(value) => {
+                setSelectedRole(value || 'all')
+              }}
+            />
+
+            <Button
+              color="brand"
+              leftSection={<IconSparkles size={17} />}
+              loading={generating}
+              onClick={generate}
+              fullWidth
+            >
               {t('missions.review.generate')}
             </Button>
+
             <Group gap="xs" grow>
-              <Button color="green" variant="light" leftSection={<IconCheck size={16} />} disabled={missions.length === 0} loading={activeAction === 'approve-all'} onClick={() => runBulkAction('approve')}>{t('missions.review.approveAll')}</Button>
-              <Button color="red" variant="light" leftSection={<IconX size={16} />} disabled={missions.length === 0} loading={activeAction === 'reject-all'} onClick={() => runBulkAction('reject')}>{t('missions.review.rejectAll')}</Button>
+              <Button
+                color="green"
+                variant="light"
+                leftSection={<IconCheck size={16} />}
+                disabled={missions.length === 0}
+                loading={activeAction === 'approve-all'}
+                onClick={() => runBulkAction('approve')}
+              >
+                {t('missions.review.approveAll')}
+              </Button>
+
+              <Button
+                color="red"
+                variant="light"
+                leftSection={<IconX size={16} />}
+                disabled={missions.length === 0}
+                loading={activeAction === 'reject-all'}
+                onClick={() => runBulkAction('reject')}
+              >
+                {t('missions.review.rejectAll')}
+              </Button>
             </Group>
           </Stack>
-        </Group>
-        <Group justify="space-between">
-          <Text fw={700}>{t('missions.review.selectedWeek', {
-            start: new Date(`${generationWeek}T12:00:00`).toLocaleDateString(i18n.resolvedLanguage),
-            end: new Date(new Date(`${generationWeek}T12:00:00`).getTime() + 6 * 86400000).toLocaleDateString(i18n.resolvedLanguage),
-          })}</Text>
-          <Button variant="light" leftSection={<IconCalendar size={17} />} onClick={() => setWeekSelectionOpen((current) => !current)}>{t('missions.review.selectWeekButton')}</Button>
-        </Group>
-        <Modal opened={weekSelectionOpen} onClose={() => setWeekSelectionOpen(false)} title={t('missions.review.selectWeek')} size="lg" centered>
-          <Stack gap="md"><Text c="dimmed" fz="sm">{t('missions.review.selectWeekDescription')}</Text><Calendar month={generationMonth} setMonth={setGenerationMonth} schedule={generationSchedule} selectedWeekStart={generationWeek} onSelect={(value) => { setGenerationWeek(value); setWeekSelectionOpen(false) }} weekMode /></Stack>
+        </SimpleGrid>
+        <SimpleGrid
+          cols={{ base: 1, md: 2 }}
+          spacing="lg"
+          verticalSpacing="md"
+          align="end"
+        >
+          <Text fw={700}>
+            {t('missions.review.selectedWeek', {
+              start: new Date(
+                `${generationWeek}T12:00:00`,
+              ).toLocaleDateString(
+                i18n.resolvedLanguage,
+              ),
+              end: new Date(
+                new Date(
+                  `${generationWeek}T12:00:00`,
+                ).getTime() + 6 * 86400000,
+              ).toLocaleDateString(
+                i18n.resolvedLanguage,
+              ),
+            })}
+          </Text>
+
+          <Group
+            align="flex-end"
+            justify={{ base: 'flex-start', md: 'flex-end' }}
+            wrap="wrap"
+          >
+            <Select
+              label={
+                language === 'en'
+                  ? 'Filter review by role'
+                  : 'Überprüfung nach Rolle filtern'
+              }
+              value={reviewRole}
+              data={roleOptions}
+              onChange={(value) => {
+                setReviewRole(value || 'all')
+              }}
+              w={{ base: '100%', sm: 240 }}
+            />
+
+            <Button
+              variant="light"
+              leftSection={<IconCalendar size={17} />}
+              onClick={() => {
+                setWeekSelectionOpen(
+                  (current) => !current,
+                )
+              }}
+            >
+              {t('missions.review.selectWeekButton')}
+            </Button>
+          </Group>
+        </SimpleGrid>
+
+
+        <Modal
+          opened={weekSelectionOpen}
+          onClose={() => setWeekSelectionOpen(false)}
+          title={t('missions.review.selectWeek')}
+          size="lg"
+          centered
+        >
+          <Stack gap="md">
+            <Text c="dimmed" fz="sm">
+              {t(
+                'missions.review.selectWeekDescription',
+              )}
+            </Text>
+
+            <Calendar
+              month={generationMonth}
+              setMonth={setGenerationMonth}
+              schedule={generationSchedule}
+              selectedWeekStart={generationWeek}
+              onSelect={(value) => {
+                setGenerationWeek(value)
+                setWeekSelectionOpen(false)
+              }}
+              weekMode
+            />
+          </Stack>
         </Modal>
-        {error && <Alert color="red">{error}</Alert>}
-        {message && <Alert color="green">{message}</Alert>}
-        {loading ? <Text c="dimmed">{t('missions.review.loading')}</Text> : missions.length === 0 ? (
-          <Paper withBorder radius="md" p="xl" bg="gray.0"><Text ta="center" c="dimmed">{t('missions.review.empty')}</Text></Paper>
-        ) : <Stack gap="md">
-          {missions.map((mission) => <Paper key={mission.id} withBorder radius="md" p="lg">
-            <Stack gap="md">
-              <Group justify="space-between" align="flex-start">
-                <Box>
-                  <Group gap="xs" mb={5}>
-                      <Badge color="yellow" variant="light">
+
+        {error && (
+          <Alert color="red">
+            {error}
+          </Alert>
+        )}
+
+        {message && (
+          <Alert color="green">
+            {message}
+          </Alert>
+        )}
+
+        {loading ? (
+          <Text c="dimmed">
+            {t('missions.review.loading')}
+          </Text>
+        ) : filteredMissions.length === 0 ? (
+          <Paper
+            withBorder
+            radius="md"
+            p="xl"
+            bg="gray.0"
+          >
+            <Text ta="center" c="dimmed">
+              {t('missions.review.empty')}
+            </Text>
+          </Paper>
+        ) : (
+          <Stack gap="md">
+            {filteredMissions.map((mission) => (
+              <Paper
+                key={mission.id}
+                withBorder
+                radius="md"
+                p="lg"
+              >
+                <Stack gap="md">
+                  
+                  <Group
+
+
+
+                    justify="space-between"
+                    align="flex-start"
+                  >
+                    <Box>
+                      <Group gap="xs" mb={5}>
+                        <Badge
+                          color="yellow"
+                          variant="light"
+                        >
                           {t('missions.review.status')}
-                      </Badge>
+                        </Badge>
 
-                      <Badge color="secondary" variant="light">
-                          {missionTypeLabel(t, mission.type)}
-                      </Badge>
+                        <Badge
+                          color="secondary"
+                          variant="light"
+                        >
+                          {missionTypeLabel(
+                            t,
+                            mission.type,
+                          )}
+                        </Badge>
 
-                      <Badge
+                        <Badge
                           color={
-                              mission.difficulty === 'beginner'
-                                  ? 'green'
-                                  : mission.difficulty === 'intermediate'
-                                  ? 'yellow'
-                                  : 'red'
+                            mission.difficulty === 'beginner'
+                              ? 'green'
+                              : mission.difficulty === 'intermediate'
+                                ? 'yellow'
+                                : 'red'
                           }
                           variant="light"
-                      >
+                        >
                           {mission.difficulty}
-                      </Badge>
+                        </Badge>
 
-                      <Badge color="blue" variant="light">
+                        <Badge
+                          color="blue"
+                          variant="light"
+                        >
                           {mission.target_role === 'all'
+                            ? language === 'en'
                               ? 'All Roles'
-                              : mission.target_role}
-                      </Badge>
+                              : 'Alle Rollen'
+                            : mission.target_role}
+                        </Badge>
 
-                    <Text fz="sm" c="dimmed">{new Date(`${mission.scheduled_date}T12:00:00`).toLocaleDateString(i18n.resolvedLanguage)}</Text>
-                  </Group>
-                  <Text fw={700} fz="lg">
-                    {mission[`title_${language}`]}
-                  </Text>
-                </Box>
-                <Badge color="accent" variant="light">{mission.max_points} {t('missions.points')}</Badge>
-              </Group>
-              <Box>
-                <Text fz="xs" fw={700} c="dimmed" tt="uppercase" mb={5}>
-                  {language === 'en' ? 'English' : 'Deutsch'}
-                </Text>
+                        <Text
+                          fz="sm"
+                          c="dimmed"
+                        >
+                          {new Date(
+                            `${mission.scheduled_date}T12:00:00`,
+                          ).toLocaleDateString(
+                            i18n.resolvedLanguage,
+                          )}
+                        </Text>
+                      </Group>
 
-                <Text fz="sm" c="dimmed" mb="xs">
-                  {mission[`description_${language}`]}
-                </Text>
-
-                <Text fw={700} fz="sm" mb="xs">
-                  {mission[`question_${language}`]}
-                </Text>
-
-                <MissionSolutionContent mission={mission} language={language} />
-
-                {getMissionType(mission.type).hasSharedFeedback &&
-                  mission[`feedback_${language}`] && (
-                    <Text fz="sm" mt="sm">
-                      <Text span fw={700}>
-                        {t('missions.review.feedback')}:{" "}
+                      <Text fw={700} fz="lg">
+                        {mission[`title_${language}`]}
                       </Text>
-                      {mission[`feedback_${language}`]}
+                    </Box>
+
+                    <Badge
+                      color="accent"
+                      variant="light"
+                    >
+                      {mission.max_points}{' '}
+                      {t('missions.points')}
+                    </Badge>
+                  </Group>
+
+                  <Box>
+                    <Text
+                      fz="xs"
+                      fw={700}
+                      c="dimmed"
+                      tt="uppercase"
+                      mb={5}
+                    >
+                      {language === 'en'
+                        ? 'English'
+                        : 'Deutsch'}
                     </Text>
-                  )}
 
-                {mission[`micro_learning_${language}`] && (
-                  <Text fz="sm" mt="sm">
-                    <Text span fw={700}>
-                      {t('missions.microLearning.title')}:{" "}
+                    <Text
+                      fz="sm"
+                      c="dimmed"
+                      mb="xs"
+                    >
+                      {
+                        mission[
+                          `description_${language}`
+                        ]
+                      }
                     </Text>
-                    {mission[`micro_learning_${language}`]}
-                  </Text>
-                )}
-              </Box>
-              <Group justify="flex-end">
-                <Button
-                  color="red"
-                  variant="subtle"
-                  leftSection={<IconX size={16} />}
-                  loading={activeAction === `reject-${mission.id}`}
-                  onClick={() => runAction(mission, 'reject')}
-                >
-                  {t('missions.review.reject')}
-                </Button>
 
-                <Button
-                  color="secondary"
-                  variant="light"
-                  leftSection={<IconRefresh size={16} />}
-                  loading={activeAction === `regenerate-${mission.id}`}
-                  onClick={() => runAction(mission, 'regenerate')}
-                >
-                  {t('missions.review.regenerate')}
-                </Button>
+                    <Text
+                      fw={700}
+                      fz="sm"
+                      mb="xs"
+                    >
+                      {
+                        mission[
+                          `question_${language}`
+                        ]
+                      }
+                    </Text>
 
-                <Button
-                  color="green"
-                  leftSection={<IconCheck size={16} />}
-                  loading={activeAction === `approve-${mission.id}`}
-                  onClick={() => runAction(mission, 'approve')}
-                >
-                  {t('missions.review.approve')}
-                </Button>
-              </Group>
-            </Stack>
-          </Paper>)}
-        </Stack>}
+                    <MissionSolutionContent
+                      mission={mission}
+                      language={language}
+                    />
+
+                    {getMissionType(mission.type)
+                      .hasSharedFeedback
+                      && mission[
+                        `feedback_${language}`
+                      ] && (
+                        <Text fz="sm" mt="sm">
+                          <Text span fw={700}>
+                            {t(
+                              'missions.review.feedback',
+                            )}
+                            :{' '}
+                          </Text>
+
+                          {
+                            mission[
+                              `feedback_${language}`
+                            ]
+                          }
+                        </Text>
+                      )}
+
+                    {mission[
+                      `micro_learning_${language}`
+                    ] && (
+                      <Text fz="sm" mt="sm">
+                        <Text span fw={700}>
+                          {t(
+                            'missions.microLearning.title',
+                          )}
+                          :{' '}
+                        </Text>
+
+                        {
+                          mission[
+                            `micro_learning_${language}`
+                          ]
+                        }
+                      </Text>
+                    )}
+                  </Box>
+
+                  <Group justify="flex-end">
+                    <Button
+                      color="red"
+                      variant="subtle"
+                      leftSection={<IconX size={16} />}
+                      loading={
+                        activeAction
+                        === `reject-${mission.id}`
+                      }
+                      onClick={() => {
+                        runAction(mission, 'reject')
+                      }}
+                    >
+                      {t('missions.review.reject')}
+                    </Button>
+
+                    <Button
+                      color="secondary"
+                      variant="light"
+                      leftSection={
+                        <IconRefresh size={16} />
+                      }
+                      loading={
+                        activeAction
+                        === `regenerate-${mission.id}`
+                      }
+                      onClick={() => {
+                        runAction(
+                          mission,
+                          'regenerate',
+                        )
+                      }}
+                    >
+                      {t(
+                        'missions.review.regenerate',
+                      )}
+                    </Button>
+
+                    <Button
+                      color="green"
+                      leftSection={
+                        <IconCheck size={16} />
+                      }
+                      loading={
+                        activeAction
+                        === `approve-${mission.id}`
+                      }
+                      onClick={() => {
+                        runAction(mission, 'approve')
+                      }}
+                    >
+                      {t('missions.review.approve')}
+                    </Button>
+                  </Group>
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
+        )}
       </Stack>
     </Paper>
   )

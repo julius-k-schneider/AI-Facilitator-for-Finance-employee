@@ -1130,7 +1130,7 @@ def generate_next_week_missions_view(request):
     force = bool(data.get('force', False))
     target_role = data.get('target_role', Mission.ROLE_ALL)
 
-    valid_roles = {value for value, _ in Mission.ROLE_CHOICES}
+    valid_roles = {'all', 'accountant', 'controller'}
 
     if target_role not in valid_roles:
         return JsonResponse({'error': 'invalid target_role'}, status=400)
