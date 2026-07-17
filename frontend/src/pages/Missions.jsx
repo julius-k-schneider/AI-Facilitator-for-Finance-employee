@@ -30,11 +30,23 @@ import MissionRunner from './missions/MissionRunner'
 import './Missions.css'
 
 const createEmptyForm = () => ({
-  type: defaultMissionType, scheduled_date: '', title_de: '', title_en: '',
-  description_de: '', description_en: '', question_de: '', question_en: '',
-  feedback_de: '', feedback_en: '',
-  micro_learning_de: '', micro_learning_en: '',
-  max_points: 100, correct_indices: [0], ...createMissionTypeDefaults(),
+  type: defaultMissionType,
+  target_role: 'all',
+  difficulty: 'beginner',
+  scheduled_date: '',
+  title_de: '',
+  title_en: '',
+  description_de: '',
+  description_en: '',
+  question_de: '',
+  question_en: '',
+  feedback_de: '',
+  feedback_en: '',
+  micro_learning_de: '',
+  micro_learning_en: '',
+  max_points: 100,
+  correct_indices: [0],
+  ...createMissionTypeDefaults(),
 })
 
 function isoDate(date) {
@@ -125,6 +137,8 @@ function missionTypeLabel(t, type) {
 function missionToForm(mission) {
   return {
     type: mission.type,
+    target_role: mission.target_role || 'all',
+    difficulty: mission.difficulty || 'beginner',
     scheduled_date: mission.scheduled_date,
     title_de: mission.title_de,
     title_en: mission.title_en,
@@ -338,7 +352,58 @@ function Creator({ opened, onClose, onCreated }) {
       <div className="mission-manager-grid">
         <Stack gap="md">
           {editingId && <Group justify="space-between"><Badge variant="light" color="brand">{t('missions.creator.editing')}</Badge><Button variant="subtle" size="xs" onClick={resetForm}>{t('missions.creator.cancelEdit')}</Button></Group>}
-          <Select label={t('missions.creator.type')} value={form.type} data={missionTypes.map((definition) => ({ value: definition.id, label: t(`missions.types.${definition.labelKey}`) }))} onChange={setType} />
+          <Select
+            label={t('missions.creator.type')}
+            value={form.type}
+            data={missionTypes.map((definition) => ({
+              value: definition.id,
+              label: t(`missions.types.${definition.labelKey}`),
+            }))}
+            onChange={setType}
+          />
+
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+            <Select
+              label={language === 'en' ? 'Target role' : 'Zielrolle'}
+              value={form.target_role}
+              data={[
+                {
+                  value: 'all',
+                  label: language === 'en' ? 'All roles' : 'Alle Rollen',
+                },
+                {
+                  value: 'accountant',
+                  label: language === 'en' ? 'Accountant' : 'Buchhaltung',
+                },
+                {
+                  value: 'controller',
+                  label: language === 'en' ? 'Controller' : 'Controlling',
+                },
+              ]}
+              onChange={(value) => setField('target_role', value || 'all')}
+            />
+
+            <Select
+              label={language === 'en' ? 'Difficulty' : 'Schwierigkeitsgrad'}
+              value={form.difficulty}
+              data={[
+                {
+                  value: 'beginner',
+                  label: language === 'en' ? 'Beginner' : 'Anfänger',
+                },
+                {
+                  value: 'intermediate',
+                  label: language === 'en' ? 'Intermediate' : 'Mittelstufe',
+                },
+                {
+                  value: 'advanced',
+                  label: language === 'en' ? 'Advanced' : 'Fortgeschritten',
+                },
+              ]}
+              onChange={(value) => setField('difficulty', value || 'beginner')}
+            />
+          </SimpleGrid>
+
           <TextInput
             type="date"
             label={t('missions.creator.date')}
@@ -372,7 +437,20 @@ function Creator({ opened, onClose, onCreated }) {
                   <Text fw={700}>
                     {mission[`title_${language}`]}
                   </Text>
+
+                  <Group gap="xs" mt={5}>
+                    <Badge variant="light" color="secondary">
+                      {mission.target_role === 'all'
+                        ? language === 'en' ? 'All roles' : 'Alle Rollen'
+                        : mission.target_role}
+                    </Badge>
+
+                    <Badge variant="light" color="brand">
+                      {mission.difficulty}
+                    </Badge>
+                  </Group>
                 </Box>
+
                 <Group gap={4} wrap="nowrap">
                   <Button variant="subtle" size="compact-sm" aria-label={t('missions.creator.view')} onClick={() => { setShowPreviewSolution(false); setPreview(mission) }}><IconEye size={17} /></Button>
                   {mission.can_edit && !mission.has_attempts && <Button variant="subtle" size="compact-sm" aria-label={t('missions.creator.edit')} onClick={() => editMission(mission)}><IconEdit size={17} /></Button>}
@@ -523,7 +601,7 @@ function MissionReview({ enabled, onPublished }) {
     setError('')
     setMessage('')
     try {
-      const data = await generateNextWeekMissions(generationWeek)
+      const data = await generateNextWeekMissions( generationWeek, false, selectedRole, )
       setMessage(t('missions.review.generated', { count: data.created_count }))
       await Promise.all([loadReview(), loadGenerationSchedule()])
     } catch (nextError) {
@@ -612,8 +690,33 @@ function MissionReview({ enabled, onPublished }) {
               <Group justify="space-between" align="flex-start">
                 <Box>
                   <Group gap="xs" mb={5}>
-                    <Badge color="yellow" variant="light">{t('missions.review.status')}</Badge>
-                    <Badge color="secondary" variant="light">{missionTypeLabel(t, mission.type)}</Badge>
+                      <Badge color="yellow" variant="light">
+                          {t('missions.review.status')}
+                      </Badge>
+
+                      <Badge color="secondary" variant="light">
+                          {missionTypeLabel(t, mission.type)}
+                      </Badge>
+
+                      <Badge
+                          color={
+                              mission.difficulty === 'beginner'
+                                  ? 'green'
+                                  : mission.difficulty === 'intermediate'
+                                  ? 'yellow'
+                                  : 'red'
+                          }
+                          variant="light"
+                      >
+                          {mission.difficulty}
+                      </Badge>
+
+                      <Badge color="blue" variant="light">
+                          {mission.target_role === 'all'
+                              ? 'All Roles'
+                              : mission.target_role}
+                      </Badge>
+
                     <Text fz="sm" c="dimmed">{new Date(`${mission.scheduled_date}T12:00:00`).toLocaleDateString(i18n.resolvedLanguage)}</Text>
                   </Group>
                   <Text fw={700} fz="lg">

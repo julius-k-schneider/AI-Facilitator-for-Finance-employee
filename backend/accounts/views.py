@@ -14,7 +14,7 @@ from .models import AgentChat, Mission, MissionAttempt, Profile, WeeklyLeaderboa
 from .services.ai_mission_generator import (
     AiMissionGenerationError,
     generate_training_candidate,
-    generate_next_week,
+    generate_next_week_all_difficulties,
     regenerate_review_mission,
 )
 from .services.ai_chat_challenge import chat_reply, evaluate_final_answers, generate_chat_challenge
@@ -342,6 +342,8 @@ def mission_schedule_payload(mission, user):
         'id': mission.id,
         'type': mission.mission_type,
         'scheduled_date': mission.scheduled_date.isoformat(),
+        'target_role': mission.target_role,
+        'difficulty': mission.difficulty,
         'title_de': mission.title_de,
         'title_en': mission.title_en,
         'description_de': mission.description_de,
@@ -1051,17 +1053,36 @@ def approve_all_review_missions_view(request):
             review_query
         )
         review_counts = {}
+
         for mission in review_missions:
-            review_counts[mission.scheduled_date] = review_counts.get(mission.scheduled_date, 0) + 1
-        for scheduled_date, review_count in review_counts.items():
+            key = (
+                mission.scheduled_date,
+                mission.target_role,
+                mission.difficulty,
+            )
+            review_counts[key] = review_counts.get(key, 0) + 1
+
+        for (
+            scheduled_date,
+            target_role,
+            difficulty,
+        ), review_count in review_counts.items():
             published_count = Mission.objects.filter(
                 scheduled_date=scheduled_date,
                 status=Mission.STATUS_PUBLISHED,
+                target_role=target_role,
+                difficulty=difficulty,
             ).count()
+
             if published_count + review_count > 2:
                 return JsonResponse({
-                    'error': f'{scheduled_date.isoformat()} would have more than two published missions',
+                    'error': (
+                        f'{scheduled_date.isoformat()} would have more than two '
+                        f'published missions for role {target_role} '
+                        f'and difficulty {difficulty}'
+                    ),
                 }, status=409)
+
         reviewed_at = timezone.now()
         mission_ids = [mission.id for mission in review_missions]
         Mission.objects.filter(id__in=mission_ids).update(
@@ -1104,30 +1125,58 @@ def reject_all_review_missions_view(request):
 def generate_next_week_missions_view(request):
     if not can_create_missions(request.user):
         return JsonResponse({'error': 'permission denied'}, status=403)
+
     data = parse_json(request)
     force = bool(data.get('force', False))
+    target_role = data.get('target_role', Mission.ROLE_ALL)
+
+    valid_roles = {value for value, _ in Mission.ROLE_CHOICES}
+
+    if target_role not in valid_roles:
+        return JsonResponse({'error': 'invalid target_role'}, status=400)
+
     raw_week_start = data.get('week_start')
     week_start = parse_iso_date(raw_week_start) if raw_week_start else None
+
     if raw_week_start and week_start is None:
-        return JsonResponse({'error': 'week_start must be a valid ISO date'}, status=400)
+        return JsonResponse(
+            {'error': 'week_start must be a valid ISO date'},
+            status=400,
+        )
+
     today = timezone.localdate()
     current_week_start = today - timedelta(days=today.weekday())
-    if week_start is not None and (week_start.weekday() != 0 or week_start < current_week_start):
-        return JsonResponse({'error': 'week_start must be the current or a future Monday'}, status=400)
+
+    if week_start is not None and (
+        week_start.weekday() != 0
+        or week_start < current_week_start
+    ):
+        return JsonResponse(
+            {'error': 'week_start must be the current or a future Monday'},
+            status=400,
+        )
+
     try:
-        missions, week_start, week_end = generate_next_week(
-            request.user,
+        missions, week_start, week_end = generate_next_week_all_difficulties(
+            created_by=request.user,
             force=force,
             week_start=week_start,
+            target_role=target_role,
         )
     except AiMissionGenerationError as error_value:
         return JsonResponse({'error': str(error_value)}, status=503)
+
     return JsonResponse({
         'created_count': len(missions),
         'week_start': week_start.isoformat(),
         'week_end': week_end.isoformat(),
-        'missions': [mission_schedule_payload(mission, request.user) for mission in missions],
+        'missions': [
+            mission_schedule_payload(mission, request.user)
+            for mission in missions
+        ],
     })
+
+
 
 
 @require_http_methods(['POST'])
@@ -1369,7 +1418,10 @@ def approve_mission_view(request, mission_id):
         published_count = Mission.objects.filter(
             scheduled_date=mission.scheduled_date,
             status=Mission.STATUS_PUBLISHED,
+            target_role=mission.target_role,
+            difficulty=mission.difficulty,
         ).count()
+
         if published_count >= 2:
             return JsonResponse({'error': 'this date already has two published missions'}, status=409)
         mission.status = Mission.STATUS_PUBLISHED

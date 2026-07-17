@@ -44,8 +44,8 @@ Target learner:
 - The goal is confidence and immediate benefit in daily work, not technical AI specialization.
 
 Difficulty and learning design:
-- Keep every mission beginner-friendly to lower-intermediate. A finance professional without AI training must be able
-  to solve it from the question and common workplace judgment alone.
+- Adapt every mission to the requested difficulty level. Beginner missions should build confidence, intermediate missions should
+require practical application, and advanced missions should involve more complex evaluation, risk identification, and critical judgment.
 - Create a small, actionable learning nugget that takes 3-8 minutes and feels useful rather than academic.
 - Use plain business language. Explain unavoidable AI terms in the question or feedback.
 - Test one clear learning objective at a time. Avoid trick questions, subtle semantic distinctions, and options that
@@ -141,7 +141,7 @@ scenario-specific feedback:
 "micro_learning_de":"...","micro_learning_en":"..."}}
 The five traffic-light arrays must each contain exactly three items, never more or fewer. The content object must use
 only the fields defined for its selected mission type. Do not add explanations outside the JSON object.
-Across the requested schedule, favor broadly useful beginner topics and vary the scenarios. At least half of the
+Across the requested schedule, favor broadly useful topics appropriate to the requested difficulty and vary the scenarios. At least half of the
 missions should focus on practical everyday AI usage such as prompting, checking outputs, confidentiality, or human
 review. Include prompt_ranking and compliance_traffic_light regularly when enough slots are available. Use advanced
 finance or AI terminology only when the term is explained within the mission.
@@ -392,10 +392,51 @@ def generate_next_week(
     return created, week_start, week_end
 
 
+
+def generate_next_week_all_difficulties(
+    created_by,
+    force=False,
+    reference_date=None,
+    week_start=None,
+    target_role=Mission.ROLE_ALL,
+):
+    created_missions = []
+    resolved_week_start = None
+    resolved_week_end = None
+
+    difficulties = [
+        Mission.DIFFICULTY_BEGINNER,
+        Mission.DIFFICULTY_INTERMEDIATE,
+        Mission.DIFFICULTY_ADVANCED,
+    ]
+
+    for difficulty in difficulties:
+        missions, current_week_start, current_week_end = generate_next_week(
+            created_by=created_by,
+            force=force,
+            reference_date=reference_date,
+            week_start=week_start,
+            target_role=target_role,
+            difficulty=difficulty,
+        )
+
+        created_missions.extend(missions)
+        resolved_week_start = current_week_start
+        resolved_week_end = current_week_end
+
+    return created_missions, resolved_week_start, resolved_week_end
+
+
+
+
 def regenerate_review_mission(mission, requested_by):
     if mission.status != Mission.STATUS_REVIEW or not mission.generated_by_ai:
         raise AiMissionGenerationError('Only AI review missions can be regenerated')
-    candidate = generate_candidates({mission.scheduled_date: 1})[0]
+    candidate = generate_candidates(
+        {mission.scheduled_date: 1},
+        target_role=mission.target_role,
+        difficulty=mission.difficulty,
+    )[0]
     with transaction.atomic():
         locked = Mission.objects.select_for_update().get(id=mission.id)
         apply_candidate(locked, candidate)

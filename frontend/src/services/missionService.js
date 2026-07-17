@@ -75,10 +75,24 @@ export const rejectAllReviewMissions = (weekStart) => request('/api/auth/mission
   body: JSON.stringify({ week_start: weekStart }),
 })
 
-export const generateNextWeekMissions = (weekStart, force = false) => request('/api/auth/missions/generate-next-week/', {
+
+export const generateNextWeekMissions = (
+  weekStart,
+  force = false,
+  targetRole = 'all',
+  difficulty = 'beginner',
+) => request('/api/auth/missions/generate-next-week/', {
   method: 'POST',
-  body: JSON.stringify({ force, week_start: weekStart }),
+  body: JSON.stringify({
+    force,
+    week_start: weekStart,
+    target_role: targetRole,
+    difficulty,
+  }),
 })
+
+
+
 
 export const approveMission = (missionId) => request(`/api/auth/missions/${missionId}/approve/`, {
   method: 'POST',
