@@ -19,7 +19,11 @@ logger = logging.getLogger(__name__)
 MAX_MISSIONS_PER_REQUEST = 2
 DEFAULT_GENERATION_WORKERS = 2
 DEFAULT_GENERATION_RETRIES = 2
-DEFAULT_MAX_TOKENS = 5000
+DEFAULT_MAX_TOKENS = 9000
+
+
+def is_business_day(day):
+    return day.weekday() < 5
 
 
 class AiMissionGenerationError(RuntimeError):
@@ -333,7 +337,7 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
     open_weekdays = []
     for offset in range(WEEKDAYS_PER_WEEK):
         day = week_start + timedelta(days=offset)
-        if day < today:
+        if day < today or not is_business_day(day):
             continue
         occupied_missions = Mission.objects.filter(
             scheduled_date=day,

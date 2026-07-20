@@ -104,24 +104,26 @@ The command requires at least one user with the `content_creator` or `admin`
 role. Generated missions remain in review until a content creator approves them
 on the Missions page.
 
-### Daily mission email reminders
+### Weekly mission email reminders
 
 To remind users who have not completed all published missions for the current
-day, run:
+week, run:
 
 ```bash
 docker compose exec web python manage.py send_daily_mission_reminders
 ```
 
-Schedule this command externally at 12:00, for example with Railway Cron or a
-server cron job. The command records one reminder per user and day, so reruns do
-not send duplicate reminders.
+Schedule this command externally on Fridays at 12:00, for example with Railway
+Cron or a server cron job. The command also skips non-Fridays, so an accidentally
+daily schedule will not send daily reminder emails. It records one reminder per
+user and Friday, so reruns do not send duplicate reminders. Each email lists only
+the missions that are still missing for that user.
 
 Useful local checks:
 
 ```bash
 docker compose exec web python manage.py send_daily_mission_reminders --dry-run
-docker compose exec web python manage.py send_daily_mission_reminders --date 2026-06-17
+docker compose exec web python manage.py send_daily_mission_reminders --date 2026-06-19
 ```
 
 ## Alternative: native venv (no Docker for the app)
@@ -187,7 +189,8 @@ both the API and the SPA.
 6. **Expose it**: Service → *Settings* → *Networking* → *Generate Domain*. Create the
    first admin user via the service shell: `python manage.py createsuperuser`.
 7. **Schedule the cron commands** (optional): add Railway Cron jobs for
-   `generate_weekly_missions` (weekly) and `send_daily_mission_reminders` (daily).
+   `generate_weekly_missions` (weekly) and `send_daily_mission_reminders`
+   (Fridays at 12:00).
 
 ### How prod differs from local
 

@@ -77,17 +77,21 @@
     "actions": {
       "openMissions": "Open mission",
       "dailyMissionsTitle": "Today's missions",
-      "dailyMissionsText": "Complete your two daily missions and earn points for the leaderboard."
+      "dailyMissionsText": "Complete today's missions or catch up on available missions from recent days."
     }
   },
   "missions": {
     "badge": "DAILY MISSIONS",
     "title": "Today's missions",
-    "description": "Up to two new tasks await you every day. Each mission can be completed exactly once.",
+    "description": "Up to two new tasks await you every day. Missed missions stay available until Monday 12:00 noon of the following week.",
     "points": "points",
     "loading": "Loading missions...",
-    "emptyTitle": "No missions are scheduled for today",
-    "emptyText": "Missions will appear here as soon as they are published for today.",
+    "emptyTitle": "No missions found",
+    "emptyText": "Missions will appear here as soon as they are available.",
+    "todayEmptyTitle": "No missions are scheduled for today",
+    "todayEmptyText": "Missions will appear here as soon as they are published for today.",
+    "availableEmptyTitle": "No available catch-up missions",
+    "availableEmptyText": "Uncompleted missions appear here until Monday 12:00 noon of the following week.",
     "startButton": "Start mission",
     "completedButton": "Completed",
     "back": "Back to missions",
@@ -100,7 +104,35 @@
       "current": "Current streak",
       "best": "Best: {{count}}"
     },
+    "tabs": {
+      "today": "Today",
+      "available": "Available",
+      "archive": "Archive"
+    },
     "status": { "open": "Open", "completed": "Completed" },
+    "archive": {
+      "back": "Back to archive",
+      "viewButton": "View",
+      "filterTitle": "Browse archive",
+      "filterText": "Shows only past published missions you have already completed. Viewing them does not award points.",
+      "month": "Month",
+      "period": "Period",
+      "week": "Week",
+      "day": "Day",
+      "modeMonth": "Month",
+      "modeWeek": "Week",
+      "modeDay": "Day",
+      "viewMode": "View",
+      "typeFilter": "Mission type",
+      "typeAll": "All types",
+      "loading": "Loading archive...",
+      "emptyTitle": "No archived missions found",
+      "emptyText": "There are no past completed missions in this period.",
+      "monthResult": "Archive for {{month}}",
+      "rangeResult": "Archive for {{range}}",
+      "completedTitle": "Completed at the time",
+      "score": "{{score}} of {{max}} points"
+    },
     "types": {
       "singleChoice": "Single choice",
       "multipleChoice": "Multiple choice",
@@ -174,7 +206,7 @@
       "generate": "Generate selected week",
       "selectWeek": "Select week for generation",
       "selectWeekButton": "Select week",
-      "selectWeekDescription": "Select a Monday-to-Sunday week in the calendar. Existing missions remain visible for each day.",
+      "selectWeekDescription": "Select a week through Monday to Friday in the calendar. Existing missions remain visible for each day.",
       "selectedWeek": "Selected: {{start}} to {{end}}",
       "approveAll": "Approve all",
       "rejectAll": "Reject all",
