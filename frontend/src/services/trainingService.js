@@ -21,6 +21,9 @@ async function trainingRequest(path, body) {
   return data
 }
 
+export const generateTaskChallenge = (missionType) => trainingRequest('/api/auth/training/task-challenge/generate/', { mission_type: missionType }).then((data) => data.mission)
+export const submitTrainingTaskChallenge = (challengeId, values, language) => trainingRequest('/api/auth/training/task-challenge/submit/', { challenge_id: challengeId, values, language }).then((data) => data.result)
+
 export const generateChatChallenge = () => trainingRequest('/api/auth/training/chat-challenge/generate/', {}).then((data) => data.mission)
 export const sendTrainingChatMessage = (challengeId, message, language) => trainingRequest('/api/auth/training/chat-challenge/message/', { challenge_id: challengeId, message, language })
 export const submitTrainingChatChallenge = (challengeId, answers, language) => trainingRequest('/api/auth/training/chat-challenge/submit/', { challenge_id: challengeId, answers, language }).then((data) => data.result)

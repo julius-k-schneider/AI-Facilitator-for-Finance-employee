@@ -109,6 +109,10 @@
       ,"promptRanking": "Prompt ranking",
       "complianceTrafficLight": "Compliance traffic light"
       ,"aiChatChallenge": "AI chat challenge"
+      ,"bulkCategorization": "Bulk categorization"
+      ,"planActualDeviation": "Plan vs. actual deviation"
+      ,"duplicatePaymentHunt": "Duplicate payment hunt"
+      ,"invoiceExtraction": "Invoice extraction"
     },
     "result": {
       "correctPrefix": "Correct.",
@@ -178,6 +182,8 @@
       "approveAllSuccess": "{{count}} missions were approved.",
       "rejectAllSuccess": "{{count}} missions were rejected.",
       "generated": "{{count}} new mission proposals were created.",
+      "generateTask": "Generate AI hands-on task",
+      "taskGenerated": "A new AI hands-on task was created as a proposal.",
       "loading": "Loading review missions...",
       "empty": "There are currently no AI-generated missions awaiting review.",
       "status": "Draft / review",
@@ -217,6 +223,10 @@
       "promptRanking": { "title": "Prompt ranking", "description": "Sort prompts from the weakest to the strongest instruction." },
       "complianceTrafficLight": { "title": "Compliance traffic light", "description": "Assess three scenarios as allowed, restricted, or prohibited." }
       ,"aiChatChallenge": { "title": "AI chat challenge", "description": "Solve a finance case with no more than three focused questions to an embedded AI chat." }
+      ,"bulkCategorization": { "title": "Bulk categorization", "description": "Use your AI assistant to assign many booking lines to categories and enter the totals per category." }
+      ,"planActualDeviation": { "title": "Plan vs. actual deviation", "description": "Use your AI assistant to find cost centers that overran their budget and enter the key figures." }
+      ,"duplicatePaymentHunt": { "title": "Duplicate payment hunt", "description": "Use your AI assistant to find accidental duplicate payments in a payment run." }
+      ,"invoiceExtraction": { "title": "Invoice extraction", "description": "Use your AI assistant to extract key figures from many invoice texts." }
     },
     "chat": {
       "caseData": "Case data",
@@ -228,6 +238,16 @@
       "message": "Your question",
       "send": "Send",
       "finalAnswers": "Final answers"
+    },
+    "task": {
+      "caseData": "Case data",
+      "rowCount": "{{count}} rows",
+      "copy": "Copy",
+      "copied": "Copied",
+      "hint": "Solve this task with your own tools (e.g. Excel) and your AI assistant such as Copilot. Copy the case data into it, then enter only the result values here.",
+      "yourResult": "Your result",
+      "promptLabel": "Which prompt did you use? (optional)",
+      "promptHint": "Stored for reference, but not part of the scoring."
     }
   },
   "agent": {

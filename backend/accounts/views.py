@@ -18,6 +18,12 @@ from .services.ai_mission_generator import (
     regenerate_review_mission,
 )
 from .services.ai_chat_challenge import chat_reply, evaluate_final_answers, generate_chat_challenge
+from .services.ai_task_challenge import (
+    TASK_CHALLENGE_TYPES,
+    evaluate_task_answers,
+    generate_task_challenge,
+    public_content as task_public_content,
+)
 from .services.email_notifications import send_published_mission_email, send_published_mission_emails
 from .services.personal_agent import personal_agent_reply
 
@@ -258,6 +264,18 @@ def mission_payload(mission, user, language='de', include_content=True):
         }
         if attempt is not None:
             payload['content']['feedback'] = translated_feedback(content, language)
+    elif include_content and mission.mission_type in Mission.TASK_TYPES:
+        payload['content'] = task_public_content(content, language)
+        if attempt is not None:
+            solutions = {field['id']: field for field in content.get('result_fields', [])}
+            payload['content']['field_results'] = [
+                {
+                    'id': field['id'],
+                    'solution': solutions[field['id']]['solution'],
+                    'feedback': translated(solutions[field['id']].get('feedback', {}), language),
+                }
+                for field in content.get('result_fields', [])
+            ]
     elif include_content and mission.mission_type in Mission.CHOICE_TYPES:
         payload['content'] = {
             'question': translated(content.get('question', {}), language),
@@ -283,8 +301,22 @@ def mission_schedule_payload(mission, user):
         'title_en': mission.title_en,
         'description_de': mission.description_de,
         'description_en': mission.description_en,
-        'question_de': translated(content.get('question', {}), 'de'),
-        'question_en': translated(content.get('question', {}), 'en'),
+        'question_de': translated(content.get('question') or content.get('task') or {}, 'de'),
+        'question_en': translated(content.get('question') or content.get('task') or {}, 'en'),
+        'case_format': content.get('case_format', 'table'),
+        'case_data_de': (content.get('case_data') or {}).get('de', []),
+        'case_data_en': (content.get('case_data') or {}).get('en', []),
+        'result_fields': [
+            {
+                'id': field.get('id'),
+                'type': field.get('type'),
+                'label_de': translated(field.get('label', {}), 'de'),
+                'label_en': translated(field.get('label', {}), 'en'),
+                'unit': field.get('unit', ''),
+                'solution': field.get('solution'),
+            }
+            for field in content.get('result_fields', [])
+        ],
         'options': [
             {'de': translated(option, 'de'), 'en': translated(option, 'en')}
             for option in content.get('options', [])
@@ -680,11 +712,28 @@ def complete_mission_view(request):
     if MissionAttempt.objects.filter(user=request.user, mission=mission).exists():
         return JsonResponse({'error': 'mission already completed'}, status=409)
 
-    if mission.mission_type not in Mission.CHOICE_TYPES:
+    if mission.mission_type not in Mission.CHOICE_TYPES and mission.mission_type not in Mission.TASK_TYPES:
         return JsonResponse({'error': 'unsupported mission type'}, status=400)
 
     content = mission.content or {}
-    if mission.mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
+    if mission.mission_type in Mission.TASK_TYPES:
+        answer = data.get('answer')
+        if not isinstance(answer, dict):
+            return JsonResponse({'error': 'result values required'}, status=400)
+        values = answer.get('values')
+        if not isinstance(values, dict):
+            return JsonResponse({'error': 'result values required'}, status=400)
+        prompt_evidence = str(answer.get('prompt', ''))[:4000]
+        evaluation = evaluate_task_answers(content, values, language)
+        total = evaluation['total_count'] or 1
+        score = mission.max_points * evaluation['correct_count'] // total
+        stored_answer = {'values': values, 'prompt': prompt_evidence}
+        result_details = {
+            'correct_count': evaluation['correct_count'],
+            'total_count': evaluation['total_count'],
+            'field_results': evaluation['field_results'],
+        }
+    elif mission.mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
         statements = content.get('statements', [])
         if len(statements) != 3:
             return JsonResponse({'error': 'invalid traffic-light mission'}, status=400)
@@ -962,6 +1011,45 @@ def generate_next_week_missions_view(request):
 
 @require_http_methods(['POST'])
 @csrf_exempt
+def generate_task_challenge_view(request):
+    """Content creators generate a single task challenge of a chosen type.
+
+    The mission is created in review status so it flows through the normal
+    approval pipeline before it becomes visible to learners.
+    """
+    if not can_create_missions(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    data = parse_json(request)
+    mission_type = data.get('mission_type') or None
+    if mission_type is not None and mission_type not in TASK_CHALLENGE_TYPES:
+        return JsonResponse({'error': 'unsupported task challenge type'}, status=400)
+    scheduled_date = parse_iso_date(data.get('scheduled_date')) if data.get('scheduled_date') else timezone.localdate()
+    if data.get('scheduled_date') and scheduled_date is None:
+        return JsonResponse({'error': 'scheduled_date must be a valid ISO date'}, status=400)
+    try:
+        candidate = generate_task_challenge(mission_type)
+    except AiMissionGenerationError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=503)
+    mission = Mission(
+        mission_type=candidate['mission_type'],
+        scheduled_date=scheduled_date,
+        title_de=candidate['title_de'],
+        title_en=candidate['title_en'],
+        description_de=candidate['description_de'],
+        description_en=candidate['description_en'],
+        content=candidate['content'],
+        max_points=candidate['max_points'],
+        status=Mission.STATUS_REVIEW,
+        generated_by_ai=True,
+        generation_batch_id=uuid.uuid4(),
+        created_by=request.user,
+    )
+    mission.save()
+    return JsonResponse({'mission': mission_schedule_payload(mission, request.user)}, status=201)
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
 def generate_training_mission_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'authentication required'}, status=401)
@@ -1093,6 +1181,85 @@ def submit_training_chat_challenge_view(request):
     request.session['training_chat_challenges'] = challenges
     request.session.modified = True
     return JsonResponse({'result': result})
+
+
+def training_task_challenges(request):
+    return dict(request.session.get('training_task_challenges', {}))
+
+
+def public_task_challenge(candidate, challenge_id):
+    content = candidate['content']
+    return {
+        'id': challenge_id,
+        'type': candidate['mission_type'],
+        'title_de': candidate['title_de'],
+        'title_en': candidate['title_en'],
+        'description_de': candidate['description_de'],
+        'description_en': candidate['description_en'],
+        'task_de': content['task']['de'],
+        'task_en': content['task']['en'],
+        'case_data_de': content['case_data']['de'],
+        'case_data_en': content['case_data']['en'],
+        'case_format': content.get('case_format', 'table'),
+        'result_fields': [
+            {
+                'id': field['id'],
+                'type': field['type'],
+                'label_de': field['label']['de'],
+                'label_en': field['label']['en'],
+                'unit': field.get('unit', ''),
+            }
+            for field in content['result_fields']
+        ],
+        'micro_learning_de': content['micro_learning']['de'],
+        'micro_learning_en': content['micro_learning']['en'],
+    }
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def generate_training_task_challenge_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    mission_type = parse_json(request).get('mission_type') or None
+    if mission_type is not None and mission_type not in TASK_CHALLENGE_TYPES:
+        return JsonResponse({'error': 'unsupported task challenge type'}, status=400)
+    try:
+        candidate = generate_task_challenge(mission_type)
+    except AiMissionGenerationError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=503)
+    challenge_id = uuid.uuid4().hex
+    challenges = training_task_challenges(request)
+    challenges[challenge_id] = candidate
+    request.session['training_task_challenges'] = challenges
+    request.session.modified = True
+    return JsonResponse({'mission': public_task_challenge(candidate, challenge_id)})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def submit_training_task_challenge_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'authentication required'}, status=401)
+    data = parse_json(request)
+    challenge_id = str(data.get('challenge_id', ''))
+    challenges = training_task_challenges(request)
+    candidate = challenges.get(challenge_id)
+    if candidate is None:
+        return JsonResponse({'error': 'training challenge not found'}, status=404)
+    values = data.get('values')
+    if not isinstance(values, dict):
+        return JsonResponse({'error': 'result values required'}, status=400)
+    evaluation = evaluate_task_answers(candidate['content'], values, data.get('language'))
+    challenges.pop(challenge_id, None)
+    request.session['training_task_challenges'] = challenges
+    request.session.modified = True
+    return JsonResponse({'result': {
+        'correct': evaluation['all_correct'],
+        'correct_count': evaluation['correct_count'],
+        'total_count': evaluation['total_count'],
+        'field_results': evaluation['field_results'],
+    }})
 
 
 def agent_chat_summary(chat):
