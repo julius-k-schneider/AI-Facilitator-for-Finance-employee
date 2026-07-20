@@ -474,9 +474,10 @@ class AccountsApiTests(TestCase):
     def test_creator_cannot_schedule_missions_on_weekends(self):
         creator = self.create_user('creator-weekend-schedule@example.com', Profile.ROLE_CONTENT_CREATOR)
         self.client.force_login(creator)
+        next_saturday = timezone.localdate() + timedelta(days=(5 - timezone.localdate().weekday()) % 7 or 7)
         payload = {
             'type': Mission.TYPE_SINGLE_CHOICE,
-            'scheduled_date': '2026-07-11',
+            'scheduled_date': next_saturday.isoformat(),
             'title_de': 'Wochenende', 'title_en': 'Weekend',
             'description_de': 'Kurze Beschreibung', 'description_en': 'Short description',
             'question_de': 'Welche Option passt?', 'question_en': 'Which option fits?',
@@ -1101,8 +1102,19 @@ class AiMissionServiceTests(TestCase):
         normalized = validate_generated_payload(traffic, {start: 1})
         self.assertEqual(normalized[0]['content']['statements'][1]['correct_color'], 'yellow')
 
+    def task_candidate(self):
+        return {
+            'mission_type': Mission.TYPE_BULK_CATEGORIZATION,
+            'title_de': 'Task', 'title_en': 'Task', 'description_de': 'd', 'description_en': 'd',
+            'max_points': 40, 'content': {
+                'task': {'de': 't', 'en': 't'}, 'case_data': {'de': [], 'en': []}, 'case_format': 'table',
+                'result_fields': [], 'micro_learning': {'de': 'x' * 30, 'en': 'x' * 30},
+            },
+        }
+
+    @patch('accounts.services.ai_task_challenge.generate_task_challenge')
     @patch('accounts.services.ai_mission_generator.call_ai')
-    def test_weekly_generation_creates_review_missions_without_overwriting_published(self, call_ai_mock):
+    def test_weekly_generation_splits_workweek_into_quiz_and_task_days(self, call_ai_mock, generate_task_mock):
         creator = self.create_creator()
         start, end = next_calendar_week()
         Mission.objects.create(
@@ -1113,20 +1125,399 @@ class AiMissionServiceTests(TestCase):
             max_points=20, created_by=creator, status=Mission.STATUS_PUBLISHED,
         )
         call_ai_mock.side_effect = self.valid_payload
+        generate_task_mock.side_effect = lambda: self.task_candidate()
 
         created, actual_start, actual_end = generate_next_week(creator)
         self.assertEqual((actual_start, actual_end), (start, end))
-        self.assertEqual(len(created), 9)
+
+        # Monday already has content, so it is left untouched entirely - no top-up.
+        monday_missions = Mission.objects.filter(scheduled_date=start)
+        self.assertEqual(monday_missions.count(), 1)
+        self.assertEqual(monday_missions.first().status, Mission.STATUS_PUBLISHED)
+
+        # Weekends are never scheduled.
+        weekend_days = [start + timedelta(days=offset) for offset in (5, 6)]
+        self.assertEqual(Mission.objects.filter(scheduled_date__in=weekend_days).count(), 0)
+
+        # 4 open weekdays (Tue-Fri): 2 become task days (1 mission), 2 remain quiz days (2 missions).
+        self.assertEqual(len(created), 2 * 1 + 2 * 2)
         self.assertTrue(all(mission.status == Mission.STATUS_REVIEW for mission in created))
         self.assertTrue(all(mission.generated_by_ai for mission in created))
-        self.assertTrue(all(mission.scheduled_date.weekday() < 5 for mission in created))
-        self.assertEqual(Mission.objects.filter(status=Mission.STATUS_PUBLISHED).count(), 1)
-        self.assertEqual(call_ai_mock.call_count, 5)
+        task_created = [mission for mission in created if mission.mission_type in Mission.TASK_TYPES]
+        quiz_created = [mission for mission in created if mission.mission_type in Mission.CHOICE_TYPES]
+        self.assertEqual(len(task_created), 2)
+        self.assertEqual(len(quiz_created), 4)
+        for day in (start + timedelta(days=offset) for offset in range(1, 5)):
+            day_missions = [mission for mission in created if mission.scheduled_date == day]
+            if len(day_missions) == 1:
+                self.assertIn(day_missions[0].mission_type, Mission.TASK_TYPES)
+            else:
+                self.assertEqual(len(day_missions), 2)
+                self.assertTrue(all(mission.mission_type in Mission.CHOICE_TYPES for mission in day_missions))
 
+    @patch('accounts.services.ai_task_challenge.generate_task_challenge')
     @patch('accounts.services.ai_mission_generator.call_ai')
-    def test_invalid_ai_response_creates_no_missions(self, call_ai_mock):
+    def test_invalid_ai_response_creates_no_missions(self, call_ai_mock, generate_task_mock):
         creator = self.create_creator()
         call_ai_mock.return_value = {'missions': []}
+        generate_task_mock.side_effect = AiMissionGenerationError('boom')
         with self.assertRaises(AiMissionGenerationError):
             generate_next_week(creator)
         self.assertEqual(Mission.objects.count(), 0)
+
+
+class AiTaskChallengeTests(TestCase):
+    def make_user(self, email, role=Profile.ROLE_ACCOUNTANT):
+        user = get_user_model().objects.create_user(username=email, email=email, password='Test1234!')
+        Profile.objects.create(user=user, role=role, onboarding_completed=True)
+        return user
+
+    def raw_payload(self, rows=30):
+        return {
+            'title_de': 'Buchungen kategorisieren', 'title_en': 'Categorize bookings',
+            'description_de': 'Ordne Buchungen den Kostenarten zu.', 'description_en': 'Assign bookings to cost types.',
+            'task_de': 'Ordne jede Zeile zu und nenne die Summe je Kategorie.',
+            'task_en': 'Assign every line and report the total per category.',
+            'categories_de': ['Reisekosten', 'Buerobedarf', 'IT'],
+            'categories_en': ['Travel', 'Office', 'IT'],
+            'rows': [
+                {
+                    'date': '2026-03-%02d' % (index % 28 + 1),
+                    'description_de': 'Position %d' % index, 'description_en': 'Item %d' % index,
+                    'amount': round(10 + index * 1.5, 2), 'category_index': index % 3,
+                }
+                for index in range(rows)
+            ],
+            'micro_learning_de': 'KI beschleunigt das Kategorisieren grosser Datenmengen; pruefe Stichproben stets selbst nach.',
+            'micro_learning_en': 'AI speeds up categorizing large data volumes; always spot-check its assignments yourself.',
+        }
+
+    def content(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        return validate_task_challenge(self.raw_payload(), 'bulk_categorization')['content']
+
+    def create_task_mission(self, creator, status=Mission.STATUS_PUBLISHED):
+        content = self.content()
+        return Mission.objects.create(
+            mission_type=Mission.TYPE_BULK_CATEGORIZATION,
+            scheduled_date=timezone.localdate(),
+            title_de='Buchungen kategorisieren', title_en='Categorize bookings',
+            description_de='Ordne Buchungen zu.', description_en='Assign bookings.',
+            content=content, max_points=40, status=status, generated_by_ai=True, created_by=creator,
+        )
+
+    def test_validation_computes_totals_and_public_hides_solutions(self):
+        from accounts.services.ai_task_challenge import public_content, validate_task_challenge
+        candidate = validate_task_challenge(self.raw_payload(), 'bulk_categorization')
+        fields = candidate['content']['result_fields']
+        self.assertEqual(len(fields), 3)
+        expected = [0.0, 0.0, 0.0]
+        for index in range(30):
+            expected[index % 3] += round(10 + index * 1.5, 2)
+        self.assertEqual([round(field['solution'], 2) for field in fields], [round(value, 2) for value in expected])
+        public = public_content(candidate['content'], 'de')
+        for field in public['result_fields']:
+            self.assertNotIn('solution', field)
+            self.assertNotIn('tolerance', field)
+        self.assertEqual(len(public['case_data']), 30)
+
+    def test_invalid_category_index_is_rejected(self):
+        from accounts.services.ai_mission_generator import AiMissionGenerationError
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        payload = self.raw_payload()
+        payload['rows'][0]['category_index'] = 9
+        with self.assertRaises(AiMissionGenerationError):
+            validate_task_challenge(payload, 'bulk_categorization')
+
+    def test_daily_task_challenge_hides_solutions(self):
+        creator = self.make_user('creator-task@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.make_user('player-task@example.com')
+        self.create_task_mission(creator)
+        self.client.force_login(player)
+        response = self.client.get('/api/auth/missions/today/?lang=de', secure=True)
+        self.assertEqual(response.status_code, 200)
+        mission = response.json()['missions'][0]
+        self.assertEqual(mission['type'], Mission.TYPE_BULK_CATEGORIZATION)
+        self.assertEqual(len(mission['content']['case_data']), 30)
+        for field in mission['content']['result_fields']:
+            self.assertNotIn('solution', field)
+
+    def test_scoring_awards_partial_points_and_stores_prompt(self):
+        creator = self.make_user('creator-score@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.make_user('player-score@example.com')
+        mission = self.create_task_mission(creator)
+        fields = mission.content['result_fields']
+        values = {field['id']: field['solution'] for field in fields}
+        values[fields[0]['id']] = -1  # one wrong
+        self.client.force_login(player)
+        response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': mission.id, 'answer': {'values': values, 'prompt': 'Kategorisiere diese Buchungen ...'},
+            'language': 'de',
+        }, content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 200)
+        result = response.json()['result']
+        self.assertEqual(result['correct_count'], 2)
+        self.assertEqual(result['total_count'], 3)
+        self.assertFalse(result['correct'])
+        self.assertEqual(result['score'], 40 * 2 // 3)
+        attempt = MissionAttempt.objects.get(user=player, mission=mission)
+        self.assertEqual(attempt.answer['prompt'], 'Kategorisiere diese Buchungen ...')
+
+    def test_full_score_marks_correct(self):
+        creator = self.make_user('creator-full@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.make_user('player-full@example.com')
+        mission = self.create_task_mission(creator)
+        values = {field['id']: field['solution'] for field in mission.content['result_fields']}
+        self.client.force_login(player)
+        response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': mission.id, 'answer': {'values': values, 'prompt': ''}, 'language': 'de',
+        }, content_type='application/json', secure=True)
+        result = response.json()['result']
+        self.assertTrue(result['correct'])
+        self.assertEqual(result['score'], 40)
+
+    def test_missing_values_are_rejected(self):
+        creator = self.make_user('creator-missing@example.com', Profile.ROLE_CONTENT_CREATOR)
+        player = self.make_user('player-missing@example.com')
+        mission = self.create_task_mission(creator)
+        self.client.force_login(player)
+        response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': mission.id, 'answer': {'prompt': 'x'}, 'language': 'de',
+        }, content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 400)
+
+    def test_generate_endpoint_creates_review_mission(self):
+        creator = self.make_user('creator-gen@example.com', Profile.ROLE_CONTENT_CREATOR)
+        self.client.force_login(creator)
+        candidate = {
+            'mission_type': Mission.TYPE_BULK_CATEGORIZATION,
+            'title_de': 'Titel', 'title_en': 'Title',
+            'description_de': 'Beschreibung', 'description_en': 'Description',
+            'max_points': 40, 'content': self.content(),
+        }
+        with patch('accounts.views.generate_task_challenge', return_value=candidate) as mock_generate:
+            response = self.client.post('/api/auth/missions/generate-task-challenge/', {
+                'mission_type': 'bulk_categorization',
+            }, content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 201)
+        mock_generate.assert_called_once_with('bulk_categorization')
+        mission = Mission.objects.get(mission_type=Mission.TYPE_BULK_CATEGORIZATION)
+        self.assertEqual(mission.status, Mission.STATUS_REVIEW)
+        self.assertTrue(mission.generated_by_ai)
+
+    def test_generate_endpoint_rejects_non_creator(self):
+        player = self.make_user('player-forbidden@example.com')
+        self.client.force_login(player)
+        response = self.client.post('/api/auth/missions/generate-task-challenge/', {}, content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 403)
+
+    def test_generate_endpoint_rejects_unknown_mission_type(self):
+        creator = self.make_user('creator-unknown@example.com', Profile.ROLE_CONTENT_CREATOR)
+        self.client.force_login(creator)
+        response = self.client.post('/api/auth/missions/generate-task-challenge/', {
+            'mission_type': 'not_a_real_type',
+        }, content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 400)
+
+    def test_generate_task_day_candidates_fills_requested_days(self):
+        from accounts.services import ai_mission_generator
+        candidate = {
+            'mission_type': Mission.TYPE_BULK_CATEGORIZATION, 'title_de': 't', 'title_en': 't',
+            'description_de': 'd', 'description_en': 'd', 'max_points': 40, 'content': self.content(),
+        }
+        day = timezone.localdate()
+        with patch('accounts.services.ai_task_challenge.generate_task_challenge', return_value=candidate):
+            candidates, failed_days = ai_mission_generator.generate_task_day_candidates([day])
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]['scheduled_date'], day)
+        self.assertEqual(failed_days, [])
+
+    def test_generate_task_day_candidates_falls_back_on_failure(self):
+        from accounts.services import ai_mission_generator
+        from accounts.services.ai_mission_generator import AiMissionGenerationError
+        day = timezone.localdate()
+        with patch('accounts.services.ai_task_challenge.generate_task_challenge', side_effect=AiMissionGenerationError('boom')):
+            candidates, failed_days = ai_mission_generator.generate_task_day_candidates([day])
+        self.assertEqual(candidates, [])
+        self.assertEqual(failed_days, [day])
+
+
+class AiTaskChallengeOtherTypesTests(TestCase):
+    """Validates the 4 additional task challenge types beyond bulk_categorization."""
+
+    def plan_actual_deviation_payload(self):
+        rows = []
+        for index in range(24):
+            if index < 5:
+                actual = 1200.0
+            elif index < 16:
+                actual = 1000.0
+            else:
+                actual = 1050.0
+            rows.append({
+                'cost_center_de': f'Kostenstelle {index}', 'cost_center_en': f'Cost center {index}',
+                'plan': 1000.0, 'actual': actual,
+            })
+        return {
+            'title_de': 'Abweichungen finden', 'title_en': 'Find deviations',
+            'description_de': 'Finde Budgetueberschreitungen.', 'description_en': 'Find budget overruns.',
+            'task_de': 'Finde die Kostenstellen ueber Plan.', 'task_en': 'Find cost centers over plan.',
+            'rows': rows,
+            'micro_learning_de': 'KI findet Ausreisser in grossen Budgetlisten schneller; pruefe die Treffer stichprobenartig nach.',
+            'micro_learning_en': 'AI spots outliers in large budget lists faster; spot-check the hits afterwards.',
+        }
+
+    def test_plan_actual_deviation_computes_totals(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        candidate = validate_task_challenge(self.plan_actual_deviation_payload(), 'plan_actual_deviation')
+        fields = {field['id']: field for field in candidate['content']['result_fields']}
+        self.assertAlmostEqual(fields['total_overrun']['solution'], 1400.0)
+        self.assertEqual(fields['count_over_threshold']['solution'], 5)
+        self.assertAlmostEqual(fields['max_deviation']['solution'], 200.0)
+
+    def duplicate_payment_hunt_payload(self):
+        rows = []
+        duplicate_amounts = [500.0, 600.0, 700.0, 800.0]
+        for pair_index, amount in enumerate(duplicate_amounts):
+            for copy_index in range(2):
+                rows.append({
+                    'date': '2026-03-01', 'invoice_number': f'DUP-{pair_index}',
+                    'vendor_de': f'Lieferant {pair_index}{"" if copy_index == 0 else " GmbH"}',
+                    'vendor_en': f'Vendor {pair_index}', 'amount': amount,
+                })
+        for index in range(16):
+            rows.append({
+                'date': '2026-03-02', 'invoice_number': f'INV-{index}',
+                'vendor_de': f'Einzellieferant {index}', 'vendor_en': f'Single vendor {index}',
+                'amount': 10.0 + index,
+            })
+        return {
+            'title_de': 'Doppelzahlungen finden', 'title_en': 'Find duplicate payments',
+            'description_de': 'Finde doppelt bezahlte Rechnungen.', 'description_en': 'Find duplicate invoice payments.',
+            'task_de': 'Finde die Doppelzahlungen.', 'task_en': 'Find the duplicate payments.',
+            'rows': rows,
+            'micro_learning_de': 'KI findet Duplikate ueber viele Zeilen zuverlaessiger als das Auge; pruefe Treffer stichprobenartig nach.',
+            'micro_learning_en': 'AI finds duplicates across many rows more reliably than the eye; spot-check hits afterwards.',
+        }
+
+    def test_duplicate_payment_hunt_computes_totals(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        candidate = validate_task_challenge(self.duplicate_payment_hunt_payload(), 'duplicate_payment_hunt')
+        fields = {field['id']: field for field in candidate['content']['result_fields']}
+        self.assertEqual(fields['duplicate_pairs_count']['solution'], 4)
+        self.assertAlmostEqual(fields['risk_amount_sum']['solution'], 2600.0)
+
+    def invoice_extraction_payload(self):
+        vendors = [
+            ('V1', 100.0, 3), ('V2', 200.0, 3), ('V3', 50.0, 3),
+        ]
+        invoices = []
+        counter = 0
+        for vendor_key, amount, count in vendors:
+            for copy_index in range(count):
+                counter += 1
+                invoices.append({
+                    'invoice_number': f'{vendor_key}-{copy_index}',
+                    'vendor_de': f'{vendor_key} GmbH', 'vendor_en': f'{vendor_key} Ltd',
+                    'date': '2026-03-01', 'amount': amount,
+                    'text_de': f'Rechnung {vendor_key}-{copy_index} ueber {amount} Euro.',
+                    'text_en': f'Invoice {vendor_key}-{copy_index} for {amount} euros.',
+                })
+        for vendor_key, amount in (('V4', 550.0), ('V5', 10.0), ('V6', 20.0)):
+            counter += 1
+            invoices.append({
+                'invoice_number': f'{vendor_key}-0',
+                'vendor_de': f'{vendor_key} GmbH', 'vendor_en': f'{vendor_key} Ltd',
+                'date': '2026-03-01', 'amount': amount,
+                'text_de': f'Rechnung {vendor_key}-0 ueber {amount} Euro.',
+                'text_en': f'Invoice {vendor_key}-0 for {amount} euros.',
+            })
+        return {
+            'title_de': 'Rechnungen extrahieren', 'title_en': 'Extract invoices',
+            'description_de': 'Lies die Rechnungstexte.', 'description_en': 'Read the invoice texts.',
+            'task_de': 'Extrahiere die geforderten Angaben.', 'task_en': 'Extract the requested facts.',
+            'invoices': invoices,
+            'micro_learning_de': 'KI extrahiert Fakten aus Fliesstext zuverlaessig; pruefe Zahlen stichprobenartig nach.',
+            'micro_learning_en': 'AI reliably extracts facts from prose text; spot-check figures afterwards.',
+        }
+
+    def test_invoice_extraction_computes_totals_and_scores_text_fields(self):
+        from accounts.services.ai_task_challenge import evaluate_task_answers, validate_task_challenge
+        candidate = validate_task_challenge(self.invoice_extraction_payload(), 'invoice_extraction')
+        content = candidate['content']
+        self.assertEqual(content['case_format'], 'prose')
+        fields = {field['id']: field for field in content['result_fields']}
+        self.assertEqual(fields['top_invoice_number']['solution'], {'de': 'V4-0', 'en': 'V4-0'})
+        self.assertEqual(fields['top_vendor']['solution'], {'de': 'V2 GmbH', 'en': 'V2 Ltd'})
+        self.assertAlmostEqual(fields['total_amount']['solution'], 1630.0)
+
+        values = {
+            'top_invoice_number': '  v4-0 ',  # different case/whitespace, must still match
+            'top_vendor': 'V2 GmbH',
+            'total_amount': 1630.0,
+        }
+        result = evaluate_task_answers(content, values, 'de')
+        self.assertTrue(result['all_correct'])
+
+        wrong_values = {**values, 'top_invoice_number': 'V1-0'}
+        wrong_result = evaluate_task_answers(content, wrong_values, 'de')
+        self.assertFalse(wrong_result['all_correct'])
+        self.assertEqual(wrong_result['correct_count'], 2)
+
+
+class AiTaskChallengeTrainingTests(TestCase):
+    def make_user(self, email):
+        user = get_user_model().objects.create_user(username=email, email=email, password='Test1234!')
+        Profile.objects.create(user=user, role=Profile.ROLE_ACCOUNTANT, onboarding_completed=True)
+        return user
+
+    def candidate(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        payload = {
+            'title_de': 'Buchungen', 'title_en': 'Bookings',
+            'description_de': 'Ordne zu.', 'description_en': 'Assign.',
+            'task_de': 'Ordne jede Zeile zu und nenne die Summe je Kategorie.',
+            'task_en': 'Assign every line and report totals.',
+            'categories_de': ['Reise', 'Buero', 'IT'], 'categories_en': ['Travel', 'Office', 'IT'],
+            'rows': [
+                {'date': '2026-03-%02d' % (i % 28 + 1), 'description_de': 'P%d' % i, 'description_en': 'I%d' % i,
+                 'amount': round(10 + i * 1.5, 2), 'category_index': i % 3}
+                for i in range(30)
+            ],
+            'micro_learning_de': 'KI beschleunigt das Kategorisieren; pruefe Stichproben stets selbst nach dem Ergebnis.',
+            'micro_learning_en': 'AI speeds up categorizing; always spot-check the assignments yourself afterwards.',
+        }
+        return validate_task_challenge(payload, 'bulk_categorization')
+
+    def test_training_generate_hides_solutions_then_submit_scores(self):
+        player = self.make_user('training-task@example.com')
+        self.client.force_login(player)
+        candidate = self.candidate()
+        with patch('accounts.views.generate_task_challenge', return_value=candidate):
+            generated = self.client.post('/api/auth/training/task-challenge/generate/', {},
+                                         content_type='application/json', secure=True)
+        self.assertEqual(generated.status_code, 200)
+        mission = generated.json()['mission']
+        challenge_id = mission['id']
+        self.assertEqual(len(mission['case_data_de']), 30)
+        for field in mission['result_fields']:
+            self.assertNotIn('solution', field)
+        # solve fully using the known candidate solutions
+        values = {field['id']: field['solution'] for field in candidate['content']['result_fields']}
+        submitted = self.client.post('/api/auth/training/task-challenge/submit/', {
+            'challenge_id': challenge_id, 'values': values, 'language': 'de',
+        }, content_type='application/json', secure=True)
+        self.assertEqual(submitted.status_code, 200)
+        result = submitted.json()['result']
+        self.assertTrue(result['correct'])
+        self.assertEqual(result['correct_count'], 3)
+        # session challenge is consumed
+        again = self.client.post('/api/auth/training/task-challenge/submit/', {
+            'challenge_id': challenge_id, 'values': values, 'language': 'de',
+        }, content_type='application/json', secure=True)
+        self.assertEqual(again.status_code, 404)
+
+    def test_training_generate_requires_authentication(self):
+        response = self.client.post('/api/auth/training/task-challenge/generate/', {},
+                                    content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 401)

@@ -141,6 +141,10 @@
       ,"promptRanking": "Prompt Ranking",
       "complianceTrafficLight": "Compliance-Ampel"
       ,"aiChatChallenge": "AI Chat Challenge"
+      ,"bulkCategorization": "Bulk-Kategorisierung"
+      ,"planActualDeviation": "Abweichungsanalyse Plan/Ist"
+      ,"duplicatePaymentHunt": "Doppelzahlungs-Jagd"
+      ,"invoiceExtraction": "Rechnungsdaten-Extraktion"
     },
     "result": {
       "correctPrefix": "Richtig.",
@@ -210,6 +214,8 @@
       "approveAllSuccess": "{{count}} Missionen wurden freigegeben.",
       "rejectAllSuccess": "{{count}} Missionen wurden verworfen.",
       "generated": "{{count}} neue Missionsvorschläge wurden erstellt.",
+      "generateTask": "KI-Praxisaufgabe generieren",
+      "taskGenerated": "Eine neue KI-Praxisaufgabe wurde als Vorschlag erstellt.",
       "loading": "Review-Missionen werden geladen...",
       "empty": "Aktuell warten keine KI-generierten Missionen auf eine Prüfung.",
       "status": "Entwurf / Review",
@@ -249,6 +255,10 @@
       "promptRanking": { "title": "Prompt Ranking", "description": "Sortiere Prompts vom schlechtesten bis zum besten Arbeitsauftrag." },
       "complianceTrafficLight": { "title": "Compliance-Ampel", "description": "Bewerte drei Szenarien einzeln als erlaubt, eingeschränkt oder verboten." }
       ,"aiChatChallenge": { "title": "AI Chat Challenge", "description": "Löse einen Finance-Fall mit höchstens drei gezielten Fragen an einen eingebauten KI-Chat." }
+      ,"bulkCategorization": { "title": "Bulk-Kategorisierung", "description": "Ordne viele Buchungszeilen mit deinem KI-Assistenten Kategorien zu und trage die Summen je Kategorie ein." }
+      ,"planActualDeviation": { "title": "Abweichungsanalyse Plan/Ist", "description": "Finde mit deinem KI-Assistenten Kostenstellen, die ihr Budget überschritten haben, und trage die Kennzahlen ein." }
+      ,"duplicatePaymentHunt": { "title": "Doppelzahlungs-Jagd", "description": "Finde mit deinem KI-Assistenten versehentliche Doppelzahlungen in einem Zahlungslauf." }
+      ,"invoiceExtraction": { "title": "Rechnungsdaten-Extraktion", "description": "Lass dir mit deinem KI-Assistenten Kennzahlen aus vielen Rechnungstexten extrahieren." }
     },
     "chat": {
       "caseData": "Falldaten",
@@ -260,6 +270,16 @@
       "message": "Deine Frage",
       "send": "Senden",
       "finalAnswers": "Finale Antworten"
+    },
+    "task": {
+      "caseData": "Falldaten",
+      "rowCount": "{{count}} Zeilen",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "hint": "Löse diese Aufgabe mit deinen eigenen Tools (z. B. Excel) und deinem KI-Assistenten wie Copilot. Kopiere die Falldaten hinein und trage anschließend nur die Ergebniswerte ein.",
+      "yourResult": "Dein Ergebnis",
+      "promptLabel": "Welchen Prompt hast du verwendet? (freiwillig)",
+      "promptHint": "Wird gespeichert, fließt aber nicht in die Bewertung ein."
     }
   },
   "agent": {

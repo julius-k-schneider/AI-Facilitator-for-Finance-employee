@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -286,14 +287,55 @@ def apply_candidate(mission, candidate):
     mission.max_points = candidate['max_points']
 
 
+WEEKDAYS_PER_WEEK = 5
+
+
+def task_days_per_week():
+    try:
+        return max(0, int(os.environ.get('KICONNECT_TASK_DAYS_PER_WEEK', 2)))
+    except (TypeError, ValueError):
+        return 2
+
+
+def generate_task_day_candidates(task_days):
+    """Generate one task challenge per requested day.
+
+    Task challenges use a separate generator with a different schema, so they are
+    produced one call at a time. Returns (task_candidates, failed_days). A day whose
+    task generation fails is returned separately so the caller can fall back to a
+    quiz day for it instead of leaving the day empty.
+    """
+    from accounts.services.ai_task_challenge import generate_task_challenge
+
+    candidates = []
+    failed_days = []
+    for day in task_days:
+        try:
+            candidate = generate_task_challenge()
+        except AiMissionGenerationError as exception:
+            logger.warning('Task challenge generation failed for %s, falling back to a quiz day: %s', day.isoformat(), exception)
+            failed_days.append(day)
+            continue
+        candidate['scheduled_date'] = day
+        candidates.append(candidate)
+    return candidates, failed_days
+
+
 def generate_next_week(created_by, force=False, reference_date=None, week_start=None):
+    """Generate missions for the Monday-Friday workweek; weekends are never scheduled.
+
+    Each open weekday becomes either a quiz day (2 quiz missions) or a task day
+    (1 task challenge) - never a mix of both on the same day. A fixed number of
+    weekdays (task_days_per_week()) become task days; the rest are quiz days.
+    """
     if week_start is None:
         week_start, week_end = next_calendar_week(reference_date)
     else:
         week_end = week_start + timedelta(days=6)
-    target_slots = {}
     today = timezone.localdate()
-    for offset in range(7):
+
+    open_weekdays = []
+    for offset in range(WEEKDAYS_PER_WEEK):
         day = week_start + timedelta(days=offset)
         if day < today or not is_business_day(day):
             continue
@@ -303,16 +345,27 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
         )
         if force:
             occupied_missions = occupied_missions.exclude(status=Mission.STATUS_REVIEW, generated_by_ai=True)
-        occupied = occupied_missions.count()
-        if occupied < 2:
-            target_slots[day] = 2 - occupied
+        if occupied_missions.exists():
+            continue
+        open_weekdays.append(day)
 
-    candidates = generate_candidates_parallel(target_slots)
+    wanted_task_days = min(task_days_per_week(), len(open_weekdays))
+    task_days = set(random.sample(open_weekdays, wanted_task_days)) if wanted_task_days else set()
+    quiz_days = [day for day in open_weekdays if day not in task_days]
+
+    task_candidates, failed_task_days = generate_task_day_candidates(task_days)
+    quiz_slots = {day: 2 for day in [*quiz_days, *failed_task_days]}
+    candidates = generate_candidates_parallel(quiz_slots) if quiz_slots else []
+    candidates.extend(task_candidates)
+
+    expected_counts = {day: 1 for day in task_days if day not in failed_task_days}
+    expected_counts.update({day: 2 for day in quiz_slots})
+
     with transaction.atomic():
         missions = Mission.objects.select_for_update().filter(scheduled_date__range=(week_start, week_end))
         if force:
             missions.filter(status=Mission.STATUS_REVIEW, generated_by_ai=True).delete()
-        for day, expected_count in target_slots.items():
+        for day, expected_count in expected_counts.items():
             occupied = Mission.objects.filter(
                 scheduled_date=day,
                 status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
@@ -339,7 +392,12 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
 def regenerate_review_mission(mission, requested_by):
     if mission.status != Mission.STATUS_REVIEW or not mission.generated_by_ai:
         raise AiMissionGenerationError('Only AI review missions can be regenerated')
-    candidate = generate_candidates({mission.scheduled_date: 1})[0]
+    if mission.mission_type in Mission.TASK_TYPES:
+        from accounts.services.ai_task_challenge import generate_task_challenge
+        candidate = generate_task_challenge(mission.mission_type)
+        candidate['scheduled_date'] = mission.scheduled_date
+    else:
+        candidate = generate_candidates({mission.scheduled_date: 1})[0]
     with transaction.atomic():
         locked = Mission.objects.select_for_update().get(id=mission.id)
         apply_candidate(locked, candidate)

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ActionIcon, Alert, Badge, Box, Button, Group, Modal, NumberInput, Paper, Select,
+  ActionIcon, Alert, Badge, Box, Button, Group, Menu, Modal, NumberInput, Paper, Select,
   SegmentedControl, SimpleGrid, Stack, Switch, Tabs, Text, Textarea, TextInput, ThemeIcon, Title,
 } from '@mantine/core'
 import {
@@ -12,11 +12,12 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
 import {
-  approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, getArchivedMissions, getAvailableMissions, getDailyMissions,
+  approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, generateTaskChallenge,
+  getArchivedMissions, getAvailableMissions, getDailyMissions,
   getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, updateMission,
   rejectAllReviewMissions,
 } from '../services/missionService'
-import { createMissionTypeDefaults, createTestMissions, defaultMissionType, getMissionType, missionTypes } from './missions/missionTypes'
+import { createMissionTypeDefaults, createTestMissions, defaultMissionType, getMissionType, missionTypes, taskChallengeTypes } from './missions/missionTypes'
 import MissionRunner from './missions/MissionRunner'
 import './Missions.css'
 
@@ -382,7 +383,7 @@ function Creator({ opened, onClose, onCreated }) {
             </Stack>
           </Paper>)}
           </SimpleGrid>
-          {preview.can_edit && !preview.has_attempts && <Button variant="light" leftSection={<IconEdit size={16} />} onClick={() => editMission(preview)}>{t('missions.creator.edit')}</Button>}
+          {preview.can_edit && !preview.has_attempts && getMissionType(preview.type).Editor && <Button variant="light" leftSection={<IconEdit size={16} />} onClick={() => editMission(preview)}>{t('missions.creator.edit')}</Button>}
         </Stack>}
       </Modal>
     </Modal>
@@ -453,6 +454,21 @@ function MissionReview({ enabled, onPublished }) {
     }
   }
 
+  const generateTask = async (missionType) => {
+    setGenerating(true)
+    setError('')
+    setMessage('')
+    try {
+      await generateTaskChallenge(missionType, generationWeek)
+      setMessage(t('missions.review.taskGenerated'))
+      await Promise.all([loadReview(), loadGenerationSchedule()])
+    } catch (nextError) {
+      setError(nextError.message)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   const runAction = async (mission, action) => {
     if (action === 'reject' && !window.confirm(t('missions.review.rejectConfirm', { title: mission.title_de }))) return
     setActiveAction(`${action}-${mission.id}`)
@@ -506,6 +522,20 @@ function MissionReview({ enabled, onPublished }) {
             <Button color="brand" leftSection={<IconSparkles size={17} />} loading={generating} onClick={generate}>
               {t('missions.review.generate')}
             </Button>
+            <Menu position="bottom-end" withinPortal>
+              <Menu.Target>
+                <Button color="brand" variant="light" leftSection={<IconTargetArrow size={17} />} loading={generating}>
+                  {t('missions.review.generateTask')}
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {taskChallengeTypes.map((definition) => (
+                  <Menu.Item key={definition.id} onClick={() => generateTask(definition.id)}>
+                    {t(`missions.types.${definition.labelKey}`)}
+                  </Menu.Item>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
             <Group gap="xs" grow>
               <Button color="green" variant="light" leftSection={<IconCheck size={16} />} disabled={missions.length === 0} loading={activeAction === 'approve-all'} onClick={() => runBulkAction('approve')}>{t('missions.review.approveAll')}</Button>
               <Button color="red" variant="light" leftSection={<IconX size={16} />} disabled={missions.length === 0} loading={activeAction === 'reject-all'} onClick={() => runBulkAction('reject')}>{t('missions.review.rejectAll')}</Button>

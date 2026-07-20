@@ -3,11 +3,31 @@ import { Alert, Badge, Box, Button, Group, Paper, SimpleGrid, Stack, Text, Theme
 import { IconBrain, IconPlayerPlay, IconSparkles } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import MissionRunner from './missions/MissionRunner'
-import { trainingMissionTypes } from './missions/missionTypes'
-import { generateChatChallenge, generateTrainingMission } from '../services/trainingService'
+import { taskChallengeTypes, trainingMissionTypes } from './missions/missionTypes'
+import { generateChatChallenge, generateTaskChallenge, generateTrainingMission } from '../services/trainingService'
+
+const taskChallengeTypeIds = new Set(taskChallengeTypes.map((definition) => definition.id))
 
 function localizeMission(raw, language) {
   const text = (value) => value?.[language] || value?.de || value?.en || ''
+  if (taskChallengeTypeIds.has(raw.type)) {
+    return {
+      id: `training-${raw.id}`, session_id: raw.id, language, type: raw.type,
+      title: raw[`title_${language}`], description: raw[`description_${language}`], max_points: 0,
+      content: {
+        question: raw[`task_${language}`],
+        case_data: raw[`case_data_${language}`],
+        case_format: raw.case_format,
+        result_fields: raw.result_fields.map((field) => ({
+          id: field.id,
+          type: field.type,
+          label: field[`label_${language}`],
+          unit: field.unit,
+        })),
+      },
+      test_solution: { micro_learning: raw[`micro_learning_${language}`] },
+    }
+  }
   if (raw.type === 'ai_chat_challenge') {
     return {
       id: `training-${raw.id}`, session_id: raw.id, language, type: raw.type,
@@ -60,7 +80,11 @@ export default function Training() {
     setGeneratingType(type)
     setError('')
     try {
-      setRawMission(type === 'ai_chat_challenge' ? await generateChatChallenge() : await generateTrainingMission(type))
+      setRawMission(
+        type === 'ai_chat_challenge' ? await generateChatChallenge()
+          : taskChallengeTypeIds.has(type) ? await generateTaskChallenge(type)
+            : await generateTrainingMission(type),
+      )
     } catch (nextError) {
       setError(nextError.message)
     } finally {

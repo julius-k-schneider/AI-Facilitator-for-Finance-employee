@@ -48,6 +48,10 @@ class Mission(models.Model):
     TYPE_PROMPT_SELECTION = 'prompt_selection'
     TYPE_PROMPT_RANKING = 'prompt_ranking'
     TYPE_COMPLIANCE_TRAFFIC_LIGHT = 'compliance_traffic_light'
+    TYPE_BULK_CATEGORIZATION = 'bulk_categorization'
+    TYPE_PLAN_ACTUAL_DEVIATION = 'plan_actual_deviation'
+    TYPE_DUPLICATE_PAYMENT_HUNT = 'duplicate_payment_hunt'
+    TYPE_INVOICE_EXTRACTION = 'invoice_extraction'
     TYPE_CHOICES = [
         (TYPE_SINGLE_CHOICE, 'Single Choice'),
         (TYPE_MULTIPLE_CHOICE, 'Multiple Choice'),
@@ -55,7 +59,12 @@ class Mission(models.Model):
         (TYPE_PROMPT_SELECTION, 'Prompt Selection'),
         (TYPE_PROMPT_RANKING, 'Prompt Ranking'),
         (TYPE_COMPLIANCE_TRAFFIC_LIGHT, 'Compliance Traffic Light'),
+        (TYPE_BULK_CATEGORIZATION, 'Bulk Categorization'),
+        (TYPE_PLAN_ACTUAL_DEVIATION, 'Plan vs. Actual Deviation'),
+        (TYPE_DUPLICATE_PAYMENT_HUNT, 'Duplicate Payment Hunt'),
+        (TYPE_INVOICE_EXTRACTION, 'Invoice Extraction'),
     ]
+    # Quiz-style types share a common choice/index scoring model.
     CHOICE_TYPES = {
         TYPE_SINGLE_CHOICE,
         TYPE_MULTIPLE_CHOICE,
@@ -63,6 +72,13 @@ class Mission(models.Model):
         TYPE_PROMPT_SELECTION,
         TYPE_PROMPT_RANKING,
         TYPE_COMPLIANCE_TRAFFIC_LIGHT,
+    }
+    # Task-style types carry a case plus typed result fields scored deterministically.
+    TASK_TYPES = {
+        TYPE_BULK_CATEGORIZATION,
+        TYPE_PLAN_ACTUAL_DEVIATION,
+        TYPE_DUPLICATE_PAYMENT_HUNT,
+        TYPE_INVOICE_EXTRACTION,
     }
 
     STATUS_REVIEW = 'review'
