@@ -1,14 +1,22 @@
 from django.contrib import admin
 
-from .models import DailyMissionReminder, Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
+from .models import (
+    DailyMissionReminder,
+    Mission,
+    MissionAssignment,
+    MissionAttempt,
+    Profile,
+    SkillProgressionSettings,
+    WeeklyLeaderboardSnapshot,
+)
 
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role', 'onboarding_completed', 'total_points', 'progress_updated_at')
-    list_filter = ('role', 'onboarding_completed')
+    list_display = ('user', 'role', 'skill_level', 'onboarding_completed', 'total_points', 'progress_updated_at')
+    list_filter = ('role', 'skill_level', 'onboarding_completed')
     search_fields = ('user__username', 'user__email')
-    readonly_fields = ('onboarding_completed_at', 'progress_updated_at')
+    readonly_fields = ('onboarding_completed_at', 'progress_updated_at', 'skill_level_entered_at')
 
 
 @admin.register(Mission)
@@ -20,14 +28,15 @@ class MissionAdmin(admin.ModelAdmin):
 
 @admin.register(MissionAttempt)
 class MissionAttemptAdmin(admin.ModelAdmin):
-    list_display = ('user', 'mission', 'score', 'completed_at')
-    list_filter = ('mission__scheduled_date',)
+    list_display = ('user', 'mission', 'difficulty', 'score', 'max_points', 'completed_at')
+    list_filter = ('difficulty', 'mission__scheduled_date')
     readonly_fields = ('completed_at',)
 
 
 @admin.register(WeeklyLeaderboardSnapshot)
 class WeeklyLeaderboardSnapshotAdmin(admin.ModelAdmin):
-    list_display = ('week_start', 'week_end', 'created_at')
+    list_display = ('week_start', 'week_end', 'difficulty', 'created_at')
+    list_filter = ('difficulty',)
     readonly_fields = ('created_at',)
 
 
@@ -37,3 +46,28 @@ class DailyMissionReminderAdmin(admin.ModelAdmin):
     list_filter = ('reminder_date',)
     search_fields = ('user__username', 'user__email')
     readonly_fields = ('sent_at',)
+
+
+@admin.register(MissionAssignment)
+class MissionAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('user', 'mission', 'difficulty', 'assigned_at')
+    list_filter = ('difficulty',)
+    readonly_fields = ('assigned_at',)
+
+
+@admin.register(SkillProgressionSettings)
+class SkillProgressionSettingsAdmin(admin.ModelAdmin):
+    list_display = (
+        'automatic_progression_enabled',
+        'evaluation_window',
+        'minimum_missions',
+        'promotion_threshold',
+        'demotion_threshold',
+        'updated_at',
+    )
+
+    def has_add_permission(self, request):
+        return not SkillProgressionSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False

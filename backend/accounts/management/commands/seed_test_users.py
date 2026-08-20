@@ -93,7 +93,7 @@ class Command(BaseCommand):
                 created_by=creator,
                 title_en=item['title_en'],
             ).first()
-            if mission is None and Mission.objects.filter(scheduled_date=today).count() >= 2:
+            if mission is None and Mission.objects.filter(scheduled_date=today).exists():
                 continue
             if mission is None:
                 mission = Mission(scheduled_date=today, created_by=creator)
@@ -109,7 +109,7 @@ class Command(BaseCommand):
             }
             mission.max_points = item['max_points']
             mission.save()
-        self.stdout.write(self.style.SUCCESS('Upserted two bilingual missions for today'))
+        self.stdout.write(self.style.SUCCESS('Upserted one bilingual mission for today'))
 
         current_week_start = today - timedelta(days=today.weekday())
         users = list(User.objects.filter(username__in=[item[0] for item in SEED_USERS]))
@@ -136,6 +136,7 @@ class Command(BaseCommand):
                 entry['rank'] = rank
             WeeklyLeaderboardSnapshot.objects.update_or_create(
                 week_start=week_start,
+                difficulty=Mission.DIFFICULTY_EASY,
                 defaults={'week_end': week_start + timedelta(days=6), 'entries': entries},
             )
         self.stdout.write(self.style.SUCCESS('Upserted leaderboard snapshots for the previous two weeks'))

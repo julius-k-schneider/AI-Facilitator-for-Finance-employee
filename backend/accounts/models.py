@@ -1,5 +1,8 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 class Profile(models.Model):
@@ -17,12 +20,23 @@ class Profile(models.Model):
         (ROLE_ADMIN, 'Admin'),
     ]
 
+    SKILL_BEGINNER = 'beginner'
+    SKILL_ADVANCED = 'advanced'
+    SKILL_PRO = 'pro'
+    SKILL_LEVEL_CHOICES = [
+        (SKILL_BEGINNER, 'Beginner'),
+        (SKILL_ADVANCED, 'Advanced'),
+        (SKILL_PRO, 'Pro'),
+    ]
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='profile',
     )
     role = models.CharField(max_length=32, choices=ROLE_CHOICES, default=ROLE_ACCOUNTANT)
+    skill_level = models.CharField(max_length=16, choices=SKILL_LEVEL_CHOICES, default=SKILL_BEGINNER)
+    skill_level_entered_at = models.DateTimeField(default=timezone.now)
     onboarding_completed = models.BooleanField(default=False)
     onboarding_completed_at = models.DateTimeField(null=True, blank=True)
     onboarding_progress = models.JSONField(default=list, blank=True)
@@ -42,6 +56,16 @@ class Profile(models.Model):
 
 
 class Mission(models.Model):
+    DIFFICULTY_EASY = 'easy'
+    DIFFICULTY_MEDIUM = 'medium'
+    DIFFICULTY_HARD = 'hard'
+    DIFFICULTY_CHOICES = [
+        (DIFFICULTY_EASY, 'Easy'),
+        (DIFFICULTY_MEDIUM, 'Medium'),
+        (DIFFICULTY_HARD, 'Hard'),
+    ]
+    DIFFICULTIES = tuple(value for value, _label in DIFFICULTY_CHOICES)
+
     TYPE_SINGLE_CHOICE = 'single_choice'
     TYPE_MULTIPLE_CHOICE = 'multiple_choice'
     TYPE_COMPLIANCE_DECISION = 'compliance_decision'
@@ -98,6 +122,11 @@ class Mission(models.Model):
     description_en = models.TextField(blank=True)
     content = models.JSONField(default=dict)
     max_points = models.PositiveIntegerField(default=100)
+    topic_de = models.CharField(max_length=200, blank=True, default='')
+    topic_en = models.CharField(max_length=200, blank=True, default='')
+    learning_objective_de = models.TextField(blank=True, default='')
+    learning_objective_en = models.TextField(blank=True, default='')
+    variants = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PUBLISHED, db_index=True)
     generated_by_ai = models.BooleanField(default=False)
     generation_batch_id = models.UUIDField(null=True, blank=True, db_index=True)
@@ -122,6 +151,10 @@ class Mission(models.Model):
     def __str__(self):
         return f'{self.scheduled_date}: {self.title_de}'
 
+    @property
+    def has_difficulty_variants(self):
+        return isinstance(self.variants, dict) and set(self.variants) == set(self.DIFFICULTIES)
+
 
 class MissionAttempt(models.Model):
     user = models.ForeignKey(
@@ -132,6 +165,14 @@ class MissionAttempt(models.Model):
     mission = models.ForeignKey(Mission, on_delete=models.CASCADE, related_name='attempts')
     answer = models.JSONField(default=dict)
     score = models.PositiveIntegerField(default=0)
+    max_points = models.PositiveIntegerField(default=100)
+    difficulty = models.CharField(
+        max_length=16,
+        choices=Mission.DIFFICULTY_CHOICES,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
     completed_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -142,6 +183,62 @@ class MissionAttempt(models.Model):
 
     def __str__(self):
         return f'{self.user} - {self.mission} ({self.score})'
+
+
+class MissionAssignment(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='mission_assignments',
+    )
+    mission = models.ForeignKey(Mission, on_delete=models.CASCADE, related_name='assignments')
+    difficulty = models.CharField(max_length=16, choices=Mission.DIFFICULTY_CHOICES)
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=('user', 'mission'), name='unique_user_mission_assignment'),
+        ]
+        ordering = ('assigned_at',)
+
+    def __str__(self):
+        return f'{self.user} - {self.mission} ({self.difficulty})'
+
+
+class SkillProgressionSettings(models.Model):
+    automatic_progression_enabled = models.BooleanField(default=True)
+    evaluation_window = models.PositiveIntegerField(default=10, validators=[MinValueValidator(1)])
+    minimum_missions = models.PositiveIntegerField(default=10, validators=[MinValueValidator(1)])
+    promotion_threshold = models.PositiveSmallIntegerField(
+        default=80,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    demotion_threshold = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'skill progression settings'
+        verbose_name_plural = 'skill progression settings'
+
+    def clean(self):
+        if self.demotion_threshold >= self.promotion_threshold:
+            raise ValidationError({'demotion_threshold': 'Must be lower than the promotion threshold.'})
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        settings_object, _created = cls.objects.get_or_create(pk=1)
+        return settings_object
+
+    def __str__(self):
+        return 'Global skill progression settings'
 
 
 class DailyMissionReminder(models.Model):
@@ -166,13 +263,17 @@ class DailyMissionReminder(models.Model):
 
 
 class WeeklyLeaderboardSnapshot(models.Model):
-    week_start = models.DateField(unique=True)
+    week_start = models.DateField()
     week_end = models.DateField()
+    difficulty = models.CharField(max_length=16, choices=Mission.DIFFICULTY_CHOICES, blank=True, default='')
     entries = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ('-week_start',)
+        constraints = [
+            models.UniqueConstraint(fields=('week_start', 'difficulty'), name='unique_weekly_leaderboard_difficulty'),
+        ]
 
     def __str__(self):
         return f'{self.week_start} - {self.week_end}'

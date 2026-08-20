@@ -11,7 +11,15 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import AgentChat, Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
+from .models import (
+    AgentChat,
+    Mission,
+    MissionAssignment,
+    MissionAttempt,
+    Profile,
+    SkillProgressionSettings,
+    WeeklyLeaderboardSnapshot,
+)
 from .services.ai_mission_generator import (
     AiMissionGenerationError,
     generate_training_candidate,
@@ -23,14 +31,25 @@ from .services.ai_task_challenge import (
     TASK_CHALLENGE_TYPES,
     evaluate_task_answers,
     generate_task_challenge,
+    generate_task_challenge_variants,
     public_content as task_public_content,
 )
 from .services.email_notifications import send_published_mission_email, send_published_mission_emails
 from .services.personal_agent import personal_agent_reply
+from .services.skill_progression import (
+    difficulty_for_skill,
+    evaluate_skill_progression,
+    progression_snapshot,
+    set_skill_level_manually,
+    skill_for_difficulty,
+)
 
 
 User = get_user_model()
 VALID_ROLES = {choice for choice, _ in Profile.ROLE_CHOICES}
+SELF_REGISTRATION_ROLES = {Profile.ROLE_CONTROLLER, Profile.ROLE_ACCOUNTANT}
+VALID_SKILL_LEVELS = {choice for choice, _ in Profile.SKILL_LEVEL_CHOICES}
+VALID_DIFFICULTIES = {choice for choice, _ in Mission.DIFFICULTY_CHOICES}
 MISSION_AVAILABILITY_DEADLINE_HOUR = 12
 
 
@@ -112,8 +131,8 @@ def streak_payload(user):
     for mission_id, scheduled_date in Mission.objects.filter(
         status=Mission.STATUS_PUBLISHED,
         scheduled_date__lte=today,
-    ).values_list('id', 'scheduled_date'):
-        missions_by_date.setdefault(scheduled_date, set()).add(mission_id)
+    ).order_by('scheduled_date', 'created_at', 'id').values_list('id', 'scheduled_date'):
+        missions_by_date.setdefault(scheduled_date, {mission_id})
 
     attempted_ids = {
         mission_id
@@ -127,7 +146,7 @@ def streak_payload(user):
     completed_dates = {
         scheduled_date
         for scheduled_date, mission_ids in missions_by_date.items()
-        if len(mission_ids) >= 2 and mission_ids.issubset(attempted_ids)
+        if mission_ids and mission_ids.issubset(attempted_ids)
     }
 
     maximum = 0
@@ -169,13 +188,16 @@ def rank_entries(entries):
     return entries
 
 
-def weekly_leaderboard_entries(week_start, week_end):
-    users = User.objects.order_by('first_name', 'last_name', 'username')
+def weekly_leaderboard_entries(week_start, week_end, difficulty):
+    users = User.objects.filter(
+        profile__skill_level=skill_for_difficulty(difficulty),
+    ).order_by('first_name', 'last_name', 'username')
     entries = []
     for user in users:
         attempts = MissionAttempt.objects.filter(
             user=user,
             completed_at__date__range=(week_start, week_end),
+            difficulty=difficulty,
         )
         points = sum(attempts.values_list('score', flat=True))
         completed = attempts.count()
@@ -198,13 +220,15 @@ def archive_completed_weeks():
     while candidate_start < current_week_start:
         candidate_end = candidate_start + timedelta(days=6)
         if MissionAttempt.objects.filter(completed_at__date__range=(candidate_start, candidate_end)).exists():
-            WeeklyLeaderboardSnapshot.objects.get_or_create(
-                week_start=candidate_start,
-                defaults={
-                    'week_end': candidate_end,
-                    'entries': weekly_leaderboard_entries(candidate_start, candidate_end),
-                },
-            )
+            for difficulty in Mission.DIFFICULTIES:
+                WeeklyLeaderboardSnapshot.objects.get_or_create(
+                    week_start=candidate_start,
+                    difficulty=difficulty,
+                    defaults={
+                        'week_end': candidate_end,
+                        'entries': weekly_leaderboard_entries(candidate_start, candidate_end, difficulty),
+                    },
+                )
         candidate_start += timedelta(days=7)
 
 
@@ -222,6 +246,9 @@ def progress_payload(profile):
         'completed_mission_count': legacy_completed + completed_attempts,
         'total_points': total_points,
         'level': level_for_points(total_points),
+        'skill_level': profile.skill_level,
+        'difficulty': difficulty_for_skill(profile.skill_level),
+        'skill_progression': progression_snapshot(profile),
         **streaks,
         'updated_at': profile.progress_updated_at.isoformat() if profile.progress_updated_at else None,
     }
@@ -280,16 +307,55 @@ def user_mission_attempt(mission, user):
     return mission.attempts.filter(user=user).first()
 
 
-def mission_payload(mission, user, language='de', include_content=True):
+def assigned_mission_difficulty(mission, user, create=False):
     attempt = user_mission_attempt(mission, user)
-    content = mission.content or {}
+    if attempt is not None and attempt.difficulty in VALID_DIFFICULTIES:
+        return attempt.difficulty
+    if not mission.has_difficulty_variants:
+        return None
+    assignment = MissionAssignment.objects.filter(user=user, mission=mission).first()
+    if assignment is not None:
+        return assignment.difficulty
+    if not create:
+        return difficulty_for_skill(ensure_profile(user).skill_level)
+    assignment, _created = MissionAssignment.objects.get_or_create(
+        user=user,
+        mission=mission,
+        defaults={'difficulty': difficulty_for_skill(ensure_profile(user).skill_level)},
+    )
+    return assignment.difficulty
+
+
+def mission_variant(mission, user, create_assignment=False):
+    difficulty = assigned_mission_difficulty(mission, user, create=create_assignment)
+    if difficulty and mission.has_difficulty_variants:
+        variant = mission.variants.get(difficulty)
+        if isinstance(variant, dict):
+            return difficulty, variant
+    return None, {
+        'title_de': mission.title_de,
+        'title_en': mission.title_en,
+        'description_de': mission.description_de,
+        'description_en': mission.description_en,
+        'content': mission.content or {},
+        'max_points': mission.max_points,
+    }
+
+
+def mission_payload(mission, user, language='de', include_content=True, create_assignment=False):
+    attempt = user_mission_attempt(mission, user)
+    difficulty, variant = mission_variant(mission, user, create_assignment=create_assignment)
+    content = variant.get('content') or {}
     payload = {
         'id': mission.id,
         'type': mission.mission_type,
         'scheduled_date': mission.scheduled_date.isoformat(),
-        'title': mission.title_en if language == 'en' else mission.title_de,
-        'description': mission.description_en if language == 'en' else mission.description_de,
-        'max_points': mission.max_points,
+        'title': variant.get('title_en') if language == 'en' else variant.get('title_de'),
+        'description': variant.get('description_en') if language == 'en' else variant.get('description_de'),
+        'max_points': variant.get('max_points', mission.max_points),
+        'difficulty': difficulty,
+        'topic': mission.topic_en if language == 'en' else mission.topic_de,
+        'learning_objective': mission.learning_objective_en if language == 'en' else mission.learning_objective_de,
         'completed': attempt is not None,
         'score': attempt.score if attempt else None,
     }
@@ -347,8 +413,8 @@ def mission_archive_payload(mission, user, language='de'):
         }
         payload['result'] = {
             'score': attempt.score,
-            'max_points': mission.max_points,
-            'correct': attempt.score == mission.max_points,
+            'max_points': attempt.max_points,
+            'correct': attempt.score == attempt.max_points,
         }
     return payload
 
@@ -363,6 +429,12 @@ def mission_schedule_payload(mission, user):
         'title_en': mission.title_en,
         'description_de': mission.description_de,
         'description_en': mission.description_en,
+        'topic_de': mission.topic_de,
+        'topic_en': mission.topic_en,
+        'learning_objective_de': mission.learning_objective_de,
+        'learning_objective_en': mission.learning_objective_en,
+        'variants': mission.variants,
+        'has_difficulty_variants': mission.has_difficulty_variants,
         'question_de': translated(content.get('question') or content.get('task') or {}, 'de'),
         'question_en': translated(content.get('question') or content.get('task') or {}, 'en'),
         'case_format': content.get('case_format', 'table'),
@@ -416,22 +488,33 @@ def parse_iso_date(value):
         return None
 
 
-def validate_choice_mission_data(data, allow_past_date=False):
+MANUAL_MISSION_TYPES = {
+    Mission.TYPE_SINGLE_CHOICE,
+    Mission.TYPE_MULTIPLE_CHOICE,
+    Mission.TYPE_COMPLIANCE_DECISION,
+    Mission.TYPE_PROMPT_SELECTION,
+    Mission.TYPE_PROMPT_RANKING,
+    Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT,
+}
+
+
+def validate_mission_identity(data, allow_past_date=False):
     scheduled_date = parse_iso_date(data.get('scheduled_date'))
     mission_type = data.get('type')
-    allowed_types = {
-        Mission.TYPE_SINGLE_CHOICE,
-        Mission.TYPE_MULTIPLE_CHOICE,
-        Mission.TYPE_PROMPT_SELECTION,
-        Mission.TYPE_PROMPT_RANKING,
-        Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT,
-    }
     if not scheduled_date or (not allow_past_date and scheduled_date < timezone.localdate()):
         return None, 'scheduled date must be today or later'
     if not is_business_day(scheduled_date):
         return None, 'scheduled date must be a weekday'
-    if mission_type not in allowed_types:
+    if mission_type not in MANUAL_MISSION_TYPES:
         return None, 'unsupported mission type'
+    return (mission_type, scheduled_date), None
+
+
+def validate_choice_mission_data(data, allow_past_date=False):
+    identity, identity_error = validate_mission_identity(data, allow_past_date)
+    if identity_error:
+        return None, identity_error
+    mission_type, scheduled_date = identity
 
     required_text = (
         'title_de', 'title_en', 'description_de', 'description_en', 'question_de', 'question_en',
@@ -562,6 +645,56 @@ def validate_choice_mission_data(data, allow_past_date=False):
     }, None
 
 
+def validate_manual_mission_data(data, allow_past_date=False):
+    identity, identity_error = validate_mission_identity(data, allow_past_date)
+    if identity_error:
+        return None, identity_error
+    mission_type, scheduled_date = identity
+
+    shared_fields = ('topic_de', 'topic_en', 'learning_objective_de', 'learning_objective_en')
+    if any(not str(data.get(field, '')).strip() for field in shared_fields):
+        return None, 'all bilingual topic and learning objective fields are required'
+
+    raw_variants = data.get('variants')
+    if not isinstance(raw_variants, dict) or set(raw_variants) != set(Mission.DIFFICULTIES):
+        return None, 'exactly easy, medium, and hard variants are required'
+
+    variants = {}
+    for difficulty in Mission.DIFFICULTIES:
+        raw_variant = raw_variants[difficulty]
+        if not isinstance(raw_variant, dict):
+            return None, f'{difficulty} variant must be an object'
+        variant_values, variant_error = validate_choice_mission_data({
+            **raw_variant,
+            'type': mission_type,
+            'scheduled_date': scheduled_date.isoformat(),
+        }, allow_past_date=allow_past_date)
+        if variant_error:
+            return None, f'{difficulty} variant: {variant_error}'
+        variants[difficulty] = {
+            'title_de': variant_values['title_de'],
+            'title_en': variant_values['title_en'],
+            'description_de': variant_values['description_de'],
+            'description_en': variant_values['description_en'],
+            'content': variant_values['content'],
+            'max_points': variant_values['max_points'],
+        }
+
+    easy = variants[Mission.DIFFICULTY_EASY]
+    return {
+        'mission_type': mission_type,
+        'scheduled_date': scheduled_date,
+        'topic_de': str(data['topic_de']).strip(),
+        'topic_en': str(data['topic_en']).strip(),
+        'learning_objective_de': str(data['learning_objective_de']).strip(),
+        'learning_objective_en': str(data['learning_objective_en']).strip(),
+        'variants': variants,
+        # Keep the easy variant as the legacy schedule/review fallback. Learner
+        # delivery always resolves the persisted assignment from ``variants``.
+        **easy,
+    }, None
+
+
 def user_payload(user):
     profile = ensure_profile(user)
     return {
@@ -572,6 +705,9 @@ def user_payload(user):
         'last_name': user.last_name,
         'role': profile.role,
         'role_display': profile.get_role_display(),
+        'skill_level': profile.skill_level,
+        'skill_level_display': profile.get_skill_level_display(),
+        'skill_progression': progression_snapshot(profile),
         'onboarding_completed': profile.onboarding_completed,
         'onboarding_completed_at': profile.onboarding_completed_at.isoformat() if profile.onboarding_completed_at else None,
         'onboarding_progress': profile.onboarding_progress or [],
@@ -617,8 +753,8 @@ def user_view(request):
 
 @require_http_methods(['GET'])
 def users_view(request):
-    if not request.user.is_authenticated:
-        return JsonResponse({'error': 'authentication required'}, status=401)
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
     users = User.objects.order_by('first_name', 'last_name', 'email', 'username')
     return JsonResponse({'users': [user_payload(user) for user in users]})
 
@@ -644,6 +780,64 @@ def update_user_role_view(request, user_id):
     profile.role = role
     profile.save(update_fields=['role'])
     return JsonResponse({'user': user_payload(target)})
+
+
+@require_http_methods(['PATCH'])
+@csrf_exempt
+def update_user_skill_level_view(request, user_id):
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    skill_level = parse_json(request).get('skill_level')
+    if skill_level not in VALID_SKILL_LEVELS:
+        return JsonResponse({'error': 'invalid skill level'}, status=400)
+    target = User.objects.filter(id=user_id).first()
+    if target is None:
+        return JsonResponse({'error': 'user not found'}, status=404)
+    profile, _changed = set_skill_level_manually(ensure_profile(target), skill_level)
+    return JsonResponse({'user': user_payload(profile.user)})
+
+
+def progression_settings_payload(settings_object):
+    return {
+        'automatic_progression_enabled': settings_object.automatic_progression_enabled,
+        'evaluation_window': settings_object.evaluation_window,
+        'minimum_missions': settings_object.minimum_missions,
+        'promotion_threshold': settings_object.promotion_threshold,
+        'demotion_threshold': settings_object.demotion_threshold,
+        'updated_at': settings_object.updated_at.isoformat() if settings_object.updated_at else None,
+    }
+
+
+@require_http_methods(['GET', 'PATCH'])
+@csrf_exempt
+def progression_settings_view(request):
+    if not is_admin(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    settings_object = SkillProgressionSettings.load()
+    if request.method == 'GET':
+        return JsonResponse({'settings': progression_settings_payload(settings_object)})
+    data = parse_json(request)
+    enabled = data.get('automatic_progression_enabled')
+    if not isinstance(enabled, bool):
+        return JsonResponse({'error': 'automatic progression must be true or false'}, status=400)
+    try:
+        evaluation_window = int(data.get('evaluation_window'))
+        minimum_missions = int(data.get('minimum_missions'))
+        promotion_threshold = int(data.get('promotion_threshold'))
+        demotion_threshold = int(data.get('demotion_threshold'))
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'progression values must be integers'}, status=400)
+    if evaluation_window < 1 or minimum_missions < 1:
+        return JsonResponse({'error': 'mission counts must be positive'}, status=400)
+    if not 0 <= demotion_threshold < promotion_threshold <= 100:
+        return JsonResponse({'error': 'thresholds must satisfy 0 <= demotion < promotion <= 100'}, status=400)
+    settings_object.automatic_progression_enabled = enabled
+    settings_object.evaluation_window = evaluation_window
+    settings_object.minimum_missions = minimum_missions
+    settings_object.promotion_threshold = promotion_threshold
+    settings_object.demotion_threshold = demotion_threshold
+    settings_object.save()
+    return JsonResponse({'settings': progression_settings_payload(settings_object)})
 
 
 @require_http_methods(['DELETE'])
@@ -679,7 +873,7 @@ def register_view(request):
 
     if not all([username, password, email, first_name, last_name]):
         return JsonResponse({'error': 'all fields required'}, status=400)
-    if role and role not in VALID_ROLES:
+    if role and role not in SELF_REGISTRATION_ROLES:
         return JsonResponse({'error': 'invalid role'}, status=400)
     if User.objects.filter(username=username).exists() or User.objects.filter(email__iexact=email).exists():
         return JsonResponse({'error': 'account already exists'}, status=400)
@@ -772,13 +966,21 @@ def complete_mission_view(request):
     ).first()
     if mission is None or not mission_is_available(mission):
         return JsonResponse({'error': 'mission not available'}, status=404)
+    canonical_mission_id = Mission.objects.filter(
+        scheduled_date=mission.scheduled_date,
+        status=Mission.STATUS_PUBLISHED,
+    ).order_by('created_at', 'id').values_list('id', flat=True).first()
+    if canonical_mission_id != mission.id:
+        return JsonResponse({'error': 'mission not available'}, status=404)
     if MissionAttempt.objects.filter(user=request.user, mission=mission).exists():
         return JsonResponse({'error': 'mission already completed'}, status=409)
 
     if mission.mission_type not in Mission.CHOICE_TYPES and mission.mission_type not in Mission.TASK_TYPES:
         return JsonResponse({'error': 'unsupported mission type'}, status=400)
 
-    content = mission.content or {}
+    difficulty, variant = mission_variant(mission, request.user, create_assignment=True)
+    content = variant.get('content') or {}
+    max_points = int(variant.get('max_points', mission.max_points))
     if mission.mission_type in Mission.TASK_TYPES:
         answer = data.get('answer')
         if not isinstance(answer, dict):
@@ -789,7 +991,7 @@ def complete_mission_view(request):
         prompt_evidence = str(answer.get('prompt', ''))[:4000]
         evaluation = evaluate_task_answers(content, values, language)
         total = evaluation['total_count'] or 1
-        score = mission.max_points * evaluation['correct_count'] // total
+        score = max_points * evaluation['correct_count'] // total
         stored_answer = {'values': values, 'prompt': prompt_evidence}
         result_details = {
             'correct_count': evaluation['correct_count'],
@@ -808,7 +1010,7 @@ def complete_mission_view(request):
             return JsonResponse({'error': 'invalid traffic-light answer'}, status=400)
         expected_colors = [statement.get('correct_color') for statement in statements]
         correct_count = sum(answer == expected for answer, expected in zip(answers, expected_colors))
-        score = mission.max_points * correct_count // len(statements)
+        score = max_points * correct_count // len(statements)
         stored_answer = {'selected_colors': answers}
         result_details = {
             'correct_count': correct_count,
@@ -825,7 +1027,7 @@ def complete_mission_view(request):
             return JsonResponse({'error': 'ranking required'}, status=400)
         if sorted(selected_order) != list(range(len(options))):
             return JsonResponse({'error': 'ranking must contain every prompt exactly once'}, status=400)
-        score = mission.max_points if selected_order == content.get('correct_order', []) else 0
+        score = max_points if selected_order == content.get('correct_order', []) else 0
         stored_answer = {'selected_order': selected_order}
         result_details = {'correct_order': content.get('correct_order', [])}
     else:
@@ -844,31 +1046,41 @@ def complete_mission_view(request):
             return JsonResponse({'error': 'invalid answer'}, status=400)
 
         expected_indices = sorted(correct_indices(content))
-        score = mission.max_points if selected_indices == expected_indices else 0
+        score = max_points if selected_indices == expected_indices else 0
         stored_answer = {'selected_indices': selected_indices}
         result_details = {'correct_indices': expected_indices}
+    ensure_profile(request.user)
     try:
-        attempt = MissionAttempt.objects.create(
-            user=request.user,
-            mission=mission,
-            answer=stored_answer,
-            score=score,
-        )
+        with transaction.atomic():
+            profile = Profile.objects.select_for_update().get(user=request.user)
+            attempt = MissionAttempt.objects.create(
+                user=request.user,
+                mission=mission,
+                answer=stored_answer,
+                score=score,
+                max_points=max_points,
+                difficulty=difficulty,
+            )
+            profile.progress_updated_at = attempt.completed_at
+            profile.save(update_fields=['progress_updated_at'])
+            if difficulty is not None:
+                skill_change, skill_progression = evaluate_skill_progression(profile)
+            else:
+                skill_change = None
+                skill_progression = progression_snapshot(profile)
     except IntegrityError:
         return JsonResponse({'error': 'mission already completed'}, status=409)
-
-    profile = ensure_profile(request.user)
-    profile.progress_updated_at = attempt.completed_at
-    profile.save(update_fields=['progress_updated_at'])
     return JsonResponse({
         'result': {
-            'correct': score == mission.max_points,
+            'correct': score == max_points,
             'score': score,
-            'max_points': mission.max_points,
+            'max_points': max_points,
             **result_details,
         },
         'mission': mission_payload(mission, request.user, language),
         'progress': progress_payload(profile),
+        'skill_change': skill_change,
+        'skill_progression': skill_progression,
     })
 
 
@@ -880,15 +1092,19 @@ def daily_missions_view(request):
     language = request.GET.get('lang', 'de')
     today = timezone.localdate()
     if is_business_day(today):
-        missions = Mission.objects.filter(
+        mission = Mission.objects.filter(
             scheduled_date=today,
             status=Mission.STATUS_PUBLISHED,
-        ).prefetch_related('attempts')[:2]
+        ).prefetch_related('attempts').order_by('created_at', 'id').first()
+        missions = [mission] if mission is not None else []
     else:
-        missions = Mission.objects.none()
+        missions = []
     return JsonResponse({
         'date': today.isoformat(),
-        'missions': [mission_payload(mission, request.user, language) for mission in missions],
+        'missions': [
+            mission_payload(mission, request.user, language, create_assignment=True)
+            for mission in missions
+        ],
         'can_create': can_create_missions(request.user),
     })
 
@@ -901,17 +1117,27 @@ def available_missions_view(request):
     language = request.GET.get('lang', 'de')
     today = timezone.localdate()
     available_from = mission_availability_start()
-    attempted_ids = MissionAttempt.objects.filter(user=request.user).values_list('mission_id', flat=True)
+    attempted_ids = set(MissionAttempt.objects.filter(user=request.user).values_list('mission_id', flat=True))
     candidates = Mission.objects.filter(
         scheduled_date__gte=available_from,
         scheduled_date__lt=today,
         status=Mission.STATUS_PUBLISHED,
-    ).exclude(id__in=attempted_ids).prefetch_related('attempts').order_by('-scheduled_date', 'created_at', 'id')
-    missions = [mission for mission in candidates if mission_is_available(mission)]
+    ).prefetch_related('attempts').order_by('-scheduled_date', 'created_at', 'id')
+    missions = []
+    seen_dates = set()
+    for mission in candidates:
+        if mission.scheduled_date in seen_dates:
+            continue
+        seen_dates.add(mission.scheduled_date)
+        if mission.id not in attempted_ids and mission_is_available(mission):
+            missions.append(mission)
     return JsonResponse({
         'from': available_from.isoformat(),
         'to': (today - timedelta(days=1)).isoformat(),
-        'missions': [mission_payload(mission, request.user, language) for mission in missions],
+        'missions': [
+            mission_payload(mission, request.user, language, create_assignment=True)
+            for mission in missions
+        ],
         'can_create': can_create_missions(request.user),
     })
 
@@ -978,7 +1204,7 @@ def mission_schedule_view(request):
             scheduled_missions.setdefault(key, []).append(mission_schedule_payload(mission, request.user))
         return JsonResponse({'dates': dates, 'missions': scheduled_missions})
 
-    values, validation_error = validate_choice_mission_data(parse_json(request))
+    values, validation_error = validate_manual_mission_data(parse_json(request))
     if validation_error:
         return JsonResponse({'error': validation_error}, status=400)
 
@@ -986,8 +1212,8 @@ def mission_schedule_view(request):
         existing = Mission.objects.select_for_update().filter(
             scheduled_date=values['scheduled_date'],
         ).exclude(status=Mission.STATUS_REJECTED)
-        if existing.count() >= 2:
-            return JsonResponse({'error': 'this date already has two missions'}, status=409)
+        if existing.exists():
+            return JsonResponse({'error': 'this date already has a mission'}, status=409)
         mission = Mission.objects.create(
             status=Mission.STATUS_PUBLISHED,
             created_by=request.user,
@@ -1009,15 +1235,17 @@ def mission_detail_view(request, mission_id):
     if request.method == 'PATCH':
         if mission.attempts.exists():
             return JsonResponse({'error': 'completed missions cannot be edited'}, status=409)
-        values, validation_error = validate_choice_mission_data(parse_json(request), allow_past_date=True)
+        data = parse_json(request)
+        validator = validate_manual_mission_data if 'variants' in data else validate_choice_mission_data
+        values, validation_error = validator(data, allow_past_date=True)
         if validation_error:
             return JsonResponse({'error': validation_error}, status=400)
         with transaction.atomic():
             date_missions = Mission.objects.select_for_update().filter(
                 scheduled_date=values['scheduled_date'],
             ).exclude(id=mission.id).exclude(status=Mission.STATUS_REJECTED)
-            if date_missions.count() >= 2:
-                return JsonResponse({'error': 'this date already has two missions'}, status=409)
+            if date_missions.exists():
+                return JsonResponse({'error': 'this date already has a mission'}, status=409)
             for field, value in values.items():
                 setattr(mission, field, value)
             mission.save()
@@ -1066,9 +1294,9 @@ def approve_all_review_missions_view(request):
                 scheduled_date=scheduled_date,
                 status=Mission.STATUS_PUBLISHED,
             ).count()
-            if published_count + review_count > 2:
+            if published_count + review_count > 1:
                 return JsonResponse({
-                    'error': f'{scheduled_date.isoformat()} would have more than two published missions',
+                    'error': f'{scheduled_date.isoformat()} would have more than one published mission',
                 }, status=409)
         reviewed_at = timezone.now()
         mission_ids = [mission.id for mission in review_missions]
@@ -1155,8 +1383,13 @@ def generate_task_challenge_view(request):
     scheduled_date = parse_iso_date(data.get('scheduled_date')) if data.get('scheduled_date') else timezone.localdate()
     if data.get('scheduled_date') and scheduled_date is None:
         return JsonResponse({'error': 'scheduled_date must be a valid ISO date'}, status=400)
+    if Mission.objects.filter(
+        scheduled_date=scheduled_date,
+        status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
+    ).exists():
+        return JsonResponse({'error': 'this date already has a mission'}, status=409)
     try:
-        candidate = generate_task_challenge(mission_type)
+        candidate = generate_task_challenge_variants(mission_type)
     except AiMissionGenerationError as error_value:
         return JsonResponse({'error': str(error_value)}, status=503)
     mission = Mission(
@@ -1168,6 +1401,11 @@ def generate_task_challenge_view(request):
         description_en=candidate['description_en'],
         content=candidate['content'],
         max_points=candidate['max_points'],
+        topic_de=candidate['topic_de'],
+        topic_en=candidate['topic_en'],
+        learning_objective_de=candidate['learning_objective_de'],
+        learning_objective_en=candidate['learning_objective_en'],
+        variants=candidate['variants'],
         status=Mission.STATUS_REVIEW,
         generated_by_ai=True,
         generation_batch_id=uuid.uuid4(),
@@ -1188,13 +1426,16 @@ def generate_training_mission_view(request):
     except AiMissionGenerationError as error_value:
         return JsonResponse({'error': str(error_value)}, status=503)
 
-    content = candidate['content']
+    difficulty = difficulty_for_skill(ensure_profile(request.user).skill_level)
+    variant = candidate.get('variants', {}).get(difficulty, candidate)
+    content = variant['content']
     payload = {
         'type': candidate['mission_type'],
-        'title_de': candidate['title_de'],
-        'title_en': candidate['title_en'],
-        'description_de': candidate['description_de'],
-        'description_en': candidate['description_en'],
+        'difficulty': difficulty,
+        'title_de': variant['title_de'],
+        'title_en': variant['title_en'],
+        'description_de': variant['description_de'],
+        'description_en': variant['description_en'],
         'question_de': translated(content.get('question', {}), 'de'),
         'question_en': translated(content.get('question', {}), 'en'),
         'options': content.get('options', []),
@@ -1354,7 +1595,8 @@ def generate_training_task_challenge_view(request):
     if mission_type is not None and mission_type not in TASK_CHALLENGE_TYPES:
         return JsonResponse({'error': 'unsupported task challenge type'}, status=400)
     try:
-        candidate = generate_task_challenge(mission_type)
+        difficulty = difficulty_for_skill(ensure_profile(request.user).skill_level)
+        candidate = generate_task_challenge(mission_type, difficulty=difficulty)
     except AiMissionGenerationError as error_value:
         return JsonResponse({'error': str(error_value)}, status=503)
     challenge_id = uuid.uuid4().hex
@@ -1496,8 +1738,8 @@ def approve_mission_view(request, mission_id):
             scheduled_date=mission.scheduled_date,
             status=Mission.STATUS_PUBLISHED,
         ).count()
-        if published_count >= 2:
-            return JsonResponse({'error': 'this date already has two published missions'}, status=409)
+        if published_count >= 1:
+            return JsonResponse({'error': 'this date already has a published mission'}, status=409)
         mission.status = Mission.STATUS_PUBLISHED
         mission.reviewed_by = request.user
         mission.reviewed_at = timezone.now()
@@ -1542,25 +1784,36 @@ def leaderboard_view(request):
         return JsonResponse({'error': 'authentication required'}, status=401)
 
     archive_completed_weeks()
+    requested_difficulty = request.GET.get('difficulty')
+    difficulty = requested_difficulty or difficulty_for_skill(ensure_profile(request.user).skill_level)
+    if difficulty not in VALID_DIFFICULTIES:
+        return JsonResponse({'error': 'invalid difficulty'}, status=400)
     entries = []
-    users = User.objects.select_related('profile').order_by('first_name', 'last_name', 'username')
+    users = User.objects.select_related('profile').filter(
+        profile__skill_level=skill_for_difficulty(difficulty),
+    ).order_by('first_name', 'last_name', 'username')
     for user in users:
         profile = ensure_profile(user)
-        progress = progress_payload(profile)
+        attempts = MissionAttempt.objects.filter(user=user, difficulty=difficulty)
+        points = sum(attempts.values_list('score', flat=True))
+        completed = attempts.count()
+        streaks = streak_payload(user)
         entries.append({
             **user_identity(user),
-            'total_points': progress['total_points'],
-            'completed_missions': progress['completed_mission_count'],
-            'level': progress['level'],
-            'current_streak': progress['current_streak'],
-            'max_streak': progress['max_streak'],
+            'total_points': points,
+            'completed_missions': completed,
+            'level': level_for_points(points),
+            'skill_level': profile.skill_level,
+            'current_streak': streaks['current_streak'],
+            'max_streak': streaks['max_streak'],
         })
 
     current_week_start, current_week_end = week_bounds()
-    history = list(WeeklyLeaderboardSnapshot.objects.values('week_start', 'week_end'))
+    history = list(WeeklyLeaderboardSnapshot.objects.filter(difficulty=difficulty).values('week_start', 'week_end'))
     return JsonResponse({
+        'difficulty': difficulty,
         'entries': rank_entries(entries),
-        'weekly_entries': weekly_leaderboard_entries(current_week_start, current_week_end),
+        'weekly_entries': weekly_leaderboard_entries(current_week_start, current_week_end, difficulty),
         'week_start': current_week_start.isoformat(),
         'week_end': current_week_end.isoformat(),
         'history': [
@@ -1575,11 +1828,26 @@ def leaderboard_history_view(request, week_start):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'authentication required'}, status=401)
     parsed_start = parse_iso_date(week_start)
-    snapshot = WeeklyLeaderboardSnapshot.objects.filter(week_start=parsed_start).first()
+    difficulty = request.GET.get('difficulty') or difficulty_for_skill(ensure_profile(request.user).skill_level)
+    if difficulty not in VALID_DIFFICULTIES:
+        return JsonResponse({'error': 'invalid difficulty'}, status=400)
+    snapshot = WeeklyLeaderboardSnapshot.objects.filter(
+        week_start=parsed_start,
+        difficulty=difficulty,
+    ).first()
     if snapshot is None:
         return JsonResponse({'error': 'leaderboard snapshot not found'}, status=404)
+    eligible_user_ids = set(User.objects.filter(
+        profile__skill_level=skill_for_difficulty(difficulty),
+    ).values_list('id', flat=True))
+    entries = [
+        entry.copy()
+        for entry in snapshot.entries
+        if entry.get('user_id') in eligible_user_ids
+    ]
     return JsonResponse({
         'week_start': snapshot.week_start.isoformat(),
         'week_end': snapshot.week_end.isoformat(),
-        'entries': snapshot.entries,
+        'difficulty': difficulty,
+        'entries': rank_entries(entries),
     })

@@ -9,6 +9,7 @@ import {
   Modal,
   Paper,
   Select,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Text,
@@ -22,6 +23,8 @@ import PageShell from './PageShell'
 import './Leaderboard.css'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
+const SKILL_DIFFICULTY = { beginner: 'easy', advanced: 'medium', pro: 'hard' }
+const DIFFICULTY_SKILL = { easy: 'beginner', medium: 'advanced', hard: 'pro' }
 
 const STAT_CONFIG = [
   { key: 'rank', icon: IconTrophy, color: 'accent' },
@@ -147,13 +150,14 @@ export default function Leaderboard({ user }) {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [difficulty, setDifficulty] = useState(() => SKILL_DIFFICULTY[user?.skill_level] || 'easy')
   const currentUserId = getUserId(user)
 
   useEffect(() => {
     let active = true
     const load = () => {
       setLoading(true)
-      fetch(`${API_BASE}/api/auth/leaderboard/`, { credentials: 'include' })
+      fetch(`${API_BASE}/api/auth/leaderboard/?difficulty=${difficulty}`, { credentials: 'include' })
         .then(async (response) => {
           const data = await response.json().catch(() => ({}))
           if (!response.ok) throw new Error(data.error || t('pages.leaderboard.loadError'))
@@ -177,7 +181,7 @@ export default function Leaderboard({ user }) {
       active = false
       window.removeEventListener(PROGRESS_EVENT, load)
     }
-  }, [t])
+  }, [t, difficulty])
 
   const leaderboardEntries = useMemo(
     () => {
@@ -207,7 +211,7 @@ export default function Leaderboard({ user }) {
     if (!weekStart) return
     setHistoryLoading(true)
     try {
-      const response = await fetch(`${API_BASE}/api/auth/leaderboard/history/${weekStart}/`, { credentials: 'include' })
+      const response = await fetch(`${API_BASE}/api/auth/leaderboard/history/${weekStart}/?difficulty=${difficulty}`, { credentials: 'include' })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || t('pages.leaderboard.historyError'))
       setSelectedHistory(data)
@@ -227,6 +231,15 @@ export default function Leaderboard({ user }) {
 
   return (
     <PageShell title={t('pages.leaderboard.title')} description={t('pages.leaderboard.description')} icon={IconTrophy}>
+      <SegmentedControl
+        mb="xl"
+        value={difficulty}
+        onChange={(value) => { setDifficulty(value); setMode('all'); setSelectedHistory(null) }}
+        data={['easy', 'medium', 'hard'].map((value) => ({
+          value,
+          label: t(`skillLevels.${DIFFICULTY_SKILL[value]}`),
+        }))}
+      />
       <Group justify="space-between" mb="xl">
         <Group gap="xs">
           <Button variant={mode === 'all' ? 'filled' : 'light'} onClick={() => setMode('all')}>{t('pages.leaderboard.allTime')}</Button>

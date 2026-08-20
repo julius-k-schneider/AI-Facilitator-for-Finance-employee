@@ -29,6 +29,16 @@ const createEmptyForm = () => ({
   max_points: 100, correct_indices: [0], ...createMissionTypeDefaults(),
 })
 
+const difficultyVariants = ['easy', 'medium', 'hard']
+
+const createEmptyVariants = () => Object.fromEntries(
+  difficultyVariants.map((difficulty) => [difficulty, createEmptyForm()]),
+)
+
+const createEmptySharedFields = () => ({
+  topic_de: '', topic_en: '', learning_objective_de: '', learning_objective_en: '',
+})
+
 function isoDate(date) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-')
 }
@@ -129,6 +139,49 @@ function missionToForm(mission) {
   }
 }
 
+function variantToReviewMission(mission, difficulty) {
+  const variant = mission.variants?.[difficulty] || {}
+  const content = variant.content || {}
+  return {
+    ...mission,
+    ...variant,
+    difficulty,
+    question_de: content.question?.de || content.task?.de || '',
+    question_en: content.question?.en || content.task?.en || '',
+    options: content.options || [],
+    correct_indices: content.correct_indices || [],
+    correct_order: content.correct_order || [],
+    statements: (content.statements || []).map((statement) => ({
+      de: statement.text?.de,
+      en: statement.text?.en,
+      correct_color: statement.correct_color,
+      feedback_de: statement.feedback?.de,
+      feedback_en: statement.feedback?.en,
+    })),
+    case_format: content.case_format,
+    case_data_de: content.case_data?.de || [],
+    case_data_en: content.case_data?.en || [],
+    result_fields: (content.result_fields || []).map((field) => ({
+      ...field,
+      label_de: field.label?.de || '',
+      label_en: field.label?.en || '',
+    })),
+    feedback_de: content.feedback?.de || '',
+    feedback_en: content.feedback?.en || '',
+    micro_learning_de: content.micro_learning?.de || '',
+    micro_learning_en: content.micro_learning?.en || '',
+  }
+}
+
+function missionToVariantForms(mission) {
+  return Object.fromEntries(difficultyVariants.map((difficulty) => [
+    difficulty,
+    mission.has_difficulty_variants
+      ? missionToForm(variantToReviewMission(mission, difficulty))
+      : missionToForm(mission),
+  ]))
+}
+
 function MissionSolutionContent({ mission, language, showSolution = true }) {
   const { t } = useTranslation()
   const Solution = getMissionType(mission.type).Solution
@@ -223,7 +276,7 @@ function Calendar({ month, setMonth, schedule, selectedDate, selectedWeekStart, 
           const selected = weekMode ? selectedWeekStart === weekStart && !weekend : selectedDate === value
           const disabled = weekMode ? weekStart < currentWeekStart() || weekend : weekend
           return <button key={value} type="button" disabled={disabled} className={`mission-calendar-day${weekend ? ' is-weekend' : ''}${selected ? ' is-selected' : ''}`} onClick={() => onSelect(weekMode ? weekStart : value)}>
-            <span>{day}</span>{count > 0 && <span className={`mission-calendar-count${count >= 2 ? ' is-full' : ''}`}>{count}/2</span>}
+            <span>{day}</span>{count > 0 && <span className={`mission-calendar-count${count >= 1 ? ' is-full' : ''}`}>{count}/1</span>}
           </button>
         })}
       </div>
@@ -233,11 +286,14 @@ function Calendar({ month, setMonth, schedule, selectedDate, selectedWeekStart, 
 
 function Creator({ opened, onClose, onCreated }) {
   const { i18n, t } = useTranslation()
-  const [form, setForm] = useState(createEmptyForm)
+  const [variantForms, setVariantForms] = useState(createEmptyVariants)
+  const [activeDifficulty, setActiveDifficulty] = useState('easy')
+  const [sharedFields, setSharedFields] = useState(createEmptySharedFields)
   const [month, setMonth] = useState(new Date())
   const [schedule, setSchedule] = useState({})
   const [scheduledMissions, setScheduledMissions] = useState({})
   const [preview, setPreview] = useState(null)
+  const [previewDifficulty, setPreviewDifficulty] = useState('easy')
   const [showPreviewSolution, setShowPreviewSolution] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
@@ -252,11 +308,22 @@ function Creator({ opened, onClose, onCreated }) {
   }, [month])
 
   useEffect(() => { if (opened) loadSchedule() }, [opened, loadSchedule])
+  const form = variantForms[activeDifficulty]
+  const setForm = (update) => setVariantForms((current) => ({
+    ...current,
+    [activeDifficulty]: typeof update === 'function' ? update(current[activeDifficulty]) : update,
+  }))
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }))
-  const setType = (value) => setForm((current) => {
-    const next = { ...current, ...getMissionType(value).createDefaults(), type: value }
-    return getMissionType(value).prepareForm?.(next) || next
-  })
+  const setSharedField = (field, value) => setSharedFields((current) => ({ ...current, [field]: value }))
+  const setType = (value) => setVariantForms((current) => Object.fromEntries(
+    difficultyVariants.map((difficulty) => {
+      const next = { ...current[difficulty], ...getMissionType(value).createDefaults(), type: value }
+      return [difficulty, getMissionType(value).prepareForm?.(next) || next]
+    }),
+  ))
+  const setScheduledDate = (value) => setVariantForms((current) => Object.fromEntries(
+    difficultyVariants.map((difficulty) => [difficulty, { ...current[difficulty], scheduled_date: value }]),
+  ))
   const setOption = (index, language, value) => setForm((current) => ({ ...current, options: current.options.map((option, optionIndex) => optionIndex === index ? { ...option, [language]: value } : option) }))
   const toggleCorrectOption = (index) => setForm((current) => ({
     ...current,
@@ -267,12 +334,21 @@ function Creator({ opened, onClose, onCreated }) {
   const missionsForDate = form.scheduled_date ? scheduledMissions[form.scheduled_date] || [] : []
 
   const resetForm = () => {
-    setForm(createEmptyForm())
+    setVariantForms(createEmptyVariants())
+    setSharedFields(createEmptySharedFields())
+    setActiveDifficulty('easy')
     setEditingId(null)
   }
 
   const editMission = (mission) => {
-    setForm(missionToForm(mission))
+    setVariantForms(missionToVariantForms(mission))
+    setSharedFields({
+      topic_de: mission.topic_de || mission.title_de || '',
+      topic_en: mission.topic_en || mission.title_en || '',
+      learning_objective_de: mission.learning_objective_de || mission.description_de || '',
+      learning_objective_en: mission.learning_objective_en || mission.description_en || '',
+    })
+    setActiveDifficulty('easy')
     setEditingId(mission.id)
     setPreview(null)
     setError('')
@@ -298,8 +374,14 @@ function Creator({ opened, onClose, onCreated }) {
     setSaving(true)
     setError('')
     try {
-      if (editingId) await updateMission(editingId, form)
-      else await createMission(form)
+      const payload = {
+        type: form.type,
+        scheduled_date: form.scheduled_date,
+        ...sharedFields,
+        variants: variantForms,
+      }
+      if (editingId) await updateMission(editingId, payload)
+      else await createMission(payload)
       resetForm()
       loadSchedule()
       onCreated()
@@ -309,6 +391,10 @@ function Creator({ opened, onClose, onCreated }) {
       setSaving(false)
     }
   }
+
+  const previewMission = preview?.has_difficulty_variants
+    ? variantToReviewMission(preview, previewDifficulty)
+    : preview
 
   return (
     <Modal
@@ -330,9 +416,21 @@ function Creator({ opened, onClose, onCreated }) {
             min={editingId ? undefined : isoDate(new Date())}
             onChange={(event) => {
               const value = event.target.value
-              if (!value || isBusinessDay(new Date(`${value}T12:00:00`))) setField('scheduled_date', value)
+              if (!value || isBusinessDay(new Date(`${value}T12:00:00`))) setScheduledDate(value)
             }}
           />
+          <Alert color="brand" variant="light">{t('missions.creator.adaptiveHint')}</Alert>
+          <SimpleGrid cols={2}><TextInput label={t('missions.creator.topicDe')} value={sharedFields.topic_de} onChange={(e) => setSharedField('topic_de', e.target.value)} /><TextInput label={t('missions.creator.topicEn')} value={sharedFields.topic_en} onChange={(e) => setSharedField('topic_en', e.target.value)} /></SimpleGrid>
+          <SimpleGrid cols={2}><Textarea label={t('missions.creator.learningObjectiveDe')} value={sharedFields.learning_objective_de} onChange={(e) => setSharedField('learning_objective_de', e.target.value)} /><Textarea label={t('missions.creator.learningObjectiveEn')} value={sharedFields.learning_objective_en} onChange={(e) => setSharedField('learning_objective_en', e.target.value)} /></SimpleGrid>
+          <Stack gap={5}>
+            <Text fz="sm" fw={600}>{t('missions.creator.difficultyVariant')}</Text>
+            <SegmentedControl
+              fullWidth
+              value={activeDifficulty}
+              onChange={setActiveDifficulty}
+              data={difficultyVariants.map((difficulty) => ({ value: difficulty, label: t(`difficulties.${difficulty}`) }))}
+            />
+          </Stack>
           <SimpleGrid cols={2}><TextInput label={t('missions.creator.titleDe')} value={form.title_de} onChange={(e) => setField('title_de', e.target.value)} /><TextInput label={t('missions.creator.titleEn')} value={form.title_en} onChange={(e) => setField('title_en', e.target.value)} /></SimpleGrid>
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.descriptionDe')} value={form.description_de} onChange={(e) => setField('description_de', e.target.value)} /><Textarea label={t('missions.creator.descriptionEn')} value={form.description_en} onChange={(e) => setField('description_en', e.target.value)} /></SimpleGrid>
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.questionDe')} value={form.question_de} onChange={(e) => setField('question_de', e.target.value)} /><Textarea label={t('missions.creator.questionEn')} value={form.question_en} onChange={(e) => setField('question_en', e.target.value)} /></SimpleGrid>
@@ -346,7 +444,7 @@ function Creator({ opened, onClose, onCreated }) {
         <Stack gap="sm">
           <Group gap="sm"><IconCalendar size={20} /><Text fw={700}>{t('missions.creator.calendarTitle')}</Text></Group>
           <Text fz="sm" c="dimmed">{t('missions.creator.calendarText')}</Text>
-          <Calendar month={month} setMonth={setMonth} schedule={schedule} selectedDate={form.scheduled_date} onSelect={(value) => setField('scheduled_date', value)} />
+          <Calendar month={month} setMonth={setMonth} schedule={schedule} selectedDate={form.scheduled_date} onSelect={setScheduledDate} />
           {form.scheduled_date && <Stack gap="xs" mt="sm">
             <Text fw={700}>{t('missions.creator.scheduledFor', { date: new Date(`${form.scheduled_date}T12:00:00`).toLocaleDateString(i18n.resolvedLanguage) })}</Text>
             {missionsForDate.length === 0 && <Text fz="sm" c="dimmed">{t('missions.creator.noScheduled')}</Text>}
@@ -357,7 +455,7 @@ function Creator({ opened, onClose, onCreated }) {
                   <Text fz="sm" c="dimmed">{mission.title_en}</Text>
                 </Box>
                 <Group gap={4} wrap="nowrap">
-                  <Button variant="subtle" size="compact-sm" aria-label={t('missions.creator.view')} onClick={() => { setShowPreviewSolution(false); setPreview(mission) }}><IconEye size={17} /></Button>
+                  <Button variant="subtle" size="compact-sm" aria-label={t('missions.creator.view')} onClick={() => { setShowPreviewSolution(false); setPreviewDifficulty('easy'); setPreview(mission) }}><IconEye size={17} /></Button>
                   {mission.can_edit && !mission.has_attempts && <Button variant="subtle" size="compact-sm" aria-label={t('missions.creator.edit')} onClick={() => editMission(mission)}><IconEdit size={17} /></Button>}
                   {mission.can_delete && <Button color="red" variant="subtle" size="compact-sm" loading={deletingId === mission.id} disabled={mission.has_attempts} aria-label={t('missions.creator.delete')} onClick={() => removeMission(mission)}><IconTrash size={17} /></Button>}
                 </Group>
@@ -368,18 +466,24 @@ function Creator({ opened, onClose, onCreated }) {
         </Stack>
       </div>
       <Modal opened={Boolean(preview)} onClose={() => { setPreview(null); setShowPreviewSolution(false) }} title={t('missions.creator.previewTitle')} size="lg" centered>
-        {preview && <Stack gap="md">
+        {previewMission && <Stack gap="md">
+          {preview?.has_difficulty_variants && <SegmentedControl
+            fullWidth
+            value={previewDifficulty}
+            onChange={setPreviewDifficulty}
+            data={difficultyVariants.map((difficulty) => ({ value: difficulty, label: t(`difficulties.${difficulty}`) }))}
+          />}
           <Switch checked={showPreviewSolution} onChange={(event) => setShowPreviewSolution(event.currentTarget.checked)} label={t('missions.creator.showSolution')} />
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
           {[['de', 'Deutsch'], ['en', 'English']].map(([language, label]) => <Paper key={language} withBorder radius="md" p="md">
             <Stack gap="sm">
               <Badge variant="light">{label}</Badge>
-              <Title order={4}>{preview[`title_${language}`]}</Title>
-              <Text fz="sm" c="dimmed">{preview[`description_${language}`]}</Text>
-              <Text fw={700}>{preview[`question_${language}`]}</Text>
-              <MissionSolutionContent mission={preview} language={language} showSolution={showPreviewSolution} />
-              {showPreviewSolution && getMissionType(preview.type).hasSharedFeedback && preview[`feedback_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{preview[`feedback_${language}`]}</Text>}
-              {showPreviewSolution && preview[`micro_learning_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.microLearning.title')}: </Text>{preview[`micro_learning_${language}`]}</Text>}
+              <Title order={4}>{previewMission[`title_${language}`]}</Title>
+              <Text fz="sm" c="dimmed">{previewMission[`description_${language}`]}</Text>
+              <Text fw={700}>{previewMission[`question_${language}`]}</Text>
+              <MissionSolutionContent mission={previewMission} language={language} showSolution={showPreviewSolution} />
+              {showPreviewSolution && getMissionType(previewMission.type).hasSharedFeedback && previewMission[`feedback_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{previewMission[`feedback_${language}`]}</Text>}
+              {showPreviewSolution && previewMission[`micro_learning_${language}`] && <Text fz="sm"><Text span fw={700}>{t('missions.microLearning.title')}: </Text>{previewMission[`micro_learning_${language}`]}</Text>}
             </Stack>
           </Paper>)}
           </SimpleGrid>
@@ -571,7 +675,26 @@ function MissionReview({ enabled, onPublished }) {
                 </Box>
                 <Badge color="accent" variant="light">{mission.max_points} {t('missions.points')}</Badge>
               </Group>
-              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+              {mission.has_difficulty_variants && <Stack gap="sm">
+                <Text fz="sm"><Text span fw={700}>{t('missions.review.learningObjective')}: </Text>{mission.learning_objective_de}</Text>
+                {['easy', 'medium', 'hard'].map((difficulty) => {
+                  const variantMission = variantToReviewMission(mission, difficulty)
+                  return <Paper key={difficulty} withBorder radius="sm" p="md" bg="gray.0">
+                    <Badge mb="sm" color="secondary" variant="light">{t(`difficulties.${difficulty}`)}</Badge>
+                    <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+                      {[['de', 'Deutsch'], ['en', 'English']].map(([language, label]) => <Box key={language}>
+                        <Text fz="xs" fw={700} c="dimmed" tt="uppercase">{label}</Text>
+                        <Text fw={700}>{variantMission[`title_${language}`]}</Text>
+                        <Text fz="sm" c="dimmed">{variantMission[`description_${language}`]}</Text>
+                        <Text fw={700} fz="sm" mt="xs">{variantMission[`question_${language}`]}</Text>
+                        <MissionSolutionContent mission={variantMission} language={language} />
+                        {variantMission[`micro_learning_${language}`] && <Text fz="sm" mt="xs"><Text span fw={700}>{t('missions.microLearning.title')}: </Text>{variantMission[`micro_learning_${language}`]}</Text>}
+                      </Box>)}
+                    </SimpleGrid>
+                  </Paper>
+                })}
+              </Stack>}
+              {!mission.has_difficulty_variants && <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
                 {[['de', 'Deutsch'], ['en', 'English']].map(([language, label]) => <Box key={language}>
                   <Text fz="xs" fw={700} c="dimmed" tt="uppercase" mb={5}>{label}</Text>
                   <Text fz="sm" c="dimmed" mb="xs">{mission[`description_${language}`]}</Text>
@@ -580,7 +703,7 @@ function MissionReview({ enabled, onPublished }) {
                   {getMissionType(mission.type).hasSharedFeedback && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{mission[`feedback_${language}`]}</Text>}
                   {mission[`micro_learning_${language}`] && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.microLearning.title')}: </Text>{mission[`micro_learning_${language}`]}</Text>}
                 </Box>)}
-              </SimpleGrid>
+              </SimpleGrid>}
               <Group justify="flex-end">
                 <Button color="red" variant="subtle" leftSection={<IconX size={16} />} loading={activeAction === `reject-${mission.id}`} onClick={() => runAction(mission, 'reject')}>{t('missions.review.reject')}</Button>
                 <Button color="secondary" variant="light" leftSection={<IconRefresh size={16} />} loading={activeAction === `regenerate-${mission.id}`} onClick={() => runAction(mission, 'regenerate')}>{t('missions.review.regenerate')}</Button>
@@ -838,8 +961,11 @@ export default function Missions({ user }) {
     if (!activeMissionId || !activeMissionDate) return undefined
     if (!activeMission?.completed) {
       const translatedMission = [...missions, ...availableMissions].find((mission) => mission.id === activeMissionId)
-      if (translatedMission) setActiveMission(translatedMission)
-      return undefined
+      let active = true
+      Promise.resolve().then(() => {
+        if (active && translatedMission) setActiveMission(translatedMission)
+      })
+      return () => { active = false }
     }
     let active = true
     const params = {

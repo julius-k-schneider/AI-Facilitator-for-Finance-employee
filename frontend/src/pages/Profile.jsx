@@ -84,10 +84,11 @@ function Profile({ user }) {
 
         <Divider mb="xl" />
 
-        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xl">
+        <SimpleGrid cols={{ base: 1, sm: 4 }} spacing="xl">
           <Field label={t('profile.fieldName')} value={fullName} />
           <Field label={t('profile.fieldEmail')} value={user.email} />
           <Field label={t('profile.fieldUser')} value={user.username} />
+          <Field label={t('profile.fieldSkillLevel')} value={t(`skillLevels.${user.skill_level || 'beginner'}`)} />
         </SimpleGrid>
       </Paper>
 

@@ -12,6 +12,8 @@
     "current": "Deutsch",
     "switchAria": "Sprache auf Englisch umschalten"
   },
+  "skillLevels": { "beginner": "Einsteiger", "advanced": "Fortgeschritten", "pro": "Pro" },
+  "difficulties": { "easy": "Leicht", "medium": "Mittel", "hard": "Schwer" },
   "nav": {
     "home": "Home",
     "basics": "Grundlagen",
@@ -83,7 +85,7 @@
   "missions": {
     "badge": "DAILY MISSIONS",
     "title": "Heutige Missionen",
-    "description": "Jeden Tag warten bis zu zwei neue Aufgaben auf dich. Verpasste Missionen bleiben bis Montag 12:00 Uhr der Folgewoche verfügbar.",
+    "description": "Jeden Tag wartet eine Mission auf deinem aktuellen Skill-Level auf dich. Verpasste Missionen bleiben bis Montag 12:00 Uhr der Folgewoche verfügbar.",
     "points": "Punkte",
     "loading": "Missionen werden geladen...",
     "emptyTitle": "Keine Missionen gefunden",
@@ -160,6 +162,11 @@
     "microLearning": {
       "title": "Für ähnliche Fälle"
     },
+    "skillChange": {
+      "title": "Skill-Level angepasst",
+      "promotion": "Neues Skill-Level erreicht: {{level}}.",
+      "demotion": "Dein aktuelles Skill-Level ist jetzt {{level}}. Deine nächsten Missionen werden entsprechend angepasst."
+    },
     "creator": {
       "button": "Missionen verwalten",
       "title": "Mission erstellen",
@@ -168,6 +175,12 @@
       "cancelEdit": "Bearbeitung abbrechen",
       "type": "Missionsart",
       "date": "Veröffentlichungsdatum",
+      "adaptiveHint": "Lege ein gemeinsames Thema und Lernziel fest. Bearbeite danach alle drei Schwierigkeitsvarianten; Nutzer erhalten automatisch die Variante ihres Skill-Levels.",
+      "topicDe": "Gemeinsames Thema (Deutsch)",
+      "topicEn": "Gemeinsames Thema (Englisch)",
+      "learningObjectiveDe": "Gemeinsames Lernziel (Deutsch)",
+      "learningObjectiveEn": "Gemeinsames Lernziel (Englisch)",
+      "difficultyVariant": "Schwierigkeitsvariante",
       "titleDe": "Titel (Deutsch)",
       "titleEn": "Titel (Englisch)",
       "descriptionDe": "Beschreibung (Deutsch)",
@@ -188,7 +201,7 @@
       "save": "Mission planen",
       "update": "Änderungen speichern",
       "calendarTitle": "Missionskalender",
-      "calendarText": "Die Markierung zeigt, wie viele der zwei täglichen Plätze bereits belegt sind.",
+      "calendarText": "Die Markierung zeigt, ob der tägliche Missionsplatz bereits belegt ist.",
       "scheduledFor": "Missionen am {{date}}",
       "noScheduled": "Für diesen Tag wurden noch keine Missionen erstellt.",
       "view": "Mission ansehen",
@@ -219,6 +232,7 @@
       "loading": "Review-Missionen werden geladen...",
       "empty": "Aktuell warten keine KI-generierten Missionen auf eine Prüfung.",
       "status": "Entwurf / Review",
+      "learningObjective": "Lernziel",
       "correct": "richtig",
       "showSolution": "Lösung und Feedback anzeigen",
       "feedback": "Feedback",
@@ -310,6 +324,7 @@
     "fieldName": "Name",
     "fieldEmail": "E-Mail",
     "fieldUser": "Benutzer",
+    "fieldSkillLevel": "Skill-Level",
     "changePassword": "Passwort ändern",
     "currentPassword": "Aktuelles Passwort",
     "newPassword": "Neues Passwort",
@@ -325,11 +340,24 @@
     "loading": "Nutzer werden geladen...",
     "columnUser": "Nutzer",
     "columnRole": "Rolle",
+    "columnSkill": "Skill-Level und Fortschritt",
     "columnPoints": "Punkte",
     "columnMissions": "Missions",
     "columnActions": "Aktionen",
     "youBadge": "Du",
     "roleSelectAria": "Rolle für {{name}}",
+    "evaluationProgress": "Auswertung: {{count}} / {{minimum}} Missionen",
+    "currentAverage": "Aktueller Durchschnitt: {{average}}%",
+    "progressionSettings": {
+      "title": "Automatische Skill-Progression",
+      "description": "Globale Regeln für Auf- und Abstufungen nach bewerteten Missionen.",
+      "enabled": "Automatisch auswerten",
+      "evaluation_window": "Auswertungsfenster",
+      "minimum_missions": "Mindestanzahl",
+      "promotion_threshold": "Aufstieg ab (%)",
+      "demotion_threshold": "Abstufung unter (%)",
+      "save": "Einstellungen speichern"
+    },
     "delete": "Löschen",
     "cancel": "Abbrechen",
     "deleteModalTitle": "Nutzer löschen",
@@ -339,12 +367,16 @@
       "loadFailed": "Nutzer konnten nicht geladen werden.",
       "lastAdminDowngrade": "Der letzte Admin kann nicht degradiert werden.",
       "roleUpdateFailed": "Rolle konnte nicht aktualisiert werden.",
+      "skillUpdateFailed": "Skill-Level konnte nicht aktualisiert werden.",
+      "settingsUpdateFailed": "Progressionsregeln konnten nicht gespeichert werden.",
       "selfDelete": "Du kannst deinen eigenen Account hier nicht löschen.",
       "lastAdminDelete": "Der letzte Admin kann nicht gelöscht werden.",
       "deleteFailed": "Nutzer konnte nicht gelöscht werden."
     },
     "success": {
       "roleUpdated": "Rolle wurde aktualisiert.",
+      "skillUpdated": "Skill-Level wurde aktualisiert und die Auswertungsphase zurückgesetzt.",
+      "settingsUpdated": "Progressionsregeln wurden gespeichert.",
       "deleted": "Nutzer wurde gelöscht."
     }
   },

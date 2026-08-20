@@ -9,6 +9,9 @@ export const EMPTY_PROGRESS = {
   currentStreak: 0,
   maxStreak: 0,
   level: 'Starter',
+  skillLevel: 'beginner',
+  difficulty: 'easy',
+  skillProgression: null,
   updatedAt: null,
 }
 
@@ -21,6 +24,9 @@ function normalizeProgress(progress = {}) {
     currentStreak: progress.current_streak ?? progress.currentStreak ?? 0,
     maxStreak: progress.max_streak ?? progress.maxStreak ?? 0,
     level: progress.level || 'Starter',
+    skillLevel: progress.skill_level || progress.skillLevel || 'beginner',
+    difficulty: progress.difficulty || 'easy',
+    skillProgression: progress.skill_progression || progress.skillProgression || null,
     updatedAt: progress.updated_at || progress.updatedAt || null,
   }
 }
