@@ -12,6 +12,8 @@
     "current": "English",
     "switchAria": "Switch language to German"
   },
+  "skillLevels": { "beginner": "Beginner", "advanced": "Advanced", "pro": "Pro" },
+  "difficulties": { "easy": "Easy", "medium": "Medium", "hard": "Hard" },
   "nav": {
     "home": "Home",
     "basics": "Basics",
@@ -83,7 +85,7 @@
   "missions": {
     "badge": "DAILY MISSIONS",
     "title": "Today's missions",
-    "description": "Up to two new tasks await you every day. Missed missions stay available until Monday 12:00 noon of the following week.",
+    "description": "One mission at your current skill level awaits you every day. Missed missions stay available until Monday 12:00 noon of the following week.",
     "points": "points",
     "loading": "Loading missions...",
     "emptyTitle": "No missions found",
@@ -160,6 +162,11 @@
     "microLearning": {
       "title": "For similar situations"
     },
+    "skillChange": {
+      "title": "Skill level adjusted",
+      "promotion": "New skill level reached: {{level}}.",
+      "demotion": "Your current skill level is now {{level}}. Your next missions will be adjusted accordingly."
+    },
     "creator": {
       "button": "Manage missions",
       "title": "Create mission",
@@ -168,6 +175,12 @@
       "cancelEdit": "Cancel editing",
       "type": "Mission type",
       "date": "Publication date",
+      "adaptiveHint": "Define one shared topic and learning objective, then complete all three difficulty variants. Users automatically receive the variant for their skill level.",
+      "topicDe": "Shared topic (German)",
+      "topicEn": "Shared topic (English)",
+      "learningObjectiveDe": "Shared learning objective (German)",
+      "learningObjectiveEn": "Shared learning objective (English)",
+      "difficultyVariant": "Difficulty variant",
       "titleDe": "Title (German)",
       "titleEn": "Title (English)",
       "descriptionDe": "Description (German)",
@@ -188,7 +201,7 @@
       "save": "Schedule mission",
       "update": "Save changes",
       "calendarTitle": "Mission calendar",
-      "calendarText": "The marker shows how many of the two daily slots are already occupied.",
+      "calendarText": "The marker shows whether the daily mission slot is already occupied.",
       "scheduledFor": "Missions on {{date}}",
       "noScheduled": "No missions have been created for this date yet.",
       "view": "View mission",
@@ -219,6 +232,7 @@
       "loading": "Loading review missions...",
       "empty": "There are currently no AI-generated missions awaiting review.",
       "status": "Draft / review",
+      "learningObjective": "Learning objective",
       "correct": "correct",
       "showSolution": "Show solution and feedback",
       "feedback": "Feedback",
@@ -310,6 +324,7 @@
     "fieldName": "Name",
     "fieldEmail": "Email",
     "fieldUser": "Username",
+    "fieldSkillLevel": "Skill level",
     "changePassword": "Change password",
     "currentPassword": "Current password",
     "newPassword": "New password",
@@ -325,11 +340,24 @@
     "loading": "Loading users...",
     "columnUser": "User",
     "columnRole": "Role",
+    "columnSkill": "Skill level and progress",
     "columnPoints": "Points",
     "columnMissions": "Missions",
     "columnActions": "Actions",
     "youBadge": "You",
     "roleSelectAria": "Role for {{name}}",
+    "evaluationProgress": "Evaluation: {{count}} / {{minimum}} missions",
+    "currentAverage": "Current average: {{average}}%",
+    "progressionSettings": {
+      "title": "Automatic skill progression",
+      "description": "Global rules for promotion and demotion after scored missions.",
+      "enabled": "Evaluate automatically",
+      "evaluation_window": "Evaluation window",
+      "minimum_missions": "Minimum missions",
+      "promotion_threshold": "Promote at (%)",
+      "demotion_threshold": "Demote below (%)",
+      "save": "Save settings"
+    },
     "delete": "Delete",
     "cancel": "Cancel",
     "deleteModalTitle": "Delete user",
@@ -339,12 +367,16 @@
       "loadFailed": "Users could not be loaded.",
       "lastAdminDowngrade": "The last admin cannot be downgraded.",
       "roleUpdateFailed": "The role could not be updated.",
+      "skillUpdateFailed": "The skill level could not be updated.",
+      "settingsUpdateFailed": "The progression rules could not be saved.",
       "selfDelete": "You cannot delete your own account here.",
       "lastAdminDelete": "The last admin cannot be deleted.",
       "deleteFailed": "User could not be deleted."
     },
     "success": {
       "roleUpdated": "The role was updated.",
+      "skillUpdated": "The skill level was updated and the evaluation phase was reset.",
+      "settingsUpdated": "The progression rules were saved.",
       "deleted": "User was deleted."
     }
   },

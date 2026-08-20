@@ -126,6 +126,26 @@ docker compose exec web python manage.py send_daily_mission_reminders --dry-run
 docker compose exec web python manage.py send_daily_mission_reminders --date 2026-06-19
 ```
 
+### Adaptive mission difficulty
+
+Each generated weekday now contains one learning topic with `easy`, `medium`,
+and `hard` variants. A persisted assignment maps the user's skill level to the
+variant (`beginner` → `easy`, `advanced` → `medium`, `pro` → `hard`) when the
+mission is first opened, so a same-day level change cannot unlock another
+variant. Admins configure the global progression window and thresholds in User
+management or Django admin.
+
+The manual mission creator uses the same model: authors enter one bilingual
+topic and learning objective, then complete separate `easy`, `medium`, and
+`hard` editors. New manual missions are rejected unless all three variants are
+valid; editing a legacy single-variant mission seeds all three editors from the
+existing content so it can be migrated without losing text.
+
+Migration `0011_skill_difficulty_progression` gives existing users the safe
+`beginner` default. Existing missions and attempts remain available but are left
+without an invented difficulty; consequently, legacy attempts are preserved but
+do not enter a difficulty-specific leaderboard or automatic progression window.
+
 ## Alternative: native venv (no Docker for the app)
 
 Faster IDE/debugger integration; only Postgres runs in Docker.

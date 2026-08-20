@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import process from 'node:process'
 
 // Production: the SPA is served by Django/WhiteNoise under /static/, so the build
 // must emit asset URLs with that prefix. Dev: base stays '/' (so localhost:5173

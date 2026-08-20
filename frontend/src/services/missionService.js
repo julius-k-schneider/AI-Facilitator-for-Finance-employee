@@ -37,6 +37,9 @@ export async function submitMission(missionId, answer, language) {
     maxStreak: progress.max_streak || 0,
     totalPoints: progress.total_points || 0,
     level: progress.level || 'Starter',
+    skillLevel: progress.skill_level || 'beginner',
+    difficulty: progress.difficulty || 'easy',
+    skillProgression: progress.skill_progression || null,
     updatedAt: progress.updated_at || null,
   } }))
   return data

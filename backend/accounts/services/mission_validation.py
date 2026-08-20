@@ -55,173 +55,169 @@ def ensure_distinct_explanations(feedback, micro_learning, field_prefix):
             )
 
 
+def normalize_generated_variant(raw_variant, mission_type, field_prefix):
+    if not isinstance(raw_variant, dict):
+        raise MissionValidationError(f'{field_prefix} must be an object')
+    try:
+        points = int(raw_variant.get('points'))
+    except (TypeError, ValueError) as error:
+        raise MissionValidationError(f'{field_prefix} has invalid points') from error
+    if points < 10 or points > 50:
+        raise MissionValidationError(f'{field_prefix} points must be between 10 and 50')
+
+    content = raw_variant.get('content')
+    if not isinstance(content, dict):
+        raise MissionValidationError(f'{field_prefix} content is required')
+    if mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
+        statements_de = content.get('statements_de')
+        statements_en = content.get('statements_en')
+        colors = content.get('correct_colors')
+        feedback_de = content.get('statement_feedback_de')
+        feedback_en = content.get('statement_feedback_en')
+        values = (statements_de, statements_en, colors, feedback_de, feedback_en)
+        if not all(isinstance(value, list) and len(value) == 3 for value in values):
+            raise MissionValidationError(f'{field_prefix} requires exactly three traffic-light statements')
+        if any(color not in TRAFFIC_LIGHT_COLORS for color in colors):
+            raise MissionValidationError(f'{field_prefix} has an invalid traffic-light color')
+        normalized_content = {
+            'question': {
+                'de': required_text(content.get('question_de'), f'{field_prefix} question_de'),
+                'en': required_text(content.get('question_en'), f'{field_prefix} question_en'),
+            },
+            'statements': [
+                {
+                    'text': {
+                        'de': required_text(de, f'{field_prefix} statement_de'),
+                        'en': required_text(en, f'{field_prefix} statement_en'),
+                    },
+                    'correct_color': color,
+                    'feedback': {
+                        'de': required_text(feedback_de[position], f'{field_prefix} statement_feedback_de'),
+                        'en': required_text(feedback_en[position], f'{field_prefix} statement_feedback_en'),
+                    },
+                }
+                for position, (de, en, color) in enumerate(zip(statements_de, statements_en, colors))
+            ],
+            'micro_learning': required_micro_learning(content, field_prefix),
+        }
+        traffic_feedback = {
+            language: ' '.join(statement['feedback'][language] for statement in normalized_content['statements'])
+            for language in ('de', 'en')
+        }
+        ensure_distinct_explanations(traffic_feedback, normalized_content['micro_learning'], field_prefix)
+    else:
+        options_de = content.get('options_de')
+        options_en = content.get('options_en')
+        if not isinstance(options_de, list) or not isinstance(options_en, list):
+            raise MissionValidationError(f'{field_prefix} options are required')
+        minimum_options = 3 if mission_type == Mission.TYPE_PROMPT_RANKING else 2
+        maximum_options = 4 if mission_type == Mission.TYPE_PROMPT_RANKING else 6
+        if len(options_de) < minimum_options or len(options_de) > maximum_options or len(options_de) != len(options_en):
+            raise MissionValidationError(
+                f'{field_prefix} must have {minimum_options} to {maximum_options} bilingual options'
+            )
+        options = [
+            {
+                'de': required_text(option_de, f'{field_prefix} option_de'),
+                'en': required_text(option_en, f'{field_prefix} option_en'),
+            }
+            for option_de, option_en in zip(options_de, options_en)
+        ]
+        normalized_content = {
+            'question': {
+                'de': required_text(content.get('question_de'), f'{field_prefix} question_de'),
+                'en': required_text(content.get('question_en'), f'{field_prefix} question_en'),
+            },
+            'options': options,
+        }
+        if mission_type == Mission.TYPE_PROMPT_RANKING:
+            try:
+                correct_order = [int(value) for value in content.get('correct_order', [])]
+            except (TypeError, ValueError) as error:
+                raise MissionValidationError(f'{field_prefix} has an invalid ranking') from error
+            if sorted(correct_order) != list(range(len(options))):
+                raise MissionValidationError(f'{field_prefix} ranking must contain every option exactly once')
+            normalized_content['correct_order'] = correct_order
+        else:
+            raw_correct_indices = content.get('correct_option_indices')
+            if raw_correct_indices is None and content.get('correct_option_index') is not None:
+                raw_correct_indices = [content.get('correct_option_index')]
+            try:
+                correct_indices = sorted({int(value) for value in (raw_correct_indices or [])})
+            except (TypeError, ValueError) as error:
+                raise MissionValidationError(f'{field_prefix} has an invalid correct answer') from error
+            if not correct_indices or any(value < 0 or value >= len(options) for value in correct_indices):
+                raise MissionValidationError(f'{field_prefix} correct answer is outside the options')
+            if mission_type != Mission.TYPE_MULTIPLE_CHOICE and len(correct_indices) != 1:
+                raise MissionValidationError(f'{field_prefix} requires exactly one correct answer')
+            normalized_content['correct_indices'] = correct_indices
+        normalized_content['feedback'] = {
+            'de': required_text(content.get('feedback_de'), f'{field_prefix} feedback_de'),
+            'en': required_text(content.get('feedback_en'), f'{field_prefix} feedback_en'),
+        }
+        normalized_content['micro_learning'] = required_micro_learning(content, field_prefix)
+        ensure_distinct_explanations(normalized_content['feedback'], normalized_content['micro_learning'], field_prefix)
+
+    return {
+        'title_de': required_text(raw_variant.get('title_de'), f'{field_prefix} title_de'),
+        'title_en': required_text(raw_variant.get('title_en'), f'{field_prefix} title_en'),
+        'description_de': required_text(raw_variant.get('description_de'), f'{field_prefix} description_de'),
+        'description_en': required_text(raw_variant.get('description_en'), f'{field_prefix} description_en'),
+        'max_points': points,
+        'content': normalized_content,
+    }
+
+
 def validate_generated_payload(payload, target_slots):
     if not isinstance(payload, dict) or not isinstance(payload.get('missions'), list):
         raise MissionValidationError('response must contain a missions array')
-
     expected_count = sum(target_slots.values())
     if len(payload['missions']) != expected_count:
         raise MissionValidationError(f'expected {expected_count} missions')
 
     normalized = []
     counts = {target_date: 0 for target_date in target_slots}
+    required_difficulties = set(Mission.DIFFICULTIES)
     for index, item in enumerate(payload['missions']):
+        prefix = f'mission {index + 1}'
         if not isinstance(item, dict):
-            raise MissionValidationError(f'mission {index + 1} must be an object')
+            raise MissionValidationError(f'{prefix} must be an object')
         try:
             scheduled_date = date.fromisoformat(str(item.get('date', '')))
         except ValueError as error:
-            raise MissionValidationError(f'mission {index + 1} has an invalid date') from error
+            raise MissionValidationError(f'{prefix} has an invalid date') from error
         if scheduled_date not in target_slots:
-            raise MissionValidationError(f'mission {index + 1} is outside the target week')
-
+            raise MissionValidationError(f'{prefix} is outside the target week')
         mission_type = item.get('type')
         if mission_type not in ALLOWED_AI_TYPES:
-            raise MissionValidationError(f'mission {index + 1} has an unsupported type')
-
-        try:
-            points = int(item.get('points'))
-        except (TypeError, ValueError) as error:
-            raise MissionValidationError(f'mission {index + 1} has invalid points') from error
-        if points < 10 or points > 50:
-            raise MissionValidationError(f'mission {index + 1} points must be between 10 and 50')
-
-        content = item.get('content')
-        if not isinstance(content, dict):
-            raise MissionValidationError(f'mission {index + 1} content is required')
-        if mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
-            statements_de = content.get('statements_de')
-            statements_en = content.get('statements_en')
-            colors = content.get('correct_colors')
-            feedback_de = content.get('statement_feedback_de')
-            feedback_en = content.get('statement_feedback_en')
-            if not all(isinstance(value, list) for value in (
-                statements_de, statements_en, colors, feedback_de, feedback_en,
-            )) or not all(len(value) == 3 for value in (
-                statements_de, statements_en, colors, feedback_de, feedback_en,
-            )):
-                raise MissionValidationError(f'mission {index + 1} requires exactly three traffic-light statements')
-            if any(color not in TRAFFIC_LIGHT_COLORS for color in colors):
-                raise MissionValidationError(f'mission {index + 1} has an invalid traffic-light color')
-            normalized_content = {
-                'question': {
-                    'de': required_text(content.get('question_de'), f'mission {index + 1} question_de'),
-                    'en': required_text(content.get('question_en'), f'mission {index + 1} question_en'),
-                },
-                'statements': [
-                    {
-                        'text': {
-                            'de': required_text(de, f'mission {index + 1} statement_de'),
-                            'en': required_text(en, f'mission {index + 1} statement_en'),
-                        },
-                        'correct_color': color,
-                        'feedback': {
-                            'de': required_text(feedback_de[position], f'mission {index + 1} statement_feedback_de'),
-                            'en': required_text(feedback_en[position], f'mission {index + 1} statement_feedback_en'),
-                        },
-                    }
-                    for position, (de, en, color) in enumerate(zip(statements_de, statements_en, colors))
-                ],
-                'micro_learning': required_micro_learning(content, f'mission {index + 1}'),
-            }
-            traffic_feedback = {
-                language: ' '.join(statement['feedback'][language] for statement in normalized_content['statements'])
-                for language in ('de', 'en')
-            }
-            ensure_distinct_explanations(
-                traffic_feedback, normalized_content['micro_learning'], f'mission {index + 1}'
-            )
-            options = []
-            correct_indices = []
-        else:
-            options_de = content.get('options_de')
-            options_en = content.get('options_en')
-            if not isinstance(options_de, list) or not isinstance(options_en, list):
-                raise MissionValidationError(f'mission {index + 1} options are required')
-            minimum_options = 3 if mission_type == Mission.TYPE_PROMPT_RANKING else 2
-            maximum_options = 4 if mission_type == Mission.TYPE_PROMPT_RANKING else 6
-            if len(options_de) < minimum_options or len(options_de) > maximum_options or len(options_de) != len(options_en):
-                raise MissionValidationError(
-                    f'mission {index + 1} must have {minimum_options} to {maximum_options} bilingual options'
-                )
-            options = [
-                {
-                    'de': required_text(option_de, f'mission {index + 1} option_de'),
-                    'en': required_text(option_en, f'mission {index + 1} option_en'),
-                }
-                for option_de, option_en in zip(options_de, options_en)
-            ]
-            if mission_type == Mission.TYPE_PROMPT_RANKING:
-                try:
-                    correct_order = [int(value) for value in content.get('correct_order', [])]
-                except (TypeError, ValueError) as error:
-                    raise MissionValidationError(f'mission {index + 1} has an invalid ranking') from error
-                if sorted(correct_order) != list(range(len(options))):
-                    raise MissionValidationError(f'mission {index + 1} ranking must contain every option exactly once')
-                correct_indices = []
-                normalized_content = {
-                    'question': {
-                        'de': required_text(content.get('question_de'), f'mission {index + 1} question_de'),
-                        'en': required_text(content.get('question_en'), f'mission {index + 1} question_en'),
-                    },
-                    'options': options,
-                    'correct_order': correct_order,
-                    'feedback': {
-                        'de': required_text(content.get('feedback_de'), f'mission {index + 1} feedback_de'),
-                        'en': required_text(content.get('feedback_en'), f'mission {index + 1} feedback_en'),
-                    },
-                }
-                normalized_content['micro_learning'] = required_micro_learning(content, f'mission {index + 1}')
-                ensure_distinct_explanations(
-                    normalized_content['feedback'],
-                    normalized_content['micro_learning'],
-                    f'mission {index + 1}',
-                )
-            else:
-                raw_correct_indices = content.get('correct_option_indices')
-                if raw_correct_indices is None and content.get('correct_option_index') is not None:
-                    raw_correct_indices = [content.get('correct_option_index')]
-                try:
-                    correct_indices = sorted({int(value) for value in (raw_correct_indices or [])})
-                except (TypeError, ValueError) as error:
-                    raise MissionValidationError(f'mission {index + 1} has an invalid correct answer') from error
-                if not correct_indices or any(value < 0 or value >= len(options) for value in correct_indices):
-                    raise MissionValidationError(f'mission {index + 1} correct answer is outside the options')
-                if mission_type != Mission.TYPE_MULTIPLE_CHOICE and len(correct_indices) != 1:
-                    raise MissionValidationError(f'mission {index + 1} requires exactly one correct answer')
-                normalized_content = {
-                    'question': {
-                        'de': required_text(content.get('question_de'), f'mission {index + 1} question_de'),
-                        'en': required_text(content.get('question_en'), f'mission {index + 1} question_en'),
-                    },
-                    'options': options,
-                    'correct_indices': correct_indices,
-                    'feedback': {
-                        'de': required_text(content.get('feedback_de'), f'mission {index + 1} feedback_de'),
-                        'en': required_text(content.get('feedback_en'), f'mission {index + 1} feedback_en'),
-                    },
-                }
-                normalized_content['micro_learning'] = required_micro_learning(content, f'mission {index + 1}')
-                ensure_distinct_explanations(
-                    normalized_content['feedback'],
-                    normalized_content['micro_learning'],
-                    f'mission {index + 1}',
-                )
-
+            raise MissionValidationError(f'{prefix} has an unsupported type')
+        raw_variants = item.get('variants')
+        if not isinstance(raw_variants, dict) or set(raw_variants) != required_difficulties:
+            raise MissionValidationError(f'{prefix} must contain exactly easy, medium, and hard variants')
+        variants = {
+            difficulty: normalize_generated_variant(raw_variants[difficulty], mission_type, f'{prefix} {difficulty}')
+            for difficulty in Mission.DIFFICULTIES
+        }
+        easy = variants[Mission.DIFFICULTY_EASY]
         normalized.append({
             'scheduled_date': scheduled_date,
             'mission_type': mission_type,
-            'title_de': required_text(item.get('title_de'), f'mission {index + 1} title_de'),
-            'title_en': required_text(item.get('title_en'), f'mission {index + 1} title_en'),
-            'description_de': required_text(item.get('description_de'), f'mission {index + 1} description_de'),
-            'description_en': required_text(item.get('description_en'), f'mission {index + 1} description_en'),
-            'max_points': points,
-            'content': normalized_content,
+            'topic_de': required_text(item.get('topic_de'), f'{prefix} topic_de'),
+            'topic_en': required_text(item.get('topic_en'), f'{prefix} topic_en'),
+            'learning_objective_de': required_text(
+                item.get('learning_objective_de'), f'{prefix} learning_objective_de'
+            ),
+            'learning_objective_en': required_text(
+                item.get('learning_objective_en'), f'{prefix} learning_objective_en'
+            ),
+            'variants': variants,
+            # Existing schedule/review code keeps using these fields as a safe
+            # preview fallback; learner delivery resolves the assigned variant.
+            **easy,
         })
         counts[scheduled_date] += 1
         if counts[scheduled_date] > target_slots[scheduled_date]:
             raise MissionValidationError(f'too many missions for {scheduled_date.isoformat()}')
-
     if counts != target_slots:
         raise MissionValidationError('missions do not fill the requested daily slots')
     return normalized

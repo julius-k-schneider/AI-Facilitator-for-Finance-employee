@@ -5,9 +5,11 @@ import {
   Badge,
   Box,
   Button,
+  Checkbox,
   Group,
   Loader,
   Modal,
+  NumberInput,
   Paper,
   Select,
   Stack,
@@ -21,7 +23,14 @@ import { IconSearch, IconShield, IconTrash, IconUserCog, IconUsers } from '@tabl
 import { useTranslation } from 'react-i18next'
 import { getUserId } from '../services/progressService'
 import { ROLE_LABELS, ROLES, getAvailableRoles } from '../auth/permissions'
-import { deleteUser, getAllRegisteredUsers, updateUserRole } from '../services/userService'
+import {
+  deleteUser,
+  getAllRegisteredUsers,
+  getSkillProgressionSettings,
+  updateSkillProgressionSettings,
+  updateUserRole,
+  updateUserSkillLevel,
+} from '../services/userService'
 
 function displayName(user) {
   const name = `${user.first_name || ''} ${user.last_name || ''}`.trim()
@@ -49,6 +58,7 @@ const roleOptions = getAvailableRoles().map((role) => ({
   value: role,
   label: ROLE_LABELS[role],
 }))
+const skillOptions = ['beginner', 'advanced', 'pro'].map((level) => ({ value: level, label: level }))
 
 export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
   const { t } = useTranslation()
@@ -57,15 +67,18 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [settings, setSettings] = useState(null)
+  const [savingSettings, setSavingSettings] = useState(false)
   const currentUserId = getUserId(currentUser)
 
   useEffect(() => {
     let isActive = true
 
-    getAllRegisteredUsers()
-      .then((nextUsers) => {
+    Promise.all([getAllRegisteredUsers(), getSkillProgressionSettings()])
+      .then(([nextUsers, nextSettings]) => {
         if (!isActive) return
         setUsers(nextUsers)
+        setSettings(nextSettings)
         setMessage(null)
       })
       .catch((error) => {
@@ -109,6 +122,32 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
       setMessage({ type: 'success', text: t('userManagement.success.roleUpdated') })
     } catch (error) {
       setMessage({ type: 'error', text: error.message || t('userManagement.errors.roleUpdateFailed') })
+    }
+  }
+
+  const handleSkillChange = async (target, skillLevel) => {
+    if (!skillLevel || skillLevel === target.skill_level) return
+    try {
+      const updatedUser = await updateUserSkillLevel(target.id, skillLevel)
+      setUsers((current) => current.map((user) => (user.id === updatedUser.id ? updatedUser : user)))
+      if (String(updatedUser.id) === currentUserId) onCurrentUserUpdate(updatedUser)
+      setMessage({ type: 'success', text: t('userManagement.success.skillUpdated') })
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || t('userManagement.errors.skillUpdateFailed') })
+    }
+  }
+
+  const saveSettings = async () => {
+    if (!settings) return
+    setSavingSettings(true)
+    try {
+      const updated = await updateSkillProgressionSettings(settings)
+      setSettings(updated)
+      setMessage({ type: 'success', text: t('userManagement.success.settingsUpdated') })
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || t('userManagement.errors.settingsUpdateFailed') })
+    } finally {
+      setSavingSettings(false)
     }
   }
 
@@ -176,6 +215,29 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
         </Group>
       </Paper>
 
+      {settings && <Paper withBorder radius="lg" bg="white" p="lg" mb="xl">
+        <Title order={2} fz="lg" mb="xs">{t('userManagement.progressionSettings.title')}</Title>
+        <Text c="dimmed" fz="sm" mb="md">{t('userManagement.progressionSettings.description')}</Text>
+        <Group align="flex-end">
+          <Checkbox
+            checked={settings.automatic_progression_enabled}
+            onChange={(event) => setSettings((current) => ({ ...current, automatic_progression_enabled: event.currentTarget.checked }))}
+            label={t('userManagement.progressionSettings.enabled')}
+            mb={8}
+          />
+          {['evaluation_window', 'minimum_missions', 'promotion_threshold', 'demotion_threshold'].map((field) => <NumberInput
+            key={field}
+            label={t(`userManagement.progressionSettings.${field}`)}
+            value={settings[field]}
+            min={field.includes('threshold') ? 0 : 1}
+            max={field.includes('threshold') ? 100 : undefined}
+            onChange={(value) => setSettings((current) => ({ ...current, [field]: Number(value) }))}
+            w={180}
+          />)}
+          <Button loading={savingSettings} onClick={saveSettings}>{t('userManagement.progressionSettings.save')}</Button>
+        </Group>
+      </Paper>}
+
       <Paper withBorder radius="lg" bg="white" style={{ overflow: 'hidden' }}>
         <Group justify="space-between" p="lg" style={{ borderBottom: '1px solid var(--line)' }}>
           <Group gap="sm">
@@ -216,6 +278,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>{t('userManagement.columnUser')}</Table.Th>
+                <Table.Th>{t('userManagement.columnSkill')}</Table.Th>
                 <Table.Th>{t('userManagement.columnRole')}</Table.Th>
                 <Table.Th>{t('userManagement.columnPoints')}</Table.Th>
                 <Table.Th>{t('userManagement.columnMissions')}</Table.Th>
@@ -260,6 +323,23 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
                           </Text>
                         </Box>
                       </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      <Select
+                        data={skillOptions.map((option) => ({ ...option, label: t(`skillLevels.${option.value}`) }))}
+                        value={user.skill_level || 'beginner'}
+                        onChange={(level) => handleSkillChange(user, level)}
+                        w={150}
+                      />
+                      <Text fz="xs" c="dimmed" mt={6}>
+                        {t('userManagement.evaluationProgress', {
+                          count: user.skill_progression?.relevant_completed_missions || 0,
+                          minimum: user.skill_progression?.minimum_missions || settings?.minimum_missions || 10,
+                        })}
+                      </Text>
+                      <Text fz="xs" c="dimmed">
+                        {t('userManagement.currentAverage', { average: user.skill_progression?.current_average ?? '-' })}
+                      </Text>
                     </Table.Td>
                     <Table.Td>
                       <Select

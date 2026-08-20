@@ -16,6 +16,7 @@ import Missions from './pages/Missions'
 import Training from './pages/Training'
 import Profile from './pages/Profile'
 import UserManagement from './pages/UserManagement'
+import { PROGRESS_EVENT } from './services/progressService'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 const EMPTY_FORM = { password: '', email: '', first_name: '', last_name: '', role: 'accountant' }
@@ -55,6 +56,17 @@ function App() {
         }
       })
       .catch(() => setStatus('guest'))
+  }, [])
+
+  useEffect(() => {
+    const refreshUser = () => {
+      fetch(`${API_BASE}/api/auth/user/`, { credentials: 'include' })
+        .then((response) => response.ok && response.json())
+        .then((data) => { if (data?.authenticated) setUser(data.user) })
+        .catch(() => {})
+    }
+    window.addEventListener(PROGRESS_EVENT, refreshUser)
+    return () => window.removeEventListener(PROGRESS_EVENT, refreshUser)
   }, [])
 
   const handleChange = (field) => (event) => {

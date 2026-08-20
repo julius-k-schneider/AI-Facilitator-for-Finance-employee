@@ -5,7 +5,16 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from .models import AgentChat, DailyMissionReminder, Mission, MissionAttempt, Profile, WeeklyLeaderboardSnapshot
+from .models import (
+    AgentChat,
+    DailyMissionReminder,
+    Mission,
+    MissionAssignment,
+    MissionAttempt,
+    Profile,
+    SkillProgressionSettings,
+    WeeklyLeaderboardSnapshot,
+)
 from .services.ai_mission_generator import (
     AiMissionGenerationError,
     SYSTEM_PROMPT,
@@ -18,6 +27,7 @@ from .services.ai_mission_generator import (
 from .services.ai_chat_challenge import evaluate_final_answers, validate_challenge
 from .services.email_notifications import send_daily_mission_reminders
 from .services.mission_validation import MissionValidationError, validate_generated_payload
+from .services.skill_progression import evaluate_skill_progression, set_skill_level_manually
 
 
 class AccountsApiTests(TestCase):
@@ -83,6 +93,15 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()['user']['role'], Profile.ROLE_ADMIN)
 
+    def test_self_registration_cannot_request_privileged_role(self):
+        self.create_user('existing-admin@example.com', Profile.ROLE_ADMIN)
+        response = self.client.post('/api/auth/register/', {
+            'email': 'attacker@example.com', 'password': 'Test1234!',
+            'first_name': 'Eve', 'last_name': 'Example', 'role': Profile.ROLE_ADMIN,
+        }, content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(get_user_model().objects.filter(email='attacker@example.com').exists())
+
     def completed_at_on(self, day):
         return timezone.make_aware(datetime.combine(day, time(hour=12)))
 
@@ -94,6 +113,34 @@ class AccountsApiTests(TestCase):
         while day.weekday() >= 5:
             day += timedelta(days=1)
         return day
+
+    def manual_mission_payload(self, scheduled_date=None, mission_type=Mission.TYPE_SINGLE_CHOICE):
+        variants = {}
+        for position, difficulty in enumerate(Mission.DIFFICULTIES):
+            variants[difficulty] = {
+                'title_de': f'Titel {difficulty}',
+                'title_en': f'Title {difficulty}',
+                'description_de': f'Beschreibung {difficulty}',
+                'description_en': f'Description {difficulty}',
+                'question_de': f'Frage {difficulty}?',
+                'question_en': f'Question {difficulty}?',
+                'feedback_de': f'Feedback {difficulty}',
+                'feedback_en': f'Feedback {difficulty}',
+                'micro_learning_de': f'Lernhinweis {difficulty}',
+                'micro_learning_en': f'Learning note {difficulty}',
+                'options': [{'de': 'Ja', 'en': 'Yes'}, {'de': 'Nein', 'en': 'No'}],
+                'correct_indices': [0],
+                'max_points': 30 + position * 10,
+            }
+        return {
+            'type': mission_type,
+            'scheduled_date': (scheduled_date or timezone.localdate()).isoformat(),
+            'topic_de': 'Gemeinsames Thema',
+            'topic_en': 'Shared topic',
+            'learning_objective_de': 'Gemeinsames Lernziel',
+            'learning_objective_en': 'Shared learning objective',
+            'variants': variants,
+        }
 
     def test_daily_missions_only_include_today_and_hide_correct_answer(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -355,17 +402,10 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.json()['result']['item_correct'], [True, False, True])
         self.assertFalse(response.json()['result']['correct'])
 
-    def test_only_creators_can_create_and_date_is_limited_to_two_missions(self):
+    def test_only_creators_can_create_and_date_is_limited_to_one_mission(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         player = self.create_user('player@example.com')
-        payload = {
-            'type': 'single_choice', 'scheduled_date': timezone.localdate().isoformat(),
-            'title_de': 'Titel', 'title_en': 'Title',
-            'description_de': 'Beschreibung', 'description_en': 'Description',
-            'question_de': 'Frage?', 'question_en': 'Question?',
-            'options': [{'de': 'Ja', 'en': 'Yes'}, {'de': 'Nein', 'en': 'No'}],
-            'correct_index': 0, 'max_points': 50,
-        }
+        payload = self.manual_mission_payload()
 
         self.client.force_login(player)
         denied = self.client.post('/api/auth/missions/schedule/', payload, content_type='application/json', secure=True)
@@ -373,23 +413,14 @@ class AccountsApiTests(TestCase):
 
         self.client.force_login(creator)
         self.assertEqual(self.client.post('/api/auth/missions/schedule/', payload, content_type='application/json', secure=True).status_code, 201)
-        payload['title_de'] = 'Titel 2'
-        self.assertEqual(self.client.post('/api/auth/missions/schedule/', payload, content_type='application/json', secure=True).status_code, 201)
-        payload['title_de'] = 'Titel 3'
+        payload['variants']['easy']['title_de'] = 'Titel 2'
         self.assertEqual(self.client.post('/api/auth/missions/schedule/', payload, content_type='application/json', secure=True).status_code, 409)
 
     @patch('accounts.views.send_published_mission_email')
     def test_published_mission_creation_sends_email_reminder(self, send_email_mock):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         self.create_user('player@example.com')
-        payload = {
-            'type': 'single_choice', 'scheduled_date': timezone.localdate().isoformat(),
-            'title_de': 'Titel', 'title_en': 'Title',
-            'description_de': 'Beschreibung', 'description_en': 'Description',
-            'question_de': 'Frage?', 'question_en': 'Question?',
-            'options': [{'de': 'Ja', 'en': 'Yes'}, {'de': 'Nein', 'en': 'No'}],
-            'correct_index': 0, 'max_points': 50,
-        }
+        payload = self.manual_mission_payload()
         self.client.force_login(creator)
 
         with self.captureOnCommitCallbacks(execute=True):
@@ -397,7 +428,7 @@ class AccountsApiTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
         send_email_mock.assert_called_once()
-        self.assertEqual(send_email_mock.call_args.args[0].title_de, 'Titel')
+        self.assertEqual(send_email_mock.call_args.args[0].title_de, 'Titel easy')
 
     @patch('accounts.services.email_notifications.send_daily_mission_reminder', return_value=1)
     def test_daily_mission_reminders_target_only_incomplete_users_once_on_friday(self, send_mock):
@@ -445,23 +476,24 @@ class AccountsApiTests(TestCase):
     def test_creator_can_create_supported_types_and_edit_from_calendar(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         self.client.force_login(creator)
-        payload = {
-            'type': Mission.TYPE_MULTIPLE_CHOICE,
-            'scheduled_date': self.next_business_day().isoformat(),
-            'title_de': 'Mehrfachauswahl', 'title_en': 'Multiple choice',
-            'description_de': 'Kurze Beschreibung', 'description_en': 'Short description',
-            'question_de': 'Welche Option passt?', 'question_en': 'Which option fits?',
-            'feedback_de': 'Option zwei passt.', 'feedback_en': 'Option two fits.',
-            'options': [{'de': 'Eins', 'en': 'One'}, {'de': 'Zwei', 'en': 'Two'}],
-            'correct_index': 1, 'max_points': 30,
-        }
+        payload = self.manual_mission_payload(
+            self.next_business_day(), mission_type=Mission.TYPE_MULTIPLE_CHOICE,
+        )
+        for variant in payload['variants'].values():
+            variant['title_de'] = 'Mehrfachauswahl'
+            variant['title_en'] = 'Multiple choice'
+            variant['correct_indices'] = [1]
         created = self.client.post('/api/auth/missions/schedule/', payload, content_type='application/json', secure=True)
         self.assertEqual(created.status_code, 201)
         mission = Mission.objects.get(title_en='Multiple choice')
+        self.assertTrue(mission.has_difficulty_variants)
+        self.assertEqual(mission.topic_en, 'Shared topic')
+        self.assertEqual(mission.variants[Mission.DIFFICULTY_HARD]['max_points'], 50)
 
         payload['type'] = Mission.TYPE_PROMPT_SELECTION
-        payload['title_de'] = 'Prompt-Auswahl'
-        payload['title_en'] = 'Prompt selection'
+        for variant in payload['variants'].values():
+            variant['title_de'] = 'Prompt-Auswahl'
+            variant['title_en'] = 'Prompt selection'
         updated = self.client.patch(
             f'/api/auth/missions/{mission.id}/', payload, content_type='application/json', secure=True,
         )
@@ -469,22 +501,28 @@ class AccountsApiTests(TestCase):
         mission.refresh_from_db()
         self.assertEqual(mission.mission_type, Mission.TYPE_PROMPT_SELECTION)
         self.assertEqual(mission.title_de, 'Prompt-Auswahl')
-        self.assertEqual(mission.content['feedback']['en'], 'Option two fits.')
+        self.assertEqual(mission.content['feedback']['en'], 'Feedback easy')
+        self.assertEqual(mission.variants[Mission.DIFFICULTY_MEDIUM]['title_en'], 'Prompt selection')
+
+    def test_manual_creator_requires_all_three_difficulty_variants(self):
+        creator = self.create_user('creator-variants@example.com', Profile.ROLE_CONTENT_CREATOR)
+        self.client.force_login(creator)
+        payload = self.manual_mission_payload(self.next_business_day())
+        payload['variants'].pop(Mission.DIFFICULTY_HARD)
+
+        response = self.client.post(
+            '/api/auth/missions/schedule/', payload, content_type='application/json', secure=True,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error'], 'exactly easy, medium, and hard variants are required')
+        self.assertFalse(Mission.objects.filter(scheduled_date=payload['scheduled_date']).exists())
 
     def test_creator_cannot_schedule_missions_on_weekends(self):
         creator = self.create_user('creator-weekend-schedule@example.com', Profile.ROLE_CONTENT_CREATOR)
         self.client.force_login(creator)
         next_saturday = timezone.localdate() + timedelta(days=(5 - timezone.localdate().weekday()) % 7 or 7)
-        payload = {
-            'type': Mission.TYPE_SINGLE_CHOICE,
-            'scheduled_date': next_saturday.isoformat(),
-            'title_de': 'Wochenende', 'title_en': 'Weekend',
-            'description_de': 'Kurze Beschreibung', 'description_en': 'Short description',
-            'question_de': 'Welche Option passt?', 'question_en': 'Which option fits?',
-            'feedback_de': 'Feedback', 'feedback_en': 'Feedback',
-            'options': [{'de': 'Eins', 'en': 'One'}, {'de': 'Zwei', 'en': 'Two'}],
-            'correct_index': 1, 'max_points': 30,
-        }
+        payload = self.manual_mission_payload(next_saturday)
 
         response = self.client.post('/api/auth/missions/schedule/', payload, content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 400)
@@ -719,7 +757,7 @@ class AccountsApiTests(TestCase):
     def test_creator_can_approve_and_reject_all_review_missions(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         first = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
-        second = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
+        second = self.create_mission(creator, timezone.localdate() + timedelta(days=2))
         Mission.objects.filter(id__in=[first.id, second.id]).update(status=Mission.STATUS_REVIEW)
         self.client.force_login(creator)
 
@@ -731,7 +769,7 @@ class AccountsApiTests(TestCase):
             2,
         )
 
-        third = self.create_mission(creator, timezone.localdate() + timedelta(days=2))
+        third = self.create_mission(creator, timezone.localdate() + timedelta(days=3))
         third.status = Mission.STATUS_REVIEW
         third.save(update_fields=['status'])
         rejected = self.client.post('/api/auth/missions/review/reject-all/', secure=True)
@@ -744,7 +782,7 @@ class AccountsApiTests(TestCase):
     def test_approve_all_review_missions_sends_email_reminders(self, send_emails_mock):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         first = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
-        second = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
+        second = self.create_mission(creator, timezone.localdate() + timedelta(days=2))
         Mission.objects.filter(id__in=[first.id, second.id]).update(status=Mission.STATUS_REVIEW)
         self.client.force_login(creator)
 
@@ -777,7 +815,7 @@ class AccountsApiTests(TestCase):
         self.assertEqual(selected.status, Mission.STATUS_PUBLISHED)
         self.assertEqual(other.status, Mission.STATUS_REVIEW)
 
-    def test_approve_all_is_atomic_when_a_day_would_exceed_two_missions(self):
+    def test_approve_all_is_atomic_when_a_day_would_exceed_one_mission(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         scheduled_date = timezone.localdate() + timedelta(days=1)
         published = self.create_mission(creator, scheduled_date)
@@ -844,17 +882,20 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         generate_mock.assert_called_once_with(creator, force=False, week_start=current_monday)
 
-    def test_leaderboard_combines_legacy_and_daily_mission_points(self):
+    def test_difficulty_leaderboard_uses_classified_attempts_only(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         leader = self.create_user('leader@example.com', legacy_score=40)
         mission = self.create_mission(creator, points=90)
-        MissionAttempt.objects.create(user=leader, mission=mission, answer={'selected_index': 0}, score=90)
+        MissionAttempt.objects.create(
+            user=leader, mission=mission, answer={'selected_index': 0}, score=90,
+            max_points=90, difficulty=Mission.DIFFICULTY_EASY,
+        )
         self.client.force_login(leader)
 
         response = self.client.get('/api/auth/leaderboard/', secure=True)
         self.assertEqual(response.status_code, 200)
         entry = next(item for item in response.json()['entries'] if item['email'] == 'leader@example.com')
-        self.assertEqual(entry['total_points'], 130)
+        self.assertEqual(entry['total_points'], 90)
 
     def test_streak_tracks_only_missions_completed_on_scheduled_date(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -922,9 +963,11 @@ class AccountsApiTests(TestCase):
         previous = self.create_mission(creator, week_start - timedelta(days=1), points=90)
         current_attempt = MissionAttempt.objects.create(
             user=player, mission=current, answer={'selected_indices': [0]}, score=40,
+            max_points=40, difficulty=Mission.DIFFICULTY_EASY,
         )
         previous_attempt = MissionAttempt.objects.create(
             user=player, mission=previous, answer={'selected_indices': [0]}, score=90,
+            max_points=90, difficulty=Mission.DIFFICULTY_EASY,
         )
         MissionAttempt.objects.filter(id=current_attempt.id).update(completed_at=timezone.now())
         MissionAttempt.objects.filter(id=previous_attempt.id).update(
@@ -950,13 +993,278 @@ class AccountsApiTests(TestCase):
             'completed_missions': 4, 'level': 'Starter',
         }]
         WeeklyLeaderboardSnapshot.objects.create(
-            week_start=week_start, week_end=week_start + timedelta(days=6), entries=entries,
+            week_start=week_start, week_end=week_start + timedelta(days=6),
+            difficulty=Mission.DIFFICULTY_EASY, entries=entries,
         )
         self.client.force_login(user)
 
         response = self.client.get(f'/api/auth/leaderboard/history/{week_start.isoformat()}/', secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['entries'][0]['total_points'], 80)
+
+
+class SkillProgressionTests(TestCase):
+    def create_user(self, email, skill_level=Profile.SKILL_BEGINNER, role=Profile.ROLE_ACCOUNTANT):
+        user = get_user_model().objects.create_user(username=email, email=email, password='Test1234!')
+        Profile.objects.create(
+            user=user,
+            role=role,
+            skill_level=skill_level,
+            onboarding_completed=True,
+        )
+        return user
+
+    def create_variant_mission(self, creator, scheduled_date=None):
+        variants = {}
+        labels = {'easy': 'Easy', 'medium': 'Medium', 'hard': 'Hard'}
+        for difficulty in Mission.DIFFICULTIES:
+            variants[difficulty] = {
+                'title_de': labels[difficulty],
+                'title_en': labels[difficulty],
+                'description_de': f'{labels[difficulty]} Beschreibung',
+                'description_en': f'{labels[difficulty]} description',
+                'max_points': 100,
+                'content': {
+                    'question': {'de': f'{labels[difficulty]} Frage?', 'en': f'{labels[difficulty]} question?'},
+                    'options': [{'de': 'Ja', 'en': 'Yes'}, {'de': 'Nein', 'en': 'No'}],
+                    'correct_indices': [0],
+                    'feedback': {'de': 'Richtig.', 'en': 'Correct.'},
+                    'micro_learning': {'de': 'Prüfe Ergebnisse.', 'en': 'Verify results.'},
+                },
+            }
+        easy = variants[Mission.DIFFICULTY_EASY]
+        return Mission.objects.create(
+            mission_type=Mission.TYPE_SINGLE_CHOICE,
+            scheduled_date=scheduled_date or timezone.localdate(),
+            title_de=easy['title_de'],
+            title_en=easy['title_en'],
+            description_de=easy['description_de'],
+            description_en=easy['description_en'],
+            content=easy['content'],
+            max_points=100,
+            topic_de='Ergebnisse prüfen',
+            topic_en='Verify results',
+            learning_objective_de='KI-Ergebnisse passend zur Komplexität prüfen.',
+            learning_objective_en='Verify AI output at an appropriate complexity.',
+            variants=variants,
+            created_by=creator,
+        )
+
+    def configure(self, minimum=3, window=3, promotion=80, demotion=50, enabled=True):
+        settings_object = SkillProgressionSettings.load()
+        settings_object.automatic_progression_enabled = enabled
+        settings_object.evaluation_window = window
+        settings_object.minimum_missions = minimum
+        settings_object.promotion_threshold = promotion
+        settings_object.demotion_threshold = demotion
+        settings_object.save()
+        return settings_object
+
+    def record_result(self, user, creator, difficulty, score):
+        mission = self.create_variant_mission(creator)
+        return MissionAttempt.objects.create(
+            user=user,
+            mission=mission,
+            answer={'selected_indices': [0]},
+            score=score,
+            max_points=100,
+            difficulty=difficulty,
+        )
+
+    def test_new_users_default_to_beginner(self):
+        user = get_user_model().objects.create_user(username='new@example.com')
+        profile = Profile.objects.create(user=user)
+        self.assertEqual(profile.skill_level, Profile.SKILL_BEGINNER)
+
+    def test_daily_variant_assignment_maps_all_skill_levels(self):
+        creator = self.create_user('creator-levels@example.com', role=Profile.ROLE_CONTENT_CREATOR)
+        mission = self.create_variant_mission(creator)
+        for skill_level, difficulty in (
+            (Profile.SKILL_BEGINNER, Mission.DIFFICULTY_EASY),
+            (Profile.SKILL_ADVANCED, Mission.DIFFICULTY_MEDIUM),
+            (Profile.SKILL_PRO, Mission.DIFFICULTY_HARD),
+        ):
+            user = self.create_user(f'{skill_level}@example.com', skill_level=skill_level)
+            self.client.force_login(user)
+            payload = self.client.get('/api/auth/missions/today/?lang=en', secure=True).json()['missions'][0]
+            self.assertEqual(payload['difficulty'], difficulty)
+            self.assertEqual(payload['title'], difficulty.title())
+            self.assertEqual(MissionAssignment.objects.get(user=user, mission=mission).difficulty, difficulty)
+
+    def test_progression_requires_minimum_and_resets_between_promotions(self):
+        self.configure(minimum=2, window=2)
+        creator = self.create_user('creator-progress@example.com', role=Profile.ROLE_CONTENT_CREATOR)
+        user = self.create_user('progress@example.com')
+        profile = user.profile
+        self.record_result(user, creator, Mission.DIFFICULTY_EASY, 100)
+        change, _summary = evaluate_skill_progression(profile)
+        self.assertIsNone(change)
+        profile.refresh_from_db()
+        self.assertEqual(profile.skill_level, Profile.SKILL_BEGINNER)
+
+        self.record_result(user, creator, Mission.DIFFICULTY_EASY, 80)
+        change, summary = evaluate_skill_progression(profile)
+        self.assertEqual(change['new_level'], Profile.SKILL_ADVANCED)
+        self.assertEqual(summary['relevant_completed_missions'], 0)
+        change, _summary = evaluate_skill_progression(profile)
+        self.assertIsNone(change)
+
+        self.record_result(user, creator, Mission.DIFFICULTY_MEDIUM, 100)
+        profile.refresh_from_db()
+        self.assertIsNone(evaluate_skill_progression(profile)[0])
+        self.record_result(user, creator, Mission.DIFFICULTY_MEDIUM, 100)
+        change, _summary = evaluate_skill_progression(profile)
+        self.assertEqual(change['new_level'], Profile.SKILL_PRO)
+
+    def test_demotion_boundaries_neutral_range_and_disabled_progression(self):
+        self.configure(minimum=1, window=1)
+        creator = self.create_user('creator-boundaries@example.com', role=Profile.ROLE_CONTENT_CREATOR)
+
+        beginner = self.create_user('beginner@example.com')
+        self.record_result(beginner, creator, Mission.DIFFICULTY_EASY, 20)
+        self.assertIsNone(evaluate_skill_progression(beginner.profile)[0])
+
+        advanced = self.create_user('advanced@example.com', Profile.SKILL_ADVANCED)
+        self.record_result(advanced, creator, Mission.DIFFICULTY_MEDIUM, 49)
+        change, _summary = evaluate_skill_progression(advanced.profile)
+        self.assertEqual(change['new_level'], Profile.SKILL_BEGINNER)
+
+        pro = self.create_user('pro@example.com', Profile.SKILL_PRO)
+        self.record_result(pro, creator, Mission.DIFFICULTY_HARD, 100)
+        self.assertIsNone(evaluate_skill_progression(pro.profile)[0])
+
+        pro_low = self.create_user('pro-low@example.com', Profile.SKILL_PRO)
+        self.record_result(pro_low, creator, Mission.DIFFICULTY_HARD, 20)
+        change, _summary = evaluate_skill_progression(pro_low.profile)
+        self.assertEqual(change['new_level'], Profile.SKILL_ADVANCED)
+
+        neutral = self.create_user('neutral@example.com', Profile.SKILL_ADVANCED)
+        self.record_result(neutral, creator, Mission.DIFFICULTY_MEDIUM, 50)
+        self.assertIsNone(evaluate_skill_progression(neutral.profile)[0])
+
+        disabled = self.create_user('disabled@example.com')
+        self.configure(minimum=1, window=1, enabled=False)
+        self.record_result(disabled, creator, Mission.DIFFICULTY_EASY, 100)
+        self.assertIsNone(evaluate_skill_progression(disabled.profile)[0])
+
+    def test_manual_admin_change_resets_evaluation_phase(self):
+        creator = self.create_user('creator-manual@example.com', role=Profile.ROLE_CONTENT_CREATOR)
+        admin = self.create_user('admin-manual@example.com', role=Profile.ROLE_ADMIN)
+        user = self.create_user('manual@example.com')
+        old_attempt = self.record_result(user, creator, Mission.DIFFICULTY_EASY, 100)
+        self.client.force_login(admin)
+        response = self.client.patch(
+            f'/api/auth/users/{user.id}/skill-level/',
+            {'skill_level': Profile.SKILL_PRO},
+            content_type='application/json',
+            secure=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        user.profile.refresh_from_db()
+        self.assertEqual(user.profile.skill_level, Profile.SKILL_PRO)
+        self.assertGreater(user.profile.skill_level_entered_at, old_attempt.completed_at)
+        self.assertEqual(response.json()['user']['skill_progression']['relevant_completed_missions'], 0)
+
+    def test_progression_settings_validation_and_persistence(self):
+        admin = self.create_user('settings-admin@example.com', role=Profile.ROLE_ADMIN)
+        self.client.force_login(admin)
+        invalid = self.client.patch('/api/auth/settings/skill-progression/', {
+            'automatic_progression_enabled': True,
+            'evaluation_window': 10,
+            'minimum_missions': 10,
+            'promotion_threshold': 50,
+            'demotion_threshold': 50,
+        }, content_type='application/json', secure=True)
+        self.assertEqual(invalid.status_code, 400)
+        valid = self.client.patch('/api/auth/settings/skill-progression/', {
+            'automatic_progression_enabled': False,
+            'evaluation_window': 6,
+            'minimum_missions': 4,
+            'promotion_threshold': 85,
+            'demotion_threshold': 40,
+        }, content_type='application/json', secure=True)
+        self.assertEqual(valid.status_code, 200)
+        settings_object = SkillProgressionSettings.load()
+        self.assertFalse(settings_object.automatic_progression_enabled)
+        self.assertEqual(settings_object.evaluation_window, 6)
+
+    def test_users_only_appear_in_their_current_skill_leaderboard(self):
+        creator = self.create_user('creator-board@example.com', role=Profile.ROLE_CONTENT_CREATOR)
+        user = self.create_user('board@example.com')
+        self.record_result(user, creator, Mission.DIFFICULTY_EASY, 30)
+        self.record_result(user, creator, Mission.DIFFICULTY_MEDIUM, 60)
+        self.record_result(user, creator, Mission.DIFFICULTY_HARD, 90)
+        set_skill_level_manually(user.profile, Profile.SKILL_PRO)
+        self.client.force_login(user)
+        for difficulty in ('easy', 'medium'):
+            data = self.client.get(f'/api/auth/leaderboard/?difficulty={difficulty}', secure=True).json()
+            self.assertNotIn(user.id, [entry['user_id'] for entry in data['entries']])
+            self.assertNotIn(user.id, [entry['user_id'] for entry in data['weekly_entries']])
+
+        hard_data = self.client.get('/api/auth/leaderboard/?difficulty=hard', secure=True).json()
+        entry = next(item for item in hard_data['entries'] if item['user_id'] == user.id)
+        self.assertEqual(entry['total_points'], 90)
+        self.assertEqual(entry['completed_missions'], 1)
+
+    def test_historical_leaderboard_hides_users_after_skill_level_change(self):
+        user = self.create_user('history-skill@example.com')
+        today = timezone.localdate()
+        current_week_start = today - timedelta(days=today.weekday())
+        week_start = current_week_start - timedelta(days=7)
+        WeeklyLeaderboardSnapshot.objects.create(
+            week_start=week_start,
+            week_end=week_start + timedelta(days=6),
+            difficulty=Mission.DIFFICULTY_EASY,
+            entries=[{
+                'rank': 1, 'user_id': user.id, 'name': 'History Skill', 'email': user.email,
+                'first_name': '', 'last_name': '', 'total_points': 80,
+                'completed_missions': 4, 'level': 'Starter',
+            }],
+        )
+        set_skill_level_manually(user.profile, Profile.SKILL_PRO)
+        self.client.force_login(user)
+
+        response = self.client.get(
+            f'/api/auth/leaderboard/history/{week_start.isoformat()}/?difficulty=easy', secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['entries'], [])
+
+    def test_same_day_level_change_keeps_one_completed_assignment(self):
+        self.configure(minimum=1, window=1)
+        creator = self.create_user('creator-day@example.com', role=Profile.ROLE_CONTENT_CREATOR)
+        user = self.create_user('day@example.com')
+        mission = self.create_variant_mission(creator)
+        second = self.create_variant_mission(creator)
+        self.client.force_login(user)
+
+        daily = self.client.get('/api/auth/missions/today/?lang=en', secure=True).json()['missions']
+        self.assertEqual(len(daily), 1)
+        self.assertEqual(daily[0]['difficulty'], Mission.DIFFICULTY_EASY)
+        response = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': mission.id,
+            'answer': 0,
+            'language': 'en',
+        }, content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['skill_change']['new_level'], Profile.SKILL_ADVANCED)
+        daily = self.client.get('/api/auth/missions/today/?lang=en', secure=True).json()['missions']
+        self.assertEqual(len(daily), 1)
+        self.assertTrue(daily[0]['completed'])
+        self.assertEqual(daily[0]['difficulty'], Mission.DIFFICULTY_EASY)
+        blocked = self.client.post('/api/auth/progress/complete/', {
+            'mission_id': second.id,
+            'answer': 0,
+        }, content_type='application/json', secure=True)
+        self.assertEqual(blocked.status_code, 404)
+
+        tomorrow = self.create_variant_mission(creator, timezone.localdate() + timedelta(days=1))
+        from accounts.views import assigned_mission_difficulty
+        self.assertEqual(
+            assigned_mission_difficulty(tomorrow, user, create=True),
+            Mission.DIFFICULTY_MEDIUM,
+        )
 
 
 class AiMissionServiceTests(TestCase):
@@ -971,28 +1279,36 @@ class AiMissionServiceTests(TestCase):
         missions = []
         for scheduled_date, count in target_slots.items():
             for index in range(count):
-                missions.append({
-                    'date': scheduled_date.isoformat(),
-                    'type': Mission.TYPE_PROMPT_SELECTION,
+                content = {
+                    'question_de': 'Welcher Prompt ist besser?', 'question_en': 'Which prompt is better?',
+                    'options_de': ['Prompt A', 'Prompt B'], 'options_en': ['Prompt A', 'Prompt B'],
+                    'correct_option_index': 1,
+                    'feedback_de': 'Prompt B ist genauer.', 'feedback_en': 'Prompt B is more precise.',
+                    'micro_learning_de': (
+                        'Ein guter Prompt gibt der AI genug Orientierung, damit sie nicht raten muss. '
+                        'Gerade in Finance-Aufgaben helfen Ziel, Kontext und gewünschtes Format dabei, '
+                        'Ergebnisse später zu prüfen und mit Kolleginnen und Kollegen zu teilen.'
+                    ),
+                    'micro_learning_en': (
+                        'A good prompt gives the AI enough orientation so it does not have to guess. '
+                        'Especially in finance tasks, the goal, context, and desired format make results '
+                        'easier to check and share with colleagues.'
+                    ),
+                }
+                variant = {
                     'title_de': f'Prompt {index}', 'title_en': f'Prompt {index}',
                     'description_de': 'Kurze Beschreibung', 'description_en': 'Short description',
                     'points': 30,
-                    'content': {
-                        'question_de': 'Welcher Prompt ist besser?', 'question_en': 'Which prompt is better?',
-                        'options_de': ['Prompt A', 'Prompt B'], 'options_en': ['Prompt A', 'Prompt B'],
-                        'correct_option_index': 1,
-                        'feedback_de': 'Prompt B ist genauer.', 'feedback_en': 'Prompt B is more precise.',
-                        'micro_learning_de': (
-                            'Ein guter Prompt gibt der AI genug Orientierung, damit sie nicht raten muss. '
-                            'Gerade in Finance-Aufgaben helfen Ziel, Kontext und gewünschtes Format dabei, '
-                            'Ergebnisse später zu prüfen und mit Kolleginnen und Kollegen zu teilen.'
-                        ),
-                        'micro_learning_en': (
-                            'A good prompt gives the AI enough orientation so it does not have to guess. '
-                            'Especially in finance tasks, the goal, context, and desired format make results '
-                            'easier to check and share with colleagues.'
-                        ),
-                    },
+                    'content': content,
+                }
+                missions.append({
+                    'date': scheduled_date.isoformat(),
+                    'type': Mission.TYPE_PROMPT_SELECTION,
+                    'topic_de': 'Gute Prompts', 'topic_en': 'Good prompts',
+                    'learning_objective_de': 'Präzise Prompts formulieren.',
+                    'learning_objective_en': 'Write precise prompts.',
+                    'variants': {difficulty: {**variant} for difficulty in Mission.DIFFICULTIES},
+                    'content': content,
                 })
         return {'missions': missions}
 
@@ -1003,9 +1319,19 @@ class AiMissionServiceTests(TestCase):
         with self.assertRaises(MissionValidationError):
             validate_generated_payload(payload, {start: 1})
 
+    def test_validator_requires_exactly_three_variants_with_one_shared_objective(self):
+        start, _ = next_calendar_week()
+        payload = self.valid_payload({start: 1})
+        normalized = validate_generated_payload(payload, {start: 1})[0]
+        self.assertEqual(set(normalized['variants']), set(Mission.DIFFICULTIES))
+        self.assertEqual(normalized['learning_objective_en'], 'Write precise prompts.')
+        payload['missions'][0]['variants'].pop(Mission.DIFFICULTY_HARD)
+        with self.assertRaises(MissionValidationError):
+            validate_generated_payload(payload, {start: 1})
+
     def test_prompt_targets_accessible_everyday_finance_ai_learning(self):
         start, _ = next_calendar_week()
-        prompt = build_user_prompt({start: 2})
+        prompt = build_user_prompt({start: 1})
         self.assertIn('little or no practical AI experience', SYSTEM_PROMPT)
         self.assertIn('beginner-friendly', SYSTEM_PROMPT)
         self.assertIn('monthly, quarterly, and year-end reports', SYSTEM_PROMPT)
@@ -1039,10 +1365,10 @@ class AiMissionServiceTests(TestCase):
 
     def test_generation_batches_are_limited_to_one_day(self):
         start, _ = next_calendar_week()
-        slots = {start + timedelta(days=offset): 2 for offset in range(7)}
+        slots = {start + timedelta(days=offset): 1 for offset in range(7)}
         batches = split_target_slots(slots)
         self.assertEqual(len(batches), 7)
-        self.assertTrue(all(sum(batch.values()) <= 2 for batch in batches))
+        self.assertTrue(all(sum(batch.values()) == 1 for batch in batches))
 
     def test_json_extractor_accepts_fences_and_trailing_text(self):
         self.assertEqual(extract_json('```json\n{"missions": []}\n```'), {'missions': []})
@@ -1083,7 +1409,7 @@ class AiMissionServiceTests(TestCase):
 
         traffic = self.valid_payload({start: 1})
         traffic['missions'][0]['type'] = Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT
-        traffic['missions'][0]['content'] = {
+        traffic_content = {
             'question_de': 'Bewerte die Szenarien.', 'question_en': 'Assess the scenarios.',
             'statements_de': ['A', 'B', 'C'], 'statements_en': ['A', 'B', 'C'],
             'correct_colors': ['green', 'yellow', 'red'],
@@ -1099,6 +1425,9 @@ class AiMissionServiceTests(TestCase):
                 'yellow requires additional safeguards, and red should not be entered into an AI tool.'
             ),
         }
+        traffic['missions'][0]['content'] = traffic_content
+        for variant in traffic['missions'][0]['variants'].values():
+            variant['content'] = traffic_content
         normalized = validate_generated_payload(traffic, {start: 1})
         self.assertEqual(normalized[0]['content']['statements'][1]['correct_color'], 'yellow')
 
@@ -1125,7 +1454,7 @@ class AiMissionServiceTests(TestCase):
             max_points=20, created_by=creator, status=Mission.STATUS_PUBLISHED,
         )
         call_ai_mock.side_effect = self.valid_payload
-        generate_task_mock.side_effect = lambda: self.task_candidate()
+        generate_task_mock.side_effect = lambda *args, **kwargs: self.task_candidate()
 
         created, actual_start, actual_end = generate_next_week(creator)
         self.assertEqual((actual_start, actual_end), (start, end))
@@ -1139,21 +1468,18 @@ class AiMissionServiceTests(TestCase):
         weekend_days = [start + timedelta(days=offset) for offset in (5, 6)]
         self.assertEqual(Mission.objects.filter(scheduled_date__in=weekend_days).count(), 0)
 
-        # 4 open weekdays (Tue-Fri): 2 become task days (1 mission), 2 remain quiz days (2 missions).
-        self.assertEqual(len(created), 2 * 1 + 2 * 2)
+        # 4 open weekdays (Tue-Fri): each gets exactly one mission topic.
+        self.assertEqual(len(created), 4)
         self.assertTrue(all(mission.status == Mission.STATUS_REVIEW for mission in created))
         self.assertTrue(all(mission.generated_by_ai for mission in created))
         task_created = [mission for mission in created if mission.mission_type in Mission.TASK_TYPES]
         quiz_created = [mission for mission in created if mission.mission_type in Mission.CHOICE_TYPES]
         self.assertEqual(len(task_created), 2)
-        self.assertEqual(len(quiz_created), 4)
+        self.assertEqual(len(quiz_created), 2)
         for day in (start + timedelta(days=offset) for offset in range(1, 5)):
             day_missions = [mission for mission in created if mission.scheduled_date == day]
-            if len(day_missions) == 1:
-                self.assertIn(day_missions[0].mission_type, Mission.TASK_TYPES)
-            else:
-                self.assertEqual(len(day_missions), 2)
-                self.assertTrue(all(mission.mission_type in Mission.CHOICE_TYPES for mission in day_missions))
+            self.assertEqual(len(day_missions), 1)
+            self.assertTrue(day_missions[0].has_difficulty_variants)
 
     @patch('accounts.services.ai_task_challenge.generate_task_challenge')
     @patch('accounts.services.ai_mission_generator.call_ai')
@@ -1294,8 +1620,19 @@ class AiTaskChallengeTests(TestCase):
             'title_de': 'Titel', 'title_en': 'Title',
             'description_de': 'Beschreibung', 'description_en': 'Description',
             'max_points': 40, 'content': self.content(),
+            'topic_de': 'Kategorisierung', 'topic_en': 'Categorization',
+            'learning_objective_de': 'Buchungen kategorisieren.',
+            'learning_objective_en': 'Categorize bookings.',
         }
-        with patch('accounts.views.generate_task_challenge', return_value=candidate) as mock_generate:
+        candidate['variants'] = {
+            difficulty: {
+                'title_de': candidate['title_de'], 'title_en': candidate['title_en'],
+                'description_de': candidate['description_de'], 'description_en': candidate['description_en'],
+                'max_points': 40, 'content': candidate['content'],
+            }
+            for difficulty in Mission.DIFFICULTIES
+        }
+        with patch('accounts.views.generate_task_challenge_variants', return_value=candidate) as mock_generate:
             response = self.client.post('/api/auth/missions/generate-task-challenge/', {
                 'mission_type': 'bulk_categorization',
             }, content_type='application/json', secure=True)

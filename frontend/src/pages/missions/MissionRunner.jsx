@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Badge, Box, Button, Paper, Stack, Text, Title } from '@mantine/core'
+import { Alert, Badge, Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core'
 import { IconArrowLeft, IconBooks, IconBulb, IconTrophy } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { submitMission } from '../../services/missionService'
@@ -72,6 +72,7 @@ export default function MissionRunner({
         ...data.result,
         feedback: data.mission.content.feedback,
         microLearning: data.mission.content.micro_learning,
+        skillChange: data.skill_change,
       })
       onCompleted(data.mission)
     } catch (nextError) {
@@ -85,7 +86,7 @@ export default function MissionRunner({
     <Button variant="subtle" color="secondary" leftSection={<IconArrowLeft size={17} />} onClick={onBack} mb="lg">{backLabel || t('missions.back')}</Button>
     <Paper withBorder radius="lg" p={{ base: 'xl', md: 40 }} bg="white">
       <Stack gap="xl">
-        <Box><Badge variant="light" color="brand" mb="sm">{t(`missions.types.${definition.labelKey}`)}</Badge><Title order={1} fz={{ base: 25, md: 32 }}>{mission.title}</Title><Text c="dimmed" mt={6}>{mission.description}</Text></Box>
+        <Box><Group gap="xs" mb="sm"><Badge variant="light" color="brand">{t(`missions.types.${definition.labelKey}`)}</Badge>{mission.difficulty && <Badge variant="light" color="secondary">{t(`difficulties.${mission.difficulty}`)}</Badge>}</Group><Title order={1} fz={{ base: 25, md: 32 }}>{mission.title}</Title><Text c="dimmed" mt={6}>{mission.description}</Text></Box>
         <Text fw={700} fz="lg">{mission.content.question}</Text>
         <definition.Runner mission={mission} answer={answer} setAnswer={readOnly ? () => {} : setAnswer} result={readOnly ? {} : result} t={t} />
         {readOnly && mission.completed && showPoints && <Alert color="green" icon={<IconTrophy size={20} />} title={t('missions.archive.completedTitle')}>
@@ -100,6 +101,11 @@ export default function MissionRunner({
           </>}
         </Alert>}
         {!readOnly && result && definition.ResultDetails && <definition.ResultDetails mission={mission} result={{ ...result, feedback }} t={t} />}
+        {!readOnly && result?.skillChange && <Alert color={result.skillChange.direction === 'promotion' ? 'green' : 'blue'} title={t('missions.skillChange.title')}>
+          <Text fz="sm">{result.skillChange.direction === 'promotion'
+            ? t('missions.skillChange.promotion', { level: t(`skillLevels.${result.skillChange.new_level}`) })
+            : t('missions.skillChange.demotion', { level: t(`skillLevels.${result.skillChange.new_level}`) })}</Text>
+        </Alert>}
         {readOnly && typeof feedback === 'string' && feedback && <Alert color="blue" icon={<IconBulb size={20} />} title={t('missions.result.explanationLabel')}>
           <Text fz="sm">{feedback}</Text>
         </Alert>}

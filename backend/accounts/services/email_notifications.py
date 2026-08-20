@@ -69,10 +69,14 @@ def current_week_range(reminder_date):
 def incomplete_weekly_mission_users(reminder_date=None):
     reminder_date = reminder_date or timezone.localdate()
     week_start, week_end = current_week_range(reminder_date)
-    missions = list(Mission.objects.filter(
+    scheduled = Mission.objects.filter(
         scheduled_date__range=(week_start, week_end),
         status=Mission.STATUS_PUBLISHED,
-    ).order_by('scheduled_date', 'id'))
+    ).order_by('scheduled_date', 'created_at', 'id')
+    missions_by_date = {}
+    for mission in scheduled:
+        missions_by_date.setdefault(mission.scheduled_date, mission)
+    missions = list(missions_by_date.values())
     if not missions:
         return [], missions
 

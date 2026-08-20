@@ -16,7 +16,7 @@ from accounts.services.mission_validation import MissionValidationError, validat
 
 
 logger = logging.getLogger(__name__)
-MAX_MISSIONS_PER_REQUEST = 2
+MAX_MISSIONS_PER_REQUEST = 1
 DEFAULT_GENERATION_WORKERS = 2
 DEFAULT_GENERATION_RETRIES = 2
 DEFAULT_MAX_TOKENS = 9000
@@ -45,8 +45,15 @@ Target learner:
 - The goal is confidence and immediate benefit in daily work, not technical AI specialization.
 
 Difficulty and learning design:
-- Keep every mission beginner-friendly to lower-intermediate. A finance professional without AI training must be able
-  to solve it from the question and common workplace judgment alone.
+- Each daily mission is one shared topic and one shared learning objective with exactly three variants: easy, medium,
+  and hard. All variants must assess the same underlying learning intent; they are not unrelated missions.
+- Easy stays beginner-friendly, provides more guidance, fewer steps, a simpler scenario, and requires basic prompting
+  or AI judgment.
+- Medium requires more independent reasoning, multiple constraints, structured outputs, and more precise prompting.
+- Hard includes realistic ambiguity, decomposition, trade-offs or multiple requirements, quality control, verification,
+  and a reusable professional-quality solution.
+- Increase genuine cognitive and execution complexity, not merely text length. The finance scenario and core learning
+  objective must remain recognizably equivalent across all three variants.
 - Create a small, actionable learning nugget that takes 3-8 minutes and feels useful rather than academic.
 - Use plain business language. Explain unavoidable AI terms in the question or feedback.
 - Test one clear learning objective at a time. Avoid trick questions, subtle semantic distinctions, and options that
@@ -96,12 +103,16 @@ def next_calendar_week(reference_date=None):
 def build_user_prompt(target_slots, requested_type=None):
     schedule = ', '.join(f'{day.isoformat()}: {count}' for day, count in sorted(target_slots.items()))
     type_requirement = f'Every mission must use exactly the type {requested_type}.' if requested_type else ''
-    return f"""Create exactly the requested missions for this schedule: {schedule}.
+    return f"""Create exactly one daily mission topic for every requested date in this schedule: {schedule}.
 {type_requirement}
-Use 10-50 points per mission. Return this structure:
+Every mission must use one common type and contain exactly easy, medium, and hard. Use one shared bilingual topic and
+learning objective. Each variant uses 10-50 points. Return this structure:
 {{"missions":[{{"date":"YYYY-MM-DD","type":"single_choice|multiple_choice|compliance_decision|prompt_selection|prompt_ranking|compliance_traffic_light",
-"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,
-"content":{{...type-specific fields...}}}}]}}
+"topic_de":"...","topic_en":"...","learning_objective_de":"...","learning_objective_en":"...",
+"variants":{{"easy":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,"content":{{...}}}},
+"medium":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,"content":{{...}}}},
+"hard":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,"content":{{...}}}}}}}}]}}
+The following type-specific content schema applies separately inside each of the three variants.
 For single_choice, multiple_choice, compliance_decision, and prompt_selection use:
 {{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
 "correct_option_indices":[0],"feedback_de":"...","feedback_en":"...",
@@ -124,11 +135,12 @@ scenario-specific feedback:
 "micro_learning_de":"...","micro_learning_en":"..."}}
 The five traffic-light arrays must each contain exactly three items, never more or fewer. The content object must use
 only the fields defined for its selected mission type. Do not add explanations outside the JSON object.
-Across the requested schedule, favor broadly useful beginner topics and vary the scenarios. At least half of the
+Across the requested schedule, favor broadly useful everyday topics and vary the scenarios. At least half of the
 missions should focus on practical everyday AI usage such as prompting, checking outputs, confidentiality, or human
 review. Include prompt_ranking and compliance_traffic_light regularly when enough slots are available. Use advanced
-finance or AI terminology only when the term is explained within the mission.
-Use only the dates and counts in the requested schedule."""
+finance or AI terminology only when the term is explained within the mission. The easy variant must remain accessible
+to a learner with little or no practical AI experience, while medium and hard must add meaningful depth.
+Use only the dates in the requested schedule and return exactly one mission object per date."""
 
 
 def extract_json(content):
@@ -285,6 +297,11 @@ def apply_candidate(mission, candidate):
     mission.description_en = candidate['description_en']
     mission.content = candidate['content']
     mission.max_points = candidate['max_points']
+    mission.topic_de = candidate.get('topic_de', '')
+    mission.topic_en = candidate.get('topic_en', '')
+    mission.learning_objective_de = candidate.get('learning_objective_de', '')
+    mission.learning_objective_en = candidate.get('learning_objective_en', '')
+    mission.variants = candidate.get('variants', {})
 
 
 WEEKDAYS_PER_WEEK = 5
@@ -305,13 +322,13 @@ def generate_task_day_candidates(task_days):
     task generation fails is returned separately so the caller can fall back to a
     quiz day for it instead of leaving the day empty.
     """
-    from accounts.services.ai_task_challenge import generate_task_challenge
+    from accounts.services.ai_task_challenge import generate_task_challenge_variants
 
     candidates = []
     failed_days = []
     for day in task_days:
         try:
-            candidate = generate_task_challenge()
+            candidate = generate_task_challenge_variants()
         except AiMissionGenerationError as exception:
             logger.warning('Task challenge generation failed for %s, falling back to a quiz day: %s', day.isoformat(), exception)
             failed_days.append(day)
@@ -324,8 +341,8 @@ def generate_task_day_candidates(task_days):
 def generate_next_week(created_by, force=False, reference_date=None, week_start=None):
     """Generate missions for the Monday-Friday workweek; weekends are never scheduled.
 
-    Each open weekday becomes either a quiz day (2 quiz missions) or a task day
-    (1 task challenge) - never a mix of both on the same day. A fixed number of
+    Each open weekday becomes either one quiz topic or one task topic, each with
+    three difficulty variants. A fixed number of
     weekdays (task_days_per_week()) become task days; the rest are quiz days.
     """
     if week_start is None:
@@ -354,12 +371,12 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
     quiz_days = [day for day in open_weekdays if day not in task_days]
 
     task_candidates, failed_task_days = generate_task_day_candidates(task_days)
-    quiz_slots = {day: 2 for day in [*quiz_days, *failed_task_days]}
+    quiz_slots = {day: 1 for day in [*quiz_days, *failed_task_days]}
     candidates = generate_candidates_parallel(quiz_slots) if quiz_slots else []
     candidates.extend(task_candidates)
 
     expected_counts = {day: 1 for day in task_days if day not in failed_task_days}
-    expected_counts.update({day: 2 for day in quiz_slots})
+    expected_counts.update({day: 1 for day in quiz_slots})
 
     with transaction.atomic():
         missions = Mission.objects.select_for_update().filter(scheduled_date__range=(week_start, week_end))
@@ -370,7 +387,7 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
                 scheduled_date=day,
                 status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
             ).count()
-            if occupied + expected_count > 2:
+            if occupied + expected_count > 1:
                 raise AiMissionGenerationError(
                     f'mission schedule changed during generation for {day.isoformat()}; please try again'
                 )
@@ -393,8 +410,8 @@ def regenerate_review_mission(mission, requested_by):
     if mission.status != Mission.STATUS_REVIEW or not mission.generated_by_ai:
         raise AiMissionGenerationError('Only AI review missions can be regenerated')
     if mission.mission_type in Mission.TASK_TYPES:
-        from accounts.services.ai_task_challenge import generate_task_challenge
-        candidate = generate_task_challenge(mission.mission_type)
+        from accounts.services.ai_task_challenge import generate_task_challenge_variants
+        candidate = generate_task_challenge_variants(mission.mission_type)
         candidate['scheduled_date'] = mission.scheduled_date
     else:
         candidate = generate_candidates({mission.scheduled_date: 1})[0]

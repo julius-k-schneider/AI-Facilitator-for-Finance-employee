@@ -45,6 +45,48 @@ MAX_ROWS = 60
 MIN_INVOICES = 12
 MAX_INVOICES = 20
 
+DIFFICULTY_INSTRUCTIONS = {
+    'easy': (
+        'Difficulty: EASY. Provide more guidance, a simpler case near the minimum data volume, fewer result fields, '
+        'and an explicit step-by-step task suitable for basic AI prompting skills.'
+    ),
+    'medium': (
+        'Difficulty: MEDIUM. Require independent reasoning, multiple constraints, a structured result, and precise '
+        'prompting. Use a moderate data volume and limited ambiguity.'
+    ),
+    'hard': (
+        'Difficulty: HARD. Use a realistic high-volume case with ambiguity, several requirements, decomposition, '
+        'quality-control and verification expectations, and a reusable professional approach.'
+    ),
+}
+
+TASK_TOPICS = {
+    TYPE_BULK_CATEGORIZATION: {
+        'topic_de': 'Buchungen mit KI kategorisieren',
+        'topic_en': 'Categorizing bookings with AI',
+        'learning_objective_de': 'KI für eine nachvollziehbare Massenkategorisierung einsetzen und Ergebnisse prüfen.',
+        'learning_objective_en': 'Use AI for traceable bulk categorization and verify the results.',
+    },
+    TYPE_PLAN_ACTUAL_DEVIATION: {
+        'topic_de': 'Plan-Ist-Abweichungen mit KI analysieren',
+        'topic_en': 'Analyzing plan-versus-actual variances with AI',
+        'learning_objective_de': 'KI zur strukturierten Abweichungsanalyse einsetzen und Berechnungen validieren.',
+        'learning_objective_en': 'Use AI for structured variance analysis and validate calculations.',
+    },
+    TYPE_DUPLICATE_PAYMENT_HUNT: {
+        'topic_de': 'Mögliche Doppelzahlungen mit KI finden',
+        'topic_en': 'Finding potential duplicate payments with AI',
+        'learning_objective_de': 'KI zur Dublettenerkennung einsetzen und Treffer anhand klarer Kriterien prüfen.',
+        'learning_objective_en': 'Use AI to detect duplicates and verify matches against clear criteria.',
+    },
+    TYPE_INVOICE_EXTRACTION: {
+        'topic_de': 'Rechnungsdaten mit KI extrahieren',
+        'topic_en': 'Extracting invoice data with AI',
+        'learning_objective_de': 'Rechnungsinformationen strukturiert extrahieren und auf Vollständigkeit prüfen.',
+        'learning_objective_en': 'Extract invoice information into a structure and verify completeness.',
+    },
+}
+
 SYSTEM_PROMPT = """You design a realistic, hands-on finance work task for an experienced accountant or controller.
 The learner solves the task OUTSIDE this app with their own tools (Excel) and an external AI assistant such as
 Microsoft Copilot or ChatGPT, then returns only the final result values. The point of the exercise is that the
@@ -523,15 +565,40 @@ def validate_task_challenge(payload, mission_type):
     }
 
 
-def generate_task_challenge(mission_type=None):
+def generate_task_challenge(mission_type=None, difficulty=None):
     mission_type = mission_type or random.choice(TASK_CHALLENGE_TYPES)
     if mission_type not in TASK_CHALLENGE_PROMPTS:
         raise AiMissionGenerationError('Unsupported task challenge type')
+    difficulty_instruction = DIFFICULTY_INSTRUCTIONS.get(difficulty, '')
     payload = extract_json(_completion([
         {'role': 'system', 'content': SYSTEM_PROMPT},
-        {'role': 'user', 'content': TASK_CHALLENGE_PROMPTS[mission_type]},
+        {'role': 'user', 'content': f'{TASK_CHALLENGE_PROMPTS[mission_type]}\n\n{difficulty_instruction}'},
     ], json_mode=True, temperature=0.5, max_tokens=4500))
     return validate_task_challenge(payload, mission_type)
+
+
+def generate_task_challenge_variants(mission_type=None):
+    mission_type = mission_type or random.choice(TASK_CHALLENGE_TYPES)
+    variants = {
+        difficulty: generate_task_challenge(mission_type, difficulty=difficulty)
+        for difficulty in ('easy', 'medium', 'hard')
+    }
+    easy = variants['easy']
+    return {
+        **easy,
+        **TASK_TOPICS[mission_type],
+        'variants': {
+            difficulty: {
+                'title_de': candidate['title_de'],
+                'title_en': candidate['title_en'],
+                'description_de': candidate['description_de'],
+                'description_en': candidate['description_en'],
+                'max_points': candidate['max_points'],
+                'content': candidate['content'],
+            }
+            for difficulty, candidate in variants.items()
+        },
+    }
 
 
 def public_content(content, language):
