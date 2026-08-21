@@ -106,6 +106,9 @@ on the Missions page.
 
 ### Weekly mission email reminders
 
+Publishing or approving a mission does not send an email. The only automatic
+email workflow is the weekly reminder described below.
+
 To remind users who have not completed all published missions for the current
 week, run:
 

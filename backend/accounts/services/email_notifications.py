@@ -12,55 +12,6 @@ from accounts.models import DailyMissionReminder, Mission, MissionAttempt
 logger = logging.getLogger(__name__)
 
 
-def mission_email_recipients():
-    User = get_user_model()
-    return list(
-        User.objects.filter(is_active=True)
-        .exclude(email='')
-        .values_list('email', flat=True)
-        .distinct()
-    )
-
-
-def send_published_mission_email(mission):
-    recipients = mission_email_recipients()
-    if not recipients:
-        return 0
-
-    subject = f'Neue Mission verfügbar / New mission available: {mission.title_de}'
-    message = (
-        'Hallo,\n\n'
-        'eine neue Mission wurde veröffentlicht:\n\n'
-        f'{mission.title_de}\n'
-        f'{mission.description_de}\n\n'
-        f'Datum: {mission.scheduled_date.isoformat()}\n\n'
-        'Viel Erfolg!\n\n'
-        '----------\n\n'
-        'Hello,\n\n'
-        'a new mission has been published:\n\n'
-        f'{mission.title_en}\n'
-        f'{mission.description_en}\n\n'
-        f'Date: {mission.scheduled_date.isoformat()}\n\n'
-        'Good luck!'
-    )
-
-    try:
-        return send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
-            recipients,
-            fail_silently=False,
-        )
-    except Exception:
-        logger.exception('Failed to send published mission reminder for mission %s', mission.id)
-        return 0
-
-
-def send_published_mission_emails(missions):
-    return sum(send_published_mission_email(mission) for mission in missions)
-
-
 def current_week_range(reminder_date):
     week_start = reminder_date - timedelta(days=reminder_date.weekday())
     return week_start, reminder_date
@@ -106,8 +57,9 @@ def incomplete_daily_mission_users(reminder_date=None):
 def send_daily_mission_reminder(user, reminder_date, missions, missing_missions):
     subject = 'Reminder: Offene Missionen der Woche / Open missions for this week'
     week_start, week_end = current_week_range(reminder_date)
+    deadline_date = week_start + timedelta(days=7)
     mission_lines_de = '\n'.join(
-        f'- {mission.scheduled_date.isoformat()}: {mission.title_de}'
+        f'- {mission.scheduled_date.strftime("%d.%m.%Y")}: {mission.title_de}'
         for mission in missing_missions
     )
     mission_lines_en = '\n'.join(
@@ -118,7 +70,9 @@ def send_daily_mission_reminder(user, reminder_date, missions, missing_missions)
         f'Hallo {user.first_name or user.username},\n\n'
         'du hast diese Woche noch nicht alle Missionen abgeschlossen.\n\n'
         f'Offene Missionen: {len(missing_missions)} von {len(missions)}\n'
-        f'Zeitraum: {week_start.isoformat()} bis {week_end.isoformat()}\n\n'
+        f'Zeitraum: {week_start.strftime("%d.%m.%Y")} bis {week_end.strftime("%d.%m.%Y")}\n'
+        f'Du kannst diese Missionen noch bis Montag, den {deadline_date.strftime("%d.%m.%Y")}, '
+        'um 12:00 Uhr bearbeiten.\n\n'
         f'Noch offene Missionen:\n{mission_lines_de}\n\n'
         'Schau kurz in die App und erledige sie, wenn du Zeit hast.\n\n'
         'Viele Grüße\n'
@@ -128,6 +82,7 @@ def send_daily_mission_reminder(user, reminder_date, missions, missing_missions)
         'you have not completed all missions for this week yet.\n\n'
         f'Open missions: {len(missing_missions)} of {len(missions)}\n'
         f'Period: {week_start.isoformat()} to {week_end.isoformat()}\n\n'
+        f'You can complete these missions until Monday, {deadline_date.isoformat()}, at 12:00 noon.\n\n'
         f'Still open missions:\n{mission_lines_en}\n\n'
         'Take a quick look at the app and complete them when you have time.\n\n'
         'Best regards\n'
