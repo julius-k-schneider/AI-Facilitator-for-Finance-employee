@@ -9,8 +9,6 @@ SKILL_TO_DIFFICULTY = {
     Profile.SKILL_ADVANCED: Mission.DIFFICULTY_MEDIUM,
     Profile.SKILL_PRO: Mission.DIFFICULTY_HARD,
 }
-DIFFICULTY_TO_SKILL = {difficulty: skill for skill, difficulty in SKILL_TO_DIFFICULTY.items()}
-
 SKILL_ORDER = [
     Profile.SKILL_BEGINNER,
     Profile.SKILL_ADVANCED,
@@ -20,10 +18,6 @@ SKILL_ORDER = [
 
 def difficulty_for_skill(skill_level):
     return SKILL_TO_DIFFICULTY.get(skill_level, Mission.DIFFICULTY_EASY)
-
-
-def skill_for_difficulty(difficulty):
-    return DIFFICULTY_TO_SKILL.get(difficulty, Profile.SKILL_BEGINNER)
 
 
 def _relevant_attempts(profile):

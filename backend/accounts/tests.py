@@ -908,6 +908,7 @@ class AccountsApiTests(TestCase):
                 for mission in missions:
                     attempt = MissionAttempt.objects.create(
                         user=player, mission=mission, answer={'selected_indices': [0]}, score=mission.max_points,
+                        difficulty=Mission.DIFFICULTY_EASY,
                     )
                     MissionAttempt.objects.filter(id=attempt.id).update(completed_at=self.completed_at_on(day))
             return missions
@@ -926,6 +927,7 @@ class AccountsApiTests(TestCase):
         for mission in today_missions:
             MissionAttempt.objects.create(
                 user=player, mission=mission, answer={'selected_indices': [0]}, score=mission.max_points,
+                difficulty=Mission.DIFFICULTY_EASY,
             )
         progress = self.client.get('/api/auth/progress/', secure=True).json()['progress']
         self.assertEqual(progress['current_streak'], 2)
@@ -981,6 +983,30 @@ class AccountsApiTests(TestCase):
         self.assertEqual(weekly['total_points'], 40)
         self.assertEqual(weekly['completed_missions'], 1)
         self.assertEqual(total['total_points'], 130)
+
+    def test_leaderboards_hide_users_without_points(self):
+        creator = self.create_user('creator-empty-board@example.com', Profile.ROLE_CONTENT_CREATOR)
+        empty_user = self.create_user('empty-board@example.com')
+        zero_score_user = self.create_user('zero-board@example.com')
+        scoring_user = self.create_user('scoring-board@example.com')
+        mission = self.create_mission(creator)
+        MissionAttempt.objects.create(
+            user=zero_score_user, mission=mission, score=0, max_points=100,
+            difficulty=Mission.DIFFICULTY_EASY,
+        )
+        MissionAttempt.objects.create(
+            user=scoring_user, mission=mission, score=10, max_points=100,
+            difficulty=Mission.DIFFICULTY_EASY,
+        )
+        self.client.force_login(scoring_user)
+
+        data = self.client.get('/api/auth/leaderboard/?difficulty=easy', secure=True).json()
+
+        for entries in (data['entries'], data['weekly_entries']):
+            user_ids = [entry['user_id'] for entry in entries]
+            self.assertNotIn(empty_user.id, user_ids)
+            self.assertNotIn(zero_score_user.id, user_ids)
+            self.assertIn(scoring_user.id, user_ids)
 
     def test_historical_weekly_leaderboard_can_be_retrieved(self):
         user = self.create_user('player@example.com')
@@ -1188,7 +1214,7 @@ class SkillProgressionTests(TestCase):
         self.assertFalse(settings_object.automatic_progression_enabled)
         self.assertEqual(settings_object.evaluation_window, 6)
 
-    def test_users_only_appear_in_their_current_skill_leaderboard(self):
+    def test_users_can_appear_in_multiple_difficulty_leaderboards(self):
         creator = self.create_user('creator-board@example.com', role=Profile.ROLE_CONTENT_CREATOR)
         user = self.create_user('board@example.com')
         self.record_result(user, creator, Mission.DIFFICULTY_EASY, 30)
@@ -1196,17 +1222,15 @@ class SkillProgressionTests(TestCase):
         self.record_result(user, creator, Mission.DIFFICULTY_HARD, 90)
         set_skill_level_manually(user.profile, Profile.SKILL_PRO)
         self.client.force_login(user)
-        for difficulty in ('easy', 'medium'):
+        for difficulty, expected in (('easy', 30), ('medium', 60), ('hard', 90)):
             data = self.client.get(f'/api/auth/leaderboard/?difficulty={difficulty}', secure=True).json()
-            self.assertNotIn(user.id, [entry['user_id'] for entry in data['entries']])
-            self.assertNotIn(user.id, [entry['user_id'] for entry in data['weekly_entries']])
+            entry = next(item for item in data['entries'] if item['user_id'] == user.id)
+            weekly_entry = next(item for item in data['weekly_entries'] if item['user_id'] == user.id)
+            self.assertEqual(entry['total_points'], expected)
+            self.assertEqual(entry['completed_missions'], 1)
+            self.assertEqual(weekly_entry['total_points'], expected)
 
-        hard_data = self.client.get('/api/auth/leaderboard/?difficulty=hard', secure=True).json()
-        entry = next(item for item in hard_data['entries'] if item['user_id'] == user.id)
-        self.assertEqual(entry['total_points'], 90)
-        self.assertEqual(entry['completed_missions'], 1)
-
-    def test_historical_leaderboard_hides_users_after_skill_level_change(self):
+    def test_historical_leaderboard_keeps_scoring_users_after_skill_level_change(self):
         user = self.create_user('history-skill@example.com')
         today = timezone.localdate()
         current_week_start = today - timedelta(days=today.weekday())
@@ -1219,6 +1243,10 @@ class SkillProgressionTests(TestCase):
                 'rank': 1, 'user_id': user.id, 'name': 'History Skill', 'email': user.email,
                 'first_name': '', 'last_name': '', 'total_points': 80,
                 'completed_missions': 4, 'level': 'Starter',
+            }, {
+                'rank': 2, 'user_id': 999999, 'name': 'No Points', 'email': 'none@example.com',
+                'first_name': '', 'last_name': '', 'total_points': 0,
+                'completed_missions': 0, 'level': 'Starter',
             }],
         )
         set_skill_level_manually(user.profile, Profile.SKILL_PRO)
@@ -1229,7 +1257,7 @@ class SkillProgressionTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['entries'], [])
+        self.assertEqual([entry['user_id'] for entry in response.json()['entries']], [user.id])
 
     def test_same_day_level_change_keeps_one_completed_assignment(self):
         self.configure(minimum=1, window=1)

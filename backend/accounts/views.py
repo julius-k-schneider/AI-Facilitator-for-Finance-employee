@@ -41,7 +41,6 @@ from .services.skill_progression import (
     evaluate_skill_progression,
     progression_snapshot,
     set_skill_level_manually,
-    skill_for_difficulty,
 )
 
 
@@ -189,9 +188,7 @@ def rank_entries(entries):
 
 
 def weekly_leaderboard_entries(week_start, week_end, difficulty):
-    users = User.objects.filter(
-        profile__skill_level=skill_for_difficulty(difficulty),
-    ).order_by('first_name', 'last_name', 'username')
+    users = User.objects.order_by('first_name', 'last_name', 'username')
     entries = []
     for user in users:
         attempts = MissionAttempt.objects.filter(
@@ -201,6 +198,8 @@ def weekly_leaderboard_entries(week_start, week_end, difficulty):
         )
         points = sum(attempts.values_list('score', flat=True))
         completed = attempts.count()
+        if points <= 0:
+            continue
         entries.append({
             **user_identity(user),
             'total_points': points,
@@ -1789,14 +1788,14 @@ def leaderboard_view(request):
     if difficulty not in VALID_DIFFICULTIES:
         return JsonResponse({'error': 'invalid difficulty'}, status=400)
     entries = []
-    users = User.objects.select_related('profile').filter(
-        profile__skill_level=skill_for_difficulty(difficulty),
-    ).order_by('first_name', 'last_name', 'username')
+    users = User.objects.select_related('profile').order_by('first_name', 'last_name', 'username')
     for user in users:
         profile = ensure_profile(user)
         attempts = MissionAttempt.objects.filter(user=user, difficulty=difficulty)
         points = sum(attempts.values_list('score', flat=True))
         completed = attempts.count()
+        if points <= 0:
+            continue
         streaks = streak_payload(user)
         entries.append({
             **user_identity(user),
@@ -1837,13 +1836,10 @@ def leaderboard_history_view(request, week_start):
     ).first()
     if snapshot is None:
         return JsonResponse({'error': 'leaderboard snapshot not found'}, status=404)
-    eligible_user_ids = set(User.objects.filter(
-        profile__skill_level=skill_for_difficulty(difficulty),
-    ).values_list('id', flat=True))
     entries = [
         entry.copy()
         for entry in snapshot.entries
-        if entry.get('user_id') in eligible_user_ids
+        if entry.get('total_points', 0) > 0
     ]
     return JsonResponse({
         'week_start': snapshot.week_start.isoformat(),
