@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     DailyMissionReminder,
+    GenerationRun,
     Mission,
     MissionAssignment,
     MissionAttempt,
@@ -9,6 +10,17 @@ from .models import (
     SkillProgressionSettings,
     WeeklyLeaderboardSnapshot,
 )
+
+
+@admin.register(GenerationRun)
+class GenerationRunAdmin(admin.ModelAdmin):
+    list_display = ('id', 'kind', 'status', 'requested_by', 'week_start', 'created_at', 'completed_at')
+    list_filter = ('kind', 'status', 'created_at')
+    search_fields = ('id', 'n8n_execution_id', 'requested_by__username', 'requested_by__email')
+    readonly_fields = (
+        'id', 'request_payload', 'result_payload', 'review_report', 'research_context',
+        'result_metadata', 'created_at', 'updated_at', 'started_at', 'completed_at', 'failed_at',
+    )
 
 
 @admin.register(Profile)

@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
 from urllib import error, request
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -308,10 +309,7 @@ WEEKDAYS_PER_WEEK = 5
 
 
 def task_days_per_week():
-    try:
-        return max(0, int(os.environ.get('KICONNECT_TASK_DAYS_PER_WEEK', 2)))
-    except (TypeError, ValueError):
-        return 2
+    return settings.MISSION_TASK_DAYS_PER_WEEK
 
 
 def generate_task_day_candidates(task_days):
@@ -338,13 +336,8 @@ def generate_task_day_candidates(task_days):
     return candidates, failed_days
 
 
-def generate_next_week(created_by, force=False, reference_date=None, week_start=None):
-    """Generate missions for the Monday-Friday workweek; weekends are never scheduled.
-
-    Each open weekday becomes either one quiz topic or one task topic, each with
-    three difficulty variants. A fixed number of
-    weekdays (task_days_per_week()) become task days; the rest are quiz days.
-    """
+def plan_next_week(force=False, reference_date=None, week_start=None):
+    """Return the date and mission-kind plan without calling an AI service."""
     if week_start is None:
         week_start, week_end = next_calendar_week(reference_date)
     else:
@@ -369,6 +362,20 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
     wanted_task_days = min(task_days_per_week(), len(open_weekdays))
     task_days = set(random.sample(open_weekdays, wanted_task_days)) if wanted_task_days else set()
     quiz_days = [day for day in open_weekdays if day not in task_days]
+    return week_start, week_end, task_days, quiz_days
+
+
+def generate_next_week(created_by, force=False, reference_date=None, week_start=None):
+    """Legacy direct generator retained for tests and reusable prompt helpers.
+
+    Active application entry points dispatch through n8n. Keeping this function
+    avoids mixing that migration with removal of deterministic generation logic.
+    """
+    week_start, week_end, task_days, quiz_days = plan_next_week(
+        force=force,
+        reference_date=reference_date,
+        week_start=week_start,
+    )
 
     task_candidates, failed_task_days = generate_task_day_candidates(task_days)
     quiz_slots = {day: 1 for day in [*quiz_days, *failed_task_days]}

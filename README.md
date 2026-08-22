@@ -1,7 +1,8 @@
 # AI-Facilitator-for-Finance-employee
 
 Django + PostgreSQL backend with a React/Vite frontend. Local development runs
-the two as **separate Docker containers** (with Vite proxying `/api` to Django).
+the application and n8n as **separate Docker containers** (with Vite proxying
+`/api` to Django).
 On [Railway](https://railway.app) they ship as **one service**: the root
 `Dockerfile` builds the frontend and bundles it into the Django image, which
 serves both the API and the SPA (via WhiteNoise) on a single origin.
@@ -12,7 +13,7 @@ serves both the API and the SPA (via WhiteNoise) on a single origin.
 .
 ├── Dockerfile              # Railway prod image: builds frontend + bundles into Django
 ├── railway.json            # Railway: build from the root Dockerfile
-├── docker-compose.yml      # local stack: web (Django) + db (Postgres) + frontend (Vite)
+├── docker-compose.yml      # local stack: Django + Postgres + Vite + n8n
 ├── backend/
 │   ├── Dockerfile          # local-dev app image (used by docker-compose)
 │   ├── .dockerignore
@@ -35,25 +36,29 @@ serves both the API and the SPA (via WhiteNoise) on a single origin.
 Prerequisite: Docker Desktop (running). No local Python needed.
 
 ```bash
-# From the repo root. .env already exists; if not: cp backend/.env.example backend/.env
-docker compose up --build        # first run (builds the image)
+# From the repo root (PowerShell equivalents: Copy-Item ...):
+cp backend/.env.example backend/.env
+cp .env.example .env
+# Replace the three n8n placeholder secrets in .env, then:
+docker compose up --build
 ```
 
-That's it — the `web` container applies migrations and starts the dev server with
-auto-reload, `db` is Postgres 16.
+The `web` container applies migrations and starts the dev server with auto-reload,
+`db` is Postgres 16, and n8n stores its local state in the `n8n_data` volume.
 
 - App:   http://127.0.0.1:8000
 - Admin: http://127.0.0.1:8000/admin
 - Frontend: http://127.0.0.1:5173
+- n8n: http://127.0.0.1:5678
 
 Everyday use:
 
 ```bash
-docker compose up -d             # start in background (no rebuild needed)
+docker compose up -d             # start in background
 docker compose logs -f web       # watch Django logs
 docker compose down              # stop (data is kept)
-docker compose down -v           # stop and wipe the database
-docker compose up --build        # rebuild after changing requirements.txt
+docker compose down -v           # stop and wipe Postgres and n8n data
+docker compose up --build        # rebuild images
 ```
 
 **Code changes auto-reload** — the source is mounted into the container, so you
@@ -82,15 +87,34 @@ docker compose exec web python manage.py send_daily_mission_reminders
 
 ### AI mission review workflow
 
-Weekly mission generation runs only in Django. Configure the Uni API in
-`backend/.env`; never place these values in Vite or frontend environment files:
+Mission generation is asynchronous and orchestrated by n8n. Django creates the
+week plan and versioned generator requirements, while n8n runs the generator,
+calls Django's deterministic validation endpoint, performs a separate AI review
+and optional repair, then returns the passed result through a callback. Only
+Django writes missions to the database and places them in human review.
+
+Configure the shared secrets in the repository-root `.env` (copied from
+`.env.example`) and the Django connection settings in `backend/.env`. Never put
+these values in Vite or frontend environment files:
 
 ```env
-KICONNECT_API_KEY=your-key
-KICONNECT_BASE_URL=https://chat.kiconnect.nrw/api/v1
-KICONNECT_MODEL=your-model
-KICONNECT_CHAT_COMPLETIONS_PATH=/chat/completions
+# .env (read by Compose and injected into Django and n8n)
+N8N_SERVICE_SECRET=separate-outbound-secret
+N8N_CALLBACK_SECRET=separate-callback-secret
+N8N_ENCRYPTION_KEY=separate-n8n-encryption-key
+
+# backend/.env
+N8N_MISSION_GENERATION_URL=http://n8n:5678/webhook/mission-generation
+N8N_REQUEST_TIMEOUT=10
+N8N_WORKFLOW_VERSION=v1
 ```
+
+Compose injects `http://n8n:5678/webhook/mission-generation` into Django. In the
+other direction, n8n receives `DJANGO_INTERNAL_BASE_URL=http://web:8000`; use it
+as the base for validation and callback HTTP Request nodes. Both names resolve
+only inside the shared Compose network. KICOnnect settings in Django are still
+used by interactive assistant/chat replies, but no active mission-generation
+endpoint calls KICOnnect directly.
 
 Generate review proposals for the next calendar week with:
 
@@ -101,8 +125,51 @@ docker compose exec web python manage.py generate_weekly_missions --force
 ```
 
 The command requires at least one user with the `content_creator` or `admin`
-role. Generated missions remain in review until a content creator approves them
-on the Missions page.
+role and starts a `GenerationRun`. Generated missions appear in the existing
+review UI only after n8n has returned a passed AI review and Django has validated
+the complete payload again.
+
+The webhook receives a versioned object with `generation_run_id`,
+`generation_kind`, `requirements`, `research_context`, `review_policy`, and the
+two relative Django service
+endpoints. Each requirement contains the exact generator messages and generation
+parameters derived from the existing mission prompts. Django sends
+`N8N_SERVICE_SECRET` as `X-N8N-Service-Secret` and the run UUID as the
+`Idempotency-Key` header.
+
+n8n validates one generated result with:
+
+```text
+POST /internal/n8n/validate-mission/
+X-N8N-Callback-Secret: <N8N_CALLBACK_SECRET>
+{"generation_run_id":"...","requirement_id":"...","result":{...}}
+```
+
+Progress and completion use:
+
+```text
+POST /internal/n8n/generation-callback/
+X-N8N-Callback-Secret: <N8N_CALLBACK_SECRET>
+{"generation_run_id":"...","status":"reviewing","n8n_execution_id":"..."}
+```
+
+A completed callback additionally supplies one result for every requirement and
+an overall passed review:
+
+```json
+{
+  "generation_run_id": "...",
+  "status": "completed",
+  "n8n_execution_id": "...",
+  "results": [{"requirement_id": "...", "payload": {}}],
+  "review_report": {"verdict": "pass", "score": 0.9, "issues": []},
+  "research_context": []
+}
+```
+
+Task-mission results use `variants` instead of `payload`, keyed by `easy`,
+`medium`, and `hard`. Django treats callbacks idempotently and revalidates the
+entire completed result before storing anything.
 
 ### Weekly mission email reminders
 
@@ -165,8 +232,9 @@ workflow uses. The Docker `web` service overrides it to the `db` host internally
 
 ## Configuration
 
-All config is read from environment variables (loaded from `backend/.env` locally
-via `python-dotenv`):
+Configuration is read from environment variables. Locally, Django settings live
+in `backend/.env`; the three shared n8n secrets live in the root `.env` so Compose
+can inject identical values into both services.
 
 | Variable        | Purpose                        | Local default                           |
 |-----------------|--------------------------------|-----------------------------------------|
@@ -176,7 +244,15 @@ via `python-dotenv`):
 | `DATABASE_URL`  | Postgres connection string     | `postgres://app:app@localhost:5432/app` |
 | `KICONNECT_API_KEY` | Server-side Uni API key | no default |
 | `KICONNECT_BASE_URL` | Uni API base URL | `https://chat.kiconnect.nrw/api/v1` |
-| `KICONNECT_MODEL` | Model used for mission generation | no default |
+| `KICONNECT_MODEL` | Model used for interactive assistant/chat replies | no default |
+| `N8N_MISSION_GENERATION_URL` | n8n webhook for generation runs | `http://n8n:5678/webhook/mission-generation` in Compose |
+| `N8N_SERVICE_SECRET` | Django-to-n8n service credential | required in root `.env` |
+| `N8N_CALLBACK_SECRET` | n8n-to-Django callback credential | required in root `.env` |
+| `N8N_ENCRYPTION_KEY` | Encrypts n8n credentials at rest | required in root `.env` |
+| `DJANGO_INTERNAL_BASE_URL` | Django base URL used by n8n nodes | `http://web:8000` in Compose |
+| `N8N_REQUEST_TIMEOUT` | Timeout for starting a workflow | `10` seconds |
+| `N8N_WORKFLOW_VERSION` | Version included in the workflow contract | `v1` |
+| `MISSION_TASK_DAYS_PER_WEEK` | Task-style days in a generated workweek | `2` |
 
 Generate a production `SECRET_KEY`:
 
@@ -200,8 +276,8 @@ both the API and the SPA.
    - `DEBUG` = `False`
    - `ALLOWED_HOSTS` is optional; the app already trusts Railway's
      `RAILWAY_PUBLIC_DOMAIN` automatically.
-   - Uni API keys for mission generation: `KICONNECT_API_KEY` (+ optional
-     `KICONNECT_*` overrides) and the `EMAIL_*` variables for reminders.
+   - n8n variables described above, optional `KICONNECT_*` values for interactive
+     chat features, and the `EMAIL_*` variables for reminders.
    - Optional: `SECURE_HSTS_SECONDS` (e.g. `31536000`) once the site is HTTPS-only.
 5. **Deploy.** The container's start command runs `collectstatic`, then `migrate`,
    then `gunicorn` (see the root `Dockerfile`). The built SPA and Django static

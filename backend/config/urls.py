@@ -24,5 +24,6 @@ def serve_index(_request, *_args, **_kwargs):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('accounts.urls')),
+    path('internal/n8n/', include('accounts.n8n_internal_urls')),
     re_path(r"^.*$", serve_index),
 ]

@@ -8,6 +8,7 @@ from django.utils import timezone
 from .models import (
     AgentChat,
     DailyMissionReminder,
+    GenerationRun,
     Mission,
     MissionAssignment,
     MissionAttempt,
@@ -582,32 +583,19 @@ class AccountsApiTests(TestCase):
         self.assertEqual(self.client.post(f'/api/auth/missions/{mission.id}/approve/', secure=True).status_code, 403)
         self.assertEqual(self.client.post('/api/auth/missions/generate-next-week/', secure=True).status_code, 403)
 
-    @patch('accounts.views.generate_training_candidate')
-    def test_authenticated_user_can_generate_training_without_saving_mission(self, generate_mock):
+    @patch('accounts.views.dispatch_generation_run')
+    def test_authenticated_user_can_start_training_without_saving_mission(self, dispatch_mock):
         player = self.create_user('training@example.com')
-        generate_mock.return_value = {
-            'mission_type': Mission.TYPE_SINGLE_CHOICE,
-            'title_de': 'Training', 'title_en': 'Training',
-            'description_de': 'Beschreibung', 'description_en': 'Description',
-            'max_points': 30,
-            'content': {
-                'question': {'de': 'Frage?', 'en': 'Question?'},
-                'options': [{'de': 'Ja', 'en': 'Yes'}, {'de': 'Nein', 'en': 'No'}],
-                'correct_indices': [0],
-                'feedback': {'de': 'Gut.', 'en': 'Good.'},
-            },
-        }
         self.client.force_login(player)
 
         response = self.client.post('/api/auth/training/generate/', {
             'type': Mission.TYPE_SINGLE_CHOICE,
         }, content_type='application/json', secure=True)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['mission']['question_en'], 'Question?')
-        self.assertEqual(response.json()['mission']['test_solution']['correct_indices'], [0])
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()['generation_run']['kind'], GenerationRun.KIND_TRAINING_CHOICE)
         self.assertEqual(Mission.objects.count(), 0)
-        generate_mock.assert_called_once_with(Mission.TYPE_SINGLE_CHOICE)
+        dispatch_mock.assert_called_once()
 
     def test_training_generation_requires_authentication(self):
         response = self.client.post('/api/auth/training/generate/', {
@@ -630,13 +618,18 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['mission']['content']['feedback'], 'Correct answer: Yes.')
 
-    @patch('accounts.views.generate_chat_challenge')
-    def test_chat_challenge_hides_solutions_and_is_not_saved_as_mission(self, generate_mock):
+    def test_chat_challenge_consume_hides_solutions_and_is_not_saved_as_mission(self):
         player = self.create_user('chat-player@example.com')
-        generate_mock.return_value = self.chat_challenge()
         self.client.force_login(player)
+        run = GenerationRun.objects.create(
+            kind=GenerationRun.KIND_TRAINING_CHAT,
+            status=GenerationRun.STATUS_COMPLETED,
+            requested_by=player,
+            request_payload={},
+            result_payload={'training-chat': self.chat_challenge()},
+        )
 
-        response = self.client.post('/api/auth/training/chat-challenge/generate/', {},
+        response = self.client.post(f'/api/auth/mission-generation-runs/{run.id}/consume/', {},
                                     content_type='application/json', secure=True)
 
         self.assertEqual(response.status_code, 200)
@@ -648,22 +641,25 @@ class AccountsApiTests(TestCase):
         self.assertEqual(Mission.objects.count(), 0)
 
     @patch('accounts.views.chat_reply', return_value='Pruefe zuerst die Differenz zwischen Ist und Plan.')
-    @patch('accounts.views.generate_chat_challenge')
-    def test_chat_challenge_allows_only_three_messages(self, generate_mock, chat_reply_mock):
+    def test_chat_challenge_allows_only_three_messages(self, chat_reply_mock):
         player = self.create_user('chat-limit@example.com')
-        generate_mock.return_value = self.chat_challenge()
         self.client.force_login(player)
-        generated = self.client.post('/api/auth/training/chat-challenge/generate/', {},
-                                     content_type='application/json', secure=True).json()['mission']
+        challenge_id = 'challenge-1'
+        challenge = self.chat_challenge()
+        challenge['history'] = []
+        challenge['prompt_count'] = 0
+        session = self.client.session
+        session['training_chat_challenges'] = {challenge_id: challenge}
+        session.save()
 
         for expected_remaining in (2, 1, 0):
             response = self.client.post('/api/auth/training/chat-challenge/message/', {
-                'challenge_id': generated['id'], 'message': 'Gib mir einen Hinweis.', 'language': 'de',
+                'challenge_id': challenge_id, 'message': 'Gib mir einen Hinweis.', 'language': 'de',
             }, content_type='application/json', secure=True)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()['remaining_prompts'], expected_remaining)
         blocked = self.client.post('/api/auth/training/chat-challenge/message/', {
-            'challenge_id': generated['id'], 'message': 'Noch ein Hinweis.', 'language': 'de',
+            'challenge_id': challenge_id, 'message': 'Noch ein Hinweis.', 'language': 'de',
         }, content_type='application/json', secure=True)
         self.assertEqual(blocked.status_code, 409)
         self.assertEqual(chat_reply_mock.call_count, 3)
@@ -830,31 +826,31 @@ class AccountsApiTests(TestCase):
         published.refresh_from_db()
         self.assertEqual(published.status, Mission.STATUS_PUBLISHED)
 
-    @patch('accounts.views.generate_next_week')
-    def test_creator_can_trigger_generation(self, generate_mock):
+    @patch('accounts.views.dispatch_generation_run')
+    def test_creator_can_trigger_generation(self, dispatch_mock):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
-        start, end = next_calendar_week()
-        generate_mock.return_value = ([], start, end)
         self.client.force_login(creator)
 
         response = self.client.post('/api/auth/missions/generate-next-week/', {}, content_type='application/json', secure=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['created_count'], 0)
-        generate_mock.assert_called_once_with(creator, force=False, week_start=None)
+        self.assertEqual(response.status_code, 202)
+        run = GenerationRun.objects.get()
+        self.assertEqual(run.kind, GenerationRun.KIND_WEEKLY_MISSIONS)
+        self.assertTrue(run.request_payload['requirements'])
+        dispatch_mock.assert_called_once_with(run)
 
-    @patch('accounts.views.generate_next_week')
-    def test_creator_can_select_a_monday_for_generation(self, generate_mock):
+    @patch('accounts.views.dispatch_generation_run')
+    def test_creator_can_select_a_monday_for_generation(self, dispatch_mock):
         creator = self.create_user('creator-week@example.com', Profile.ROLE_CONTENT_CREATOR)
-        start, end = next_calendar_week()
-        generate_mock.return_value = ([], start, end)
+        start, _end = next_calendar_week()
         self.client.force_login(creator)
 
         response = self.client.post('/api/auth/missions/generate-next-week/', {
             'week_start': start.isoformat(),
         }, content_type='application/json', secure=True)
 
-        self.assertEqual(response.status_code, 200)
-        generate_mock.assert_called_once_with(creator, force=False, week_start=start)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(GenerationRun.objects.get().week_start, start)
+        dispatch_mock.assert_called_once()
 
     def test_generation_week_must_be_a_future_monday(self):
         creator = self.create_user('creator-invalid-week@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -867,20 +863,20 @@ class AccountsApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
-    @patch('accounts.views.generate_next_week')
-    def test_creator_can_select_the_current_week_monday(self, generate_mock):
+    @patch('accounts.views.dispatch_generation_run')
+    def test_creator_can_select_the_current_week_monday(self, dispatch_mock):
         creator = self.create_user('creator-current-week@example.com', Profile.ROLE_CONTENT_CREATOR)
         today = timezone.localdate()
         current_monday = today - timedelta(days=today.weekday())
-        generate_mock.return_value = ([], current_monday, current_monday + timedelta(days=6))
         self.client.force_login(creator)
 
         response = self.client.post('/api/auth/missions/generate-next-week/', {
             'week_start': current_monday.isoformat(),
         }, content_type='application/json', secure=True)
 
-        self.assertEqual(response.status_code, 200)
-        generate_mock.assert_called_once_with(creator, force=False, week_start=current_monday)
+        expected_status = 200 if not GenerationRun.objects.get().request_payload['requirements'] else 202
+        self.assertEqual(response.status_code, expected_status)
+        self.assertEqual(GenerationRun.objects.get().week_start, current_monday)
 
     def test_difficulty_leaderboard_uses_classified_attempts_only(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -1640,35 +1636,19 @@ class AiTaskChallengeTests(TestCase):
         }, content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 400)
 
-    def test_generate_endpoint_creates_review_mission(self):
+    def test_generate_endpoint_starts_review_mission_run(self):
         creator = self.make_user('creator-gen@example.com', Profile.ROLE_CONTENT_CREATOR)
         self.client.force_login(creator)
-        candidate = {
-            'mission_type': Mission.TYPE_BULK_CATEGORIZATION,
-            'title_de': 'Titel', 'title_en': 'Title',
-            'description_de': 'Beschreibung', 'description_en': 'Description',
-            'max_points': 40, 'content': self.content(),
-            'topic_de': 'Kategorisierung', 'topic_en': 'Categorization',
-            'learning_objective_de': 'Buchungen kategorisieren.',
-            'learning_objective_en': 'Categorize bookings.',
-        }
-        candidate['variants'] = {
-            difficulty: {
-                'title_de': candidate['title_de'], 'title_en': candidate['title_en'],
-                'description_de': candidate['description_de'], 'description_en': candidate['description_en'],
-                'max_points': 40, 'content': candidate['content'],
-            }
-            for difficulty in Mission.DIFFICULTIES
-        }
-        with patch('accounts.views.generate_task_challenge_variants', return_value=candidate) as mock_generate:
+        with patch('accounts.views.dispatch_generation_run') as dispatch_mock:
             response = self.client.post('/api/auth/missions/generate-task-challenge/', {
                 'mission_type': 'bulk_categorization',
             }, content_type='application/json', secure=True)
-        self.assertEqual(response.status_code, 201)
-        mock_generate.assert_called_once_with('bulk_categorization')
-        mission = Mission.objects.get(mission_type=Mission.TYPE_BULK_CATEGORIZATION)
-        self.assertEqual(mission.status, Mission.STATUS_REVIEW)
-        self.assertTrue(mission.generated_by_ai)
+        self.assertEqual(response.status_code, 202)
+        run = GenerationRun.objects.get()
+        self.assertEqual(run.kind, GenerationRun.KIND_SCHEDULED_TASK)
+        self.assertEqual(run.request_payload['requirements'][0]['mission_type'], 'bulk_categorization')
+        self.assertEqual(Mission.objects.count(), 0)
+        dispatch_mock.assert_called_once_with(run)
 
     def test_generate_endpoint_rejects_non_creator(self):
         player = self.make_user('player-forbidden@example.com')
@@ -1858,9 +1838,15 @@ class AiTaskChallengeTrainingTests(TestCase):
         player = self.make_user('training-task@example.com')
         self.client.force_login(player)
         candidate = self.candidate()
-        with patch('accounts.views.generate_task_challenge', return_value=candidate):
-            generated = self.client.post('/api/auth/training/task-challenge/generate/', {},
-                                         content_type='application/json', secure=True)
+        run = GenerationRun.objects.create(
+            kind=GenerationRun.KIND_TRAINING_TASK,
+            status=GenerationRun.STATUS_COMPLETED,
+            requested_by=player,
+            request_payload={},
+            result_payload={'training-task': candidate},
+        )
+        generated = self.client.post(f'/api/auth/mission-generation-runs/{run.id}/consume/', {},
+                                     content_type='application/json', secure=True)
         self.assertEqual(generated.status_code, 200)
         mission = generated.json()['mission']
         challenge_id = mission['id']

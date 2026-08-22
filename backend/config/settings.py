@@ -34,6 +34,21 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
 
 
+def env_positive_float(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def env_nonnegative_int(name: str, default: int) -> int:
+    try:
+        return max(0, int(os.environ.get(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
 # SECURITY WARNING: keep the secret key used in production secret!
 # A throwaway default keeps local dev frictionless; production MUST set SECRET_KEY.
 SECRET_KEY = os.environ.get(
@@ -195,6 +210,16 @@ EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", default=True)
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "noreply@example.com")
+
+
+# n8n owns mission-generation LLM orchestration. Interactive chat replies keep
+# using the separately configured KICOnnect connection.
+N8N_MISSION_GENERATION_URL = os.environ.get("N8N_MISSION_GENERATION_URL", "").strip()
+N8N_SERVICE_SECRET = os.environ.get("N8N_SERVICE_SECRET", "").strip()
+N8N_CALLBACK_SECRET = os.environ.get("N8N_CALLBACK_SECRET", "").strip()
+N8N_REQUEST_TIMEOUT = env_positive_float("N8N_REQUEST_TIMEOUT", 10.0)
+N8N_WORKFLOW_VERSION = os.environ.get("N8N_WORKFLOW_VERSION", "v1").strip() or "v1"
+MISSION_TASK_DAYS_PER_WEEK = env_nonnegative_int("MISSION_TASK_DAYS_PER_WEEK", 2)
 
 
 CORS_ALLOWED_ORIGINS = [

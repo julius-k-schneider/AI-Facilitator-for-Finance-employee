@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -53,6 +55,89 @@ class Profile(models.Model):
 
     def __str__(self):
         return f'{self.user.username} ({self.get_role_display()})'
+
+
+class GenerationRun(models.Model):
+    KIND_WEEKLY_MISSIONS = 'weekly_missions'
+    KIND_REGENERATE_MISSION = 'regenerate_mission'
+    KIND_SCHEDULED_TASK = 'scheduled_task'
+    KIND_TRAINING_CHOICE = 'training_choice'
+    KIND_TRAINING_TASK = 'training_task'
+    KIND_TRAINING_CHAT = 'training_chat'
+    KIND_CHOICES = [
+        (KIND_WEEKLY_MISSIONS, 'Weekly missions'),
+        (KIND_REGENERATE_MISSION, 'Regenerate mission'),
+        (KIND_SCHEDULED_TASK, 'Scheduled task mission'),
+        (KIND_TRAINING_CHOICE, 'Training choice mission'),
+        (KIND_TRAINING_TASK, 'Training task challenge'),
+        (KIND_TRAINING_CHAT, 'Training chat challenge'),
+    ]
+
+    STATUS_QUEUED = 'queued'
+    STATUS_DISPATCHED = 'dispatched'
+    STATUS_RUNNING = 'running'
+    STATUS_VALIDATING = 'validating'
+    STATUS_REVIEWING = 'reviewing'
+    STATUS_REPAIRING = 'repairing'
+    STATUS_COMPLETED = 'completed'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_QUEUED, 'Queued'),
+        (STATUS_DISPATCHED, 'Dispatched'),
+        (STATUS_RUNNING, 'Running'),
+        (STATUS_VALIDATING, 'Validating'),
+        (STATUS_REVIEWING, 'Reviewing'),
+        (STATUS_REPAIRING, 'Repairing'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+    TERMINAL_STATUSES = {STATUS_COMPLETED, STATUS_FAILED}
+    ACTIVE_STATUSES = {
+        STATUS_QUEUED,
+        STATUS_DISPATCHED,
+        STATUS_RUNNING,
+        STATUS_VALIDATING,
+        STATUS_REVIEWING,
+        STATUS_REPAIRING,
+    }
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField(max_length=32, choices=KIND_CHOICES)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_QUEUED, db_index=True)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='mission_generation_runs',
+    )
+    target_mission = models.ForeignKey(
+        'Mission',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='regeneration_runs',
+    )
+    week_start = models.DateField(null=True, blank=True, db_index=True)
+    week_end = models.DateField(null=True, blank=True)
+    force = models.BooleanField(default=False)
+    workflow_version = models.CharField(max_length=32, default='v1')
+    request_payload = models.JSONField(default=dict)
+    result_payload = models.JSONField(default=dict, blank=True)
+    research_context = models.JSONField(default=list, blank=True)
+    review_report = models.JSONField(default=dict, blank=True)
+    result_metadata = models.JSONField(default=dict, blank=True)
+    n8n_execution_id = models.CharField(max_length=160, blank=True, default='')
+    error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+
+    def __str__(self):
+        return f'{self.kind}: {self.id} ({self.status})'
 
 
 class Mission(models.Model):
@@ -130,6 +215,13 @@ class Mission(models.Model):
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PUBLISHED, db_index=True)
     generated_by_ai = models.BooleanField(default=False)
     generation_batch_id = models.UUIDField(null=True, blank=True, db_index=True)
+    generation_run = models.ForeignKey(
+        GenerationRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='missions',
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
