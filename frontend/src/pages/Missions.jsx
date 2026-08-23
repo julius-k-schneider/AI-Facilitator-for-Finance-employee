@@ -36,7 +36,7 @@ const createEmptyVariants = () => Object.fromEntries(
 )
 
 const createEmptySharedFields = () => ({
-  topic_de: '', topic_en: '', learning_objective_de: '', learning_objective_en: '',
+  target_role: 'all', topic_de: '', topic_en: '', learning_objective_de: '', learning_objective_en: '',
 })
 
 function isoDate(date) {
@@ -276,7 +276,7 @@ function Calendar({ month, setMonth, schedule, selectedDate, selectedWeekStart, 
           const selected = weekMode ? selectedWeekStart === weekStart && !weekend : selectedDate === value
           const disabled = weekMode ? weekStart < currentWeekStart() || weekend : weekend
           return <button key={value} type="button" disabled={disabled} className={`mission-calendar-day${weekend ? ' is-weekend' : ''}${selected ? ' is-selected' : ''}`} onClick={() => onSelect(weekMode ? weekStart : value)}>
-            <span>{day}</span>{count > 0 && <span className={`mission-calendar-count${count >= 1 ? ' is-full' : ''}`}>{count}/1</span>}
+            <span>{day}</span>{count > 0 && <span className={`mission-calendar-count${count >= 2 ? ' is-full' : ''}`}>{count}/2</span>}
           </button>
         })}
       </div>
@@ -343,6 +343,7 @@ function Creator({ opened, onClose, onCreated }) {
   const editMission = (mission) => {
     setVariantForms(missionToVariantForms(mission))
     setSharedFields({
+      target_role: mission.target_role || 'all',
       topic_de: mission.topic_de || mission.title_de || '',
       topic_en: mission.topic_en || mission.title_en || '',
       learning_objective_de: mission.learning_objective_de || mission.description_de || '',
@@ -420,6 +421,7 @@ function Creator({ opened, onClose, onCreated }) {
             }}
           />
           <Alert color="brand" variant="light">{t('missions.creator.adaptiveHint')}</Alert>
+          <Select label={t('missions.creator.targetRole')} value={sharedFields.target_role} onChange={(value) => setSharedField('target_role', value)} data={[{ value: 'all', label: t('missions.creator.allFinanceRoles') }, { value: 'accountant', label: t('roles.accountant') }, { value: 'controller', label: t('roles.controller') }]} />
           <SimpleGrid cols={2}><TextInput label={t('missions.creator.topicDe')} value={sharedFields.topic_de} onChange={(e) => setSharedField('topic_de', e.target.value)} /><TextInput label={t('missions.creator.topicEn')} value={sharedFields.topic_en} onChange={(e) => setSharedField('topic_en', e.target.value)} /></SimpleGrid>
           <SimpleGrid cols={2}><Textarea label={t('missions.creator.learningObjectiveDe')} value={sharedFields.learning_objective_de} onChange={(e) => setSharedField('learning_objective_de', e.target.value)} /><Textarea label={t('missions.creator.learningObjectiveEn')} value={sharedFields.learning_objective_en} onChange={(e) => setSharedField('learning_objective_en', e.target.value)} /></SimpleGrid>
           <Stack gap={5}>

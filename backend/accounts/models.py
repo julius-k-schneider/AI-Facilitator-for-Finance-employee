@@ -56,6 +56,14 @@ class Profile(models.Model):
 
 
 class Mission(models.Model):
+    TARGET_ALL = 'all'
+    TARGET_ACCOUNTANT = Profile.ROLE_ACCOUNTANT
+    TARGET_CONTROLLER = Profile.ROLE_CONTROLLER
+    TARGET_ROLE_CHOICES = [
+        (TARGET_ALL, 'All finance roles'),
+        (TARGET_ACCOUNTANT, 'Accountant'),
+        (TARGET_CONTROLLER, 'Controller'),
+    ]
     DIFFICULTY_EASY = 'easy'
     DIFFICULTY_MEDIUM = 'medium'
     DIFFICULTY_HARD = 'hard'
@@ -115,6 +123,7 @@ class Mission(models.Model):
     ]
 
     mission_type = models.CharField(max_length=32, choices=TYPE_CHOICES)
+    target_role = models.CharField(max_length=16, choices=TARGET_ROLE_CHOICES, default=TARGET_ALL, db_index=True)
     scheduled_date = models.DateField(db_index=True)
     title_de = models.CharField(max_length=160)
     title_en = models.CharField(max_length=160)

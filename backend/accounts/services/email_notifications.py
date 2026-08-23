@@ -12,10 +12,13 @@ from accounts.models import DailyMissionReminder, Mission, MissionAttempt
 logger = logging.getLogger(__name__)
 
 
-def mission_email_recipients():
+def mission_email_recipients(target_role=Mission.TARGET_ALL):
     User = get_user_model()
+    users = User.objects.filter(is_active=True)
+    if target_role != Mission.TARGET_ALL:
+        users = users.filter(profile__role=target_role)
     return list(
-        User.objects.filter(is_active=True)
+        users
         .exclude(email='')
         .values_list('email', flat=True)
         .distinct()
@@ -23,7 +26,7 @@ def mission_email_recipients():
 
 
 def send_published_mission_email(mission):
-    recipients = mission_email_recipients()
+    recipients = mission_email_recipients(mission.target_role)
     if not recipients:
         return 0
 
@@ -73,16 +76,12 @@ def incomplete_weekly_mission_users(reminder_date=None):
         scheduled_date__range=(week_start, week_end),
         status=Mission.STATUS_PUBLISHED,
     ).order_by('scheduled_date', 'created_at', 'id')
-    missions_by_date = {}
-    for mission in scheduled:
-        missions_by_date.setdefault(mission.scheduled_date, mission)
-    missions = list(missions_by_date.values())
-    if not missions:
-        return [], missions
-
-    mission_ids = [mission.id for mission in missions]
     User = get_user_model()
     users = User.objects.filter(is_active=True).exclude(email='').order_by('id')
+    missions = list(scheduled)
+    if not missions:
+        return [], missions
+    mission_ids = [mission.id for mission in missions]
     completed_pairs = set(MissionAttempt.objects.filter(
         mission_id__in=mission_ids,
         user__in=users,
@@ -90,8 +89,17 @@ def incomplete_weekly_mission_users(reminder_date=None):
 
     incomplete = []
     for user in users:
+        role = getattr(getattr(user, 'profile', None), 'role', None)
+        user_missions_by_date = {}
+        for mission in missions:
+            if mission.target_role not in {Mission.TARGET_ALL, role}:
+                continue
+            current = user_missions_by_date.get(mission.scheduled_date)
+            if current is None or (current.target_role == Mission.TARGET_ALL and mission.target_role == role):
+                user_missions_by_date[mission.scheduled_date] = mission
+        user_missions = list(user_missions_by_date.values())
         missing_missions = [
-            mission for mission in missions
+            mission for mission in user_missions
             if (user.id, mission.id) not in completed_pairs
         ]
         if missing_missions:
@@ -162,6 +170,11 @@ def send_daily_mission_reminders(reminder_date=None, dry_run=False):
     failed = 0
 
     for user, missing_missions in incomplete_users:
+        role = getattr(getattr(user, 'profile', None), 'role', None)
+        user_missions = [
+            mission for mission in missions
+            if mission.target_role in {Mission.TARGET_ALL, role}
+        ]
         if DailyMissionReminder.objects.filter(user=user, reminder_date=reminder_date).exists():
             skipped += 1
             continue
@@ -169,11 +182,11 @@ def send_daily_mission_reminders(reminder_date=None, dry_run=False):
             sent += 1
             continue
         try:
-            send_daily_mission_reminder(user, reminder_date, missions, missing_missions)
+            send_daily_mission_reminder(user, reminder_date, user_missions, missing_missions)
             DailyMissionReminder.objects.create(
                 user=user,
                 reminder_date=reminder_date,
-                mission_count=len(missions),
+                mission_count=len(user_missions),
                 missing_count=len(missing_missions),
             )
             sent += 1

@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -49,7 +49,22 @@ VALID_ROLES = {choice for choice, _ in Profile.ROLE_CHOICES}
 SELF_REGISTRATION_ROLES = {Profile.ROLE_CONTROLLER, Profile.ROLE_ACCOUNTANT}
 VALID_SKILL_LEVELS = {choice for choice, _ in Profile.SKILL_LEVEL_CHOICES}
 VALID_DIFFICULTIES = {choice for choice, _ in Mission.DIFFICULTY_CHOICES}
+VALID_TARGET_ROLES = {choice for choice, _ in Mission.TARGET_ROLE_CHOICES}
 MISSION_AVAILABILITY_DEADLINE_HOUR = 12
+
+
+def missions_for_user(queryset, user):
+    """Keep legacy/shared missions visible and select profession-specific content."""
+    role = ensure_profile(user).role
+    if role in {Profile.ROLE_ACCOUNTANT, Profile.ROLE_CONTROLLER}:
+        return queryset.filter(Q(target_role=Mission.TARGET_ALL) | Q(target_role=role))
+    return queryset.filter(target_role=Mission.TARGET_ALL)
+
+
+def role_slot_conflict(queryset, target_role):
+    if target_role == Mission.TARGET_ALL:
+        return queryset.exists()
+    return queryset.filter(Q(target_role=Mission.TARGET_ALL) | Q(target_role=target_role)).exists()
 
 
 def mission_week_start(scheduled_date):
@@ -127,7 +142,7 @@ def level_for_points(points):
 def streak_payload(user):
     today = timezone.localdate()
     missions_by_date = {}
-    for mission_id, scheduled_date in Mission.objects.filter(
+    for mission_id, scheduled_date in missions_for_user(Mission.objects, user).filter(
         status=Mission.STATUS_PUBLISHED,
         scheduled_date__lte=today,
     ).order_by('scheduled_date', 'created_at', 'id').values_list('id', 'scheduled_date'):
@@ -348,6 +363,7 @@ def mission_payload(mission, user, language='de', include_content=True, create_a
     payload = {
         'id': mission.id,
         'type': mission.mission_type,
+        'target_role': mission.target_role,
         'scheduled_date': mission.scheduled_date.isoformat(),
         'title': variant.get('title_en') if language == 'en' else variant.get('title_de'),
         'description': variant.get('description_en') if language == 'en' else variant.get('description_de'),
@@ -423,6 +439,7 @@ def mission_schedule_payload(mission, user):
     return {
         'id': mission.id,
         'type': mission.mission_type,
+        'target_role': mission.target_role,
         'scheduled_date': mission.scheduled_date.isoformat(),
         'title_de': mission.title_de,
         'title_en': mission.title_en,
@@ -506,14 +523,17 @@ def validate_mission_identity(data, allow_past_date=False):
         return None, 'scheduled date must be a weekday'
     if mission_type not in MANUAL_MISSION_TYPES:
         return None, 'unsupported mission type'
-    return (mission_type, scheduled_date), None
+    target_role = data.get('target_role', Mission.TARGET_ALL)
+    if target_role not in VALID_TARGET_ROLES:
+        return None, 'unsupported target role'
+    return (mission_type, scheduled_date, target_role), None
 
 
 def validate_choice_mission_data(data, allow_past_date=False):
     identity, identity_error = validate_mission_identity(data, allow_past_date)
     if identity_error:
         return None, identity_error
-    mission_type, scheduled_date = identity
+    mission_type, scheduled_date, target_role = identity
 
     required_text = (
         'title_de', 'title_en', 'description_de', 'description_en', 'question_de', 'question_en',
@@ -540,6 +560,7 @@ def validate_choice_mission_data(data, allow_past_date=False):
             return None, 'invalid points'
         return {
             'mission_type': mission_type,
+            'target_role': target_role,
             'scheduled_date': scheduled_date,
             'title_de': data['title_de'].strip(),
             'title_en': data['title_en'].strip(),
@@ -583,6 +604,7 @@ def validate_choice_mission_data(data, allow_past_date=False):
             return None, 'ranking must contain every option exactly once'
         return {
             'mission_type': mission_type,
+            'target_role': target_role,
             'scheduled_date': scheduled_date,
             'title_de': data['title_de'].strip(),
             'title_en': data['title_en'].strip(),
@@ -622,6 +644,7 @@ def validate_choice_mission_data(data, allow_past_date=False):
         return None, 'this mission type requires exactly one correct answer'
     return {
         'mission_type': mission_type,
+        'target_role': target_role,
         'scheduled_date': scheduled_date,
         'title_de': data['title_de'].strip(),
         'title_en': data['title_en'].strip(),
@@ -648,7 +671,7 @@ def validate_manual_mission_data(data, allow_past_date=False):
     identity, identity_error = validate_mission_identity(data, allow_past_date)
     if identity_error:
         return None, identity_error
-    mission_type, scheduled_date = identity
+    mission_type, scheduled_date, target_role = identity
 
     shared_fields = ('topic_de', 'topic_en', 'learning_objective_de', 'learning_objective_en')
     if any(not str(data.get(field, '')).strip() for field in shared_fields):
@@ -666,6 +689,7 @@ def validate_manual_mission_data(data, allow_past_date=False):
         variant_values, variant_error = validate_choice_mission_data({
             **raw_variant,
             'type': mission_type,
+            'target_role': target_role,
             'scheduled_date': scheduled_date.isoformat(),
         }, allow_past_date=allow_past_date)
         if variant_error:
@@ -682,6 +706,7 @@ def validate_manual_mission_data(data, allow_past_date=False):
     easy = variants[Mission.DIFFICULTY_EASY]
     return {
         'mission_type': mission_type,
+        'target_role': target_role,
         'scheduled_date': scheduled_date,
         'topic_de': str(data['topic_de']).strip(),
         'topic_en': str(data['topic_en']).strip(),
@@ -959,16 +984,16 @@ def complete_mission_view(request):
 
     data = parse_json(request)
     language = 'en' if data.get('language') == 'en' else 'de'
-    mission = Mission.objects.filter(
+    mission = missions_for_user(Mission.objects, request.user).filter(
         id=data.get('mission_id'),
         status=Mission.STATUS_PUBLISHED,
     ).first()
     if mission is None or not mission_is_available(mission):
         return JsonResponse({'error': 'mission not available'}, status=404)
-    canonical_mission_id = Mission.objects.filter(
+    canonical_mission_id = missions_for_user(Mission.objects, request.user).filter(
         scheduled_date=mission.scheduled_date,
         status=Mission.STATUS_PUBLISHED,
-    ).order_by('created_at', 'id').values_list('id', flat=True).first()
+    ).order_by('-target_role', 'created_at', 'id').values_list('id', flat=True).first()
     if canonical_mission_id != mission.id:
         return JsonResponse({'error': 'mission not available'}, status=404)
     if MissionAttempt.objects.filter(user=request.user, mission=mission).exists():
@@ -1091,10 +1116,10 @@ def daily_missions_view(request):
     language = request.GET.get('lang', 'de')
     today = timezone.localdate()
     if is_business_day(today):
-        mission = Mission.objects.filter(
+        mission = missions_for_user(Mission.objects, request.user).filter(
             scheduled_date=today,
             status=Mission.STATUS_PUBLISHED,
-        ).prefetch_related('attempts').order_by('created_at', 'id').first()
+        ).prefetch_related('attempts').order_by('-target_role', 'created_at', 'id').first()
         missions = [mission] if mission is not None else []
     else:
         missions = []
@@ -1117,7 +1142,7 @@ def available_missions_view(request):
     today = timezone.localdate()
     available_from = mission_availability_start()
     attempted_ids = set(MissionAttempt.objects.filter(user=request.user).values_list('mission_id', flat=True))
-    candidates = Mission.objects.filter(
+    candidates = missions_for_user(Mission.objects, request.user).filter(
         scheduled_date__gte=available_from,
         scheduled_date__lt=today,
         status=Mission.STATUS_PUBLISHED,
@@ -1199,7 +1224,7 @@ def mission_schedule_view(request):
         scheduled_missions = {}
         for mission in missions:
             key = mission.scheduled_date.isoformat()
-            dates[key] = dates.get(key, 0) + 1
+            dates[key] = dates.get(key, 0) + (2 if mission.target_role == Mission.TARGET_ALL else 1)
             scheduled_missions.setdefault(key, []).append(mission_schedule_payload(mission, request.user))
         return JsonResponse({'dates': dates, 'missions': scheduled_missions})
 
@@ -1211,8 +1236,8 @@ def mission_schedule_view(request):
         existing = Mission.objects.select_for_update().filter(
             scheduled_date=values['scheduled_date'],
         ).exclude(status=Mission.STATUS_REJECTED)
-        if existing.exists():
-            return JsonResponse({'error': 'this date already has a mission'}, status=409)
+        if role_slot_conflict(existing, values['target_role']):
+            return JsonResponse({'error': 'this date already has a mission for the selected role'}, status=409)
         mission = Mission.objects.create(
             status=Mission.STATUS_PUBLISHED,
             created_by=request.user,
@@ -1243,8 +1268,8 @@ def mission_detail_view(request, mission_id):
             date_missions = Mission.objects.select_for_update().filter(
                 scheduled_date=values['scheduled_date'],
             ).exclude(id=mission.id).exclude(status=Mission.STATUS_REJECTED)
-            if date_missions.exists():
-                return JsonResponse({'error': 'this date already has a mission'}, status=409)
+            if role_slot_conflict(date_missions, values['target_role']):
+                return JsonResponse({'error': 'this date already has a mission for the selected role'}, status=409)
             for field, value in values.items():
                 setattr(mission, field, value)
             mission.save()
@@ -1287,15 +1312,17 @@ def approve_all_review_missions_view(request):
         )
         review_counts = {}
         for mission in review_missions:
-            review_counts[mission.scheduled_date] = review_counts.get(mission.scheduled_date, 0) + 1
-        for scheduled_date, review_count in review_counts.items():
+            key = (mission.scheduled_date, mission.target_role)
+            review_counts[key] = review_counts.get(key, 0) + 1
+        for (scheduled_date, target_role), review_count in review_counts.items():
             published_count = Mission.objects.filter(
                 scheduled_date=scheduled_date,
                 status=Mission.STATUS_PUBLISHED,
+                target_role=target_role,
             ).count()
             if published_count + review_count > 1:
                 return JsonResponse({
-                    'error': f'{scheduled_date.isoformat()} would have more than one published mission',
+                    'error': f'{scheduled_date.isoformat()} would have more than one published mission for {target_role}',
                 }, status=409)
         reviewed_at = timezone.now()
         mission_ids = [mission.id for mission in review_missions]
@@ -1377,22 +1404,28 @@ def generate_task_challenge_view(request):
         return JsonResponse({'error': 'permission denied'}, status=403)
     data = parse_json(request)
     mission_type = data.get('mission_type') or None
+    target_role = data.get('target_role', Mission.TARGET_ALL)
+    if target_role not in VALID_TARGET_ROLES:
+        return JsonResponse({'error': 'unsupported target role'}, status=400)
     if mission_type is not None and mission_type not in TASK_CHALLENGE_TYPES:
         return JsonResponse({'error': 'unsupported task challenge type'}, status=400)
     scheduled_date = parse_iso_date(data.get('scheduled_date')) if data.get('scheduled_date') else timezone.localdate()
     if data.get('scheduled_date') and scheduled_date is None:
         return JsonResponse({'error': 'scheduled_date must be a valid ISO date'}, status=400)
-    if Mission.objects.filter(
+    occupied = Mission.objects.filter(
         scheduled_date=scheduled_date,
         status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
-    ).exists():
-        return JsonResponse({'error': 'this date already has a mission'}, status=409)
+    )
+    if role_slot_conflict(occupied, target_role):
+        return JsonResponse({'error': 'this date already has a mission for the selected role'}, status=409)
     try:
-        candidate = generate_task_challenge_variants(mission_type)
+        candidate = (generate_task_challenge_variants(mission_type) if target_role == Mission.TARGET_ALL
+                     else generate_task_challenge_variants(mission_type, target_role=target_role))
     except AiMissionGenerationError as error_value:
         return JsonResponse({'error': str(error_value)}, status=503)
     mission = Mission(
         mission_type=candidate['mission_type'],
+        target_role=target_role,
         scheduled_date=scheduled_date,
         title_de=candidate['title_de'],
         title_en=candidate['title_en'],
@@ -1736,6 +1769,7 @@ def approve_mission_view(request, mission_id):
         published_count = Mission.objects.filter(
             scheduled_date=mission.scheduled_date,
             status=Mission.STATUS_PUBLISHED,
+            target_role=mission.target_role,
         ).count()
         if published_count >= 1:
             return JsonResponse({'error': 'this date already has a published mission'}, status=409)
