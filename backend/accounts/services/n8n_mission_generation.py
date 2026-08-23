@@ -413,7 +413,11 @@ def complete_generation_run(run_id, *, results, review_report, n8n_execution_id=
     if not isinstance(review_report, dict) or review_report.get('verdict') != 'pass':
         raise GenerationContractError('completed callback requires a passed AI review')
     with transaction.atomic():
-        run = GenerationRun.objects.select_for_update().select_related('target_mission').get(id=run_id)
+        # Lock only the generation run. ``target_mission`` is nullable, so joining
+        # it here creates a LEFT OUTER JOIN; PostgreSQL rejects FOR UPDATE on the
+        # nullable side of that join. Regeneration locks the target mission with a
+        # separate query below, and the other run kinds do not need the relation.
+        run = GenerationRun.objects.select_for_update().get(id=run_id)
         if run.status == GenerationRun.STATUS_COMPLETED:
             return run, list(run.missions.order_by('scheduled_date'))
         validated = _validated_results(run, results)

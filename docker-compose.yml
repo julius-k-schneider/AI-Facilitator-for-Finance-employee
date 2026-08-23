@@ -80,6 +80,12 @@ services:
       N8N_SERVICE_SECRET: "${N8N_SERVICE_SECRET:?Set N8N_SERVICE_SECRET in the root .env}"
       N8N_CALLBACK_SECRET: "${N8N_CALLBACK_SECRET:?Set N8N_CALLBACK_SECRET in the root .env}"
       DJANGO_INTERNAL_BASE_URL: http://web:8000
+      # LLM connection used by the mission generator and reviewer nodes.
+      KICONNECT_API_KEY: "${KICONNECT_API_KEY}"
+      KICONNECT_BASE_URL: "${KICONNECT_BASE_URL}"
+      KICONNECT_MODEL: "${KICONNECT_MODEL}"
+      KICONNECT_CHAT_COMPLETIONS_PATH: "${KICONNECT_CHAT_COMPLETIONS_PATH}"
+
     volumes:
       - n8n_data:/home/node/.n8n
     ports:

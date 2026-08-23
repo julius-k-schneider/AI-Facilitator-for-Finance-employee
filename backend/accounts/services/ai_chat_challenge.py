@@ -2,35 +2,12 @@ import json
 import os
 from urllib import error, request
 
+from accounts.prompts.chat_challenges import SYSTEM_PROMPT, USER_PROMPT, build_coaching_system_prompt
 from accounts.services.ai_mission_generator import AiMissionGenerationError, extract_json
 
 
 CHAT_CHALLENGE_TYPE = 'ai_chat_challenge'
 FINAL_TYPES = {'number', 'single_choice', 'compliance_decision', 'evidence_boolean'}
-
-SYSTEM_PROMPT = """Create one beginner-friendly bilingual AI Chat Challenge for a finance employee.
-The learner gets a small finance case, may ask an AI assistant up to three questions, and then submits final answers.
-The chat must support reasoning but must not directly provide the final answer values or option labels.
-Return compact valid JSON only. Never use real personal, customer, Lufthansa-internal, or confidential data."""
-
-USER_PROMPT = """Return exactly this JSON structure:
-{
-  "title_de":"...", "title_en":"...",
-  "description_de":"...", "description_en":"...",
-  "task_de":"...", "task_en":"...",
-  "case_data_de":["..."], "case_data_en":["..."],
-  "chat_system_prompt_de":"...", "chat_system_prompt_en":"...",
-  "final_questions":[
-    {"id":"q1","type":"number","prompt_de":"...","prompt_en":"...","solution":12.5,"tolerance":0.1,"feedback_de":"...","feedback_en":"..."},
-    {"id":"q2","type":"single_choice","prompt_de":"...","prompt_en":"...","options_de":["..."],"options_en":["..."],"solution":1,"feedback_de":"...","feedback_en":"..."}
-  ]
-}
-Create exactly two final questions. Allowed types are number, single_choice, compliance_decision, evidence_boolean.
-For compliance_decision use options green/yellow/red and store the solution as one of those strings.
-For evidence_boolean use options true/false and store the solution as a boolean.
-For single_choice store the zero-based correct option index. Numeric questions require a non-negative tolerance.
-The task should be solvable from the supplied case data with thoughtful use of the mini-chat."""
-
 
 def _configuration():
     api_key = os.environ.get('KICONNECT_API_KEY', '').strip()
@@ -151,14 +128,7 @@ def chat_reply(challenge, history, message, language):
     system = challenge[f'chat_system_prompt_{language}']
     messages = [{
         'role': 'system',
-        'content': (
-            f'{system}\n'
-            f'Task: {task}\n'
-            f'Case data: {json.dumps(case_data, ensure_ascii=False)}\n'
-            'Give hints and explain reasoning, but never state final answer values or identify the correct final option. '
-            'Answer in plain text only: no Markdown, no bold markers, no tables. '
-            'Use at most one short paragraph plus up to three short bullet lines when helpful.'
-        ),
+        'content': build_coaching_system_prompt(system, task, case_data),
     }]
     messages.extend(history)
     messages.append({'role': 'user', 'content': message})

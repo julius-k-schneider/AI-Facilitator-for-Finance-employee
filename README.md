@@ -82,8 +82,13 @@ docker compose exec web python manage.py makemigrations
 docker compose exec web python manage.py migrate
 docker compose exec web python manage.py shell
 docker compose exec web python manage.py generate_weekly_missions
+docker compose exec web python manage.py seed_placeholder_missions --start-date 2026-08-24 --end-date 2026-08-27
 docker compose exec web python manage.py send_daily_mission_reminders
 ```
+
+`seed_placeholder_missions` creates idempotent review placeholders on unoccupied
+weekdays. Weekly generation then skips those dates, which is useful when testing
+the generation workflow with only one open day.
 
 ### AI mission review workflow
 

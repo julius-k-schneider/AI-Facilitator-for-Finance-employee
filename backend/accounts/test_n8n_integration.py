@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 from urllib import error
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import Client, TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from .models import GenerationRun, Mission, Profile
@@ -234,11 +236,20 @@ class N8NGenerationApiTests(TestCase):
             'review_report': {'verdict': 'pass', 'score': 0.94, 'issues': []},
             'research_context': [],
         }
-        first = self.callback(body)
+        with CaptureQueriesContext(connection) as captured_queries:
+            first = self.callback(body)
         second = self.callback(body)
 
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
+        generation_run_queries = [
+            query['sql'] for query in captured_queries.captured_queries
+            if 'accounts_generationrun' in query['sql']
+        ]
+        self.assertFalse(any(
+            'LEFT OUTER JOIN' in query and 'accounts_mission' in query
+            for query in generation_run_queries
+        ))
         self.assertEqual(Mission.objects.count(), 1)
         mission = Mission.objects.get()
         self.assertEqual(mission.status, Mission.STATUS_REVIEW)
