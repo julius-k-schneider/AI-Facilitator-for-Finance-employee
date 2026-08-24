@@ -1,0 +1,205 @@
+[
+  {
+    "id": "RsrchSelect2026A",
+    "name": "AI Finance Research - Context Selector",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "passthrough"
+        },
+        "id": "6ffbb7e0-919d-4417-b22b-b6d0910aeff2",
+        "name": "When Called by Another Workflow",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [0, -100]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "ai-finance-research-context-selector",
+          "authentication": "headerAuth",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "36483a16-1330-479f-acf0-3ec6479e6f68",
+        "name": "Authenticated Selector Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [0, -300],
+        "webhookId": "1a1fcbf8-a074-4544-9ed1-c09dcc585eca",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "VKHohALUbaf2u4a3",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const payload = $json.body && typeof $json.body === 'object' ? $json.body : $json;\nreturn [{ json: payload }];"
+        },
+        "id": "bc426c36-6351-46ab-bb6a-afd6d1ce52f4",
+        "name": "Unwrap Selector Webhook Body",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [240, -300]
+      },
+      {
+        "parameters": {},
+        "id": "f24afff2-c169-4631-b4d5-55242be2bb34",
+        "name": "Run Selector Manually",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [0, 120]
+      },
+      {
+        "parameters": {
+          "jsCode": "const now = new Date();\nconst day = now.getUTCDay();\nconst daysToMonday = day === 0 ? 1 : 8 - day;\nconst monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysToMonday));\nconst dateAt = (offset) => new Date(monday.getTime() + offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);\nreturn [{ json: {\n  generation_run_id: 'manual-selector-test',\n  generation_kind: 'weekly_missions',\n  as_of: now.toISOString(),\n  max_research_missions: 1,\n  preferred_tags: ['ai_governance', 'operational_resilience', 'human_review'],\n  requirements: [\n    { id: dateAt(0), scheduled_date: dateAt(0), output_type: 'quiz_mission', requested_mission_type: 'single_choice' },\n    { id: dateAt(1), scheduled_date: dateAt(1), output_type: 'task_mission', mission_type: 'invoice_extraction' },\n    { id: dateAt(2), scheduled_date: dateAt(2), output_type: 'quiz_mission', requested_mission_type: 'compliance_traffic_light' }\n  ]\n} }];"
+        },
+        "id": "b9bb1ff5-82cc-42a2-b1e9-3309e47eec6d",
+        "name": "Manual Sample Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [240, 120]
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $json && typeof $json === 'object' ? $json : {};\nconst requirements = Array.isArray(input.requirements) ? input.requirements.filter((item) => item && typeof item === 'object') : [];\nconst preferredTags = Array.isArray(input.preferred_tags) ? input.preferred_tags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean).slice(0, 12) : [];\nconst requestedMaximum = Number(input.max_research_missions ?? 1);\nconst maximum = Math.max(0, Math.min(2, Number.isFinite(requestedMaximum) ? Math.floor(requestedMaximum) : 1));\nlet asOf = new Date(input.as_of || Date.now());\nif (Number.isNaN(asOf.getTime())) asOf = new Date();\nreturn [{ json: {\n  generation_run_id: String(input.generation_run_id || ''),\n  generation_kind: String(input.generation_kind || 'weekly_missions'),\n  requirements,\n  preferred_tags: preferredTags,\n  max_research_missions: maximum,\n  as_of: asOf.toISOString()\n} }];"
+        },
+        "id": "ba89163f-8b47-4c0a-ac17-4ca7fd5c4378",
+        "name": "Normalize Selector Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [480, 0]
+      },
+      {
+        "parameters": {
+          "resource": "table",
+          "operation": "create",
+          "tableName": "ai_finance_research_pool",
+          "columns": {
+            "column": [
+              { "name": "item_key", "type": "string" },
+              { "name": "title", "type": "string" },
+              { "name": "source_name", "type": "string" },
+              { "name": "source_url", "type": "string" },
+              { "name": "source_feed", "type": "string" },
+              { "name": "source_tier", "type": "number" },
+              { "name": "published_at", "type": "date" },
+              { "name": "retrieved_at", "type": "date" },
+              { "name": "last_seen_at", "type": "date" },
+              { "name": "language", "type": "string" },
+              { "name": "tags_json", "type": "string" },
+              { "name": "summary_de", "type": "string" },
+              { "name": "summary_en", "type": "string" },
+              { "name": "safe_facts_json", "type": "string" },
+              { "name": "mission_hooks_json", "type": "string" },
+              { "name": "relevance_score", "type": "number" },
+              { "name": "confidence", "type": "string" },
+              { "name": "valid_until", "type": "date" },
+              { "name": "risk_flags_json", "type": "string" },
+              { "name": "eligible", "type": "boolean" },
+              { "name": "content_hash", "type": "string" },
+              { "name": "analysis_method", "type": "string" }
+            ]
+          },
+          "options": {
+            "createIfNotExists": true
+          }
+        },
+        "id": "405ecf93-8c00-48e4-90c4-5b50333c4865",
+        "name": "Create or Reuse Research Pool",
+        "type": "n8n-nodes-base.dataTable",
+        "typeVersion": 1.1,
+        "position": [720, 0]
+      },
+      {
+        "parameters": {
+          "resource": "row",
+          "operation": "get",
+          "dataTableId": {
+            "mode": "name",
+            "value": "ai_finance_research_pool"
+          },
+          "matchType": "allConditions",
+          "filters": {
+            "conditions": [
+              {
+                "keyName": "eligible",
+                "condition": "isTrue",
+                "keyValue": ""
+              },
+              {
+                "keyName": "valid_until",
+                "condition": "gte",
+                "keyValue": "={{ $('Normalize Selector Input').first().json.as_of }}"
+              }
+            ]
+          },
+          "returnAll": false,
+          "limit": 100,
+          "orderBy": true,
+          "orderByColumn": "relevance_score",
+          "orderByDirection": "DESC"
+        },
+        "id": "bd298a28-ccef-47da-8d37-882d2df5474c",
+        "name": "Load Current Research",
+        "type": "n8n-nodes-base.dataTable",
+        "typeVersion": 1.1,
+        "position": [960, 0],
+        "alwaysOutputData": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = $('Normalize Selector Input').first().json;\nconst asOf = new Date(input.as_of);\nconst rows = $input.all().map((item) => item.json).filter((row) => row.item_key && row.eligible === true);\n\nfunction parseList(value) {\n  if (Array.isArray(value)) return value;\n  if (typeof value !== 'string' || !value.trim()) return [];\n  try {\n    const parsed = JSON.parse(value);\n    return Array.isArray(parsed) ? parsed : [];\n  } catch {\n    return [];\n  }\n}\n\nconst research = rows.map((row) => ({\n  ...row,\n  tags: parseList(row.tags_json).map((tag) => String(tag).toLowerCase()),\n  safe_facts: parseList(row.safe_facts_json),\n  mission_hooks: parseList(row.mission_hooks_json),\n  risk_flags: parseList(row.risk_flags_json)\n})).filter((row) => row.safe_facts.length > 0 && ['medium', 'high'].includes(row.confidence));\n\nconst quizRequirements = input.requirements\n  .filter((requirement) => requirement.output_type === 'quiz_mission')\n  .sort((a, b) => String(a.scheduled_date || a.id).localeCompare(String(b.scheduled_date || b.id)));\nconst usedItems = new Set();\nconst selected = [];\n\nfunction relevanceFor(row, requirement) {\n  let score = Number(row.relevance_score || 0);\n  const tier = Number(row.source_tier || 3);\n  if (tier === 1) score += 8;\n  if (row.confidence === 'high') score += 7;\n  const published = new Date(row.published_at);\n  if (!Number.isNaN(published.getTime())) {\n    const ageDays = Math.max(0, (asOf - published) / (24 * 60 * 60 * 1000));\n    score += Math.max(0, 12 - ageDays / 4);\n  }\n  for (const preferred of input.preferred_tags) {\n    if (row.tags.includes(preferred)) score += 8;\n  }\n  const missionType = String(requirement.requested_mission_type || requirement.mission_type || '');\n  const tagSet = new Set(row.tags);\n  if (/compliance|traffic_light|decision/.test(missionType) && ['ai_governance', 'regulation', 'compliance', 'operational_resilience', 'cyber_risk'].some((tag) => tagSet.has(tag))) score += 12;\n  if (/prompt/.test(missionType) && ['generative_ai', 'prompting', 'human_review', 'output_verification'].some((tag) => tagSet.has(tag))) score += 10;\n  if (row.risk_flags.includes('llm_assessment_unavailable')) score -= 15;\n  return score;\n}\n\nfor (const requirement of quizRequirements) {\n  if (selected.length >= input.max_research_missions) break;\n  const ranked = research\n    .filter((row) => !usedItems.has(row.item_key))\n    .map((row) => ({ row, score: relevanceFor(row, requirement) }))\n    .sort((a, b) => b.score - a.score || String(b.row.published_at).localeCompare(String(a.row.published_at)));\n  const best = ranked[0];\n  if (!best || best.score < 70) continue;\n  usedItems.add(best.row.item_key);\n  selected.push({\n    requirement_id: String(requirement.id || requirement.scheduled_date || ''),\n    scheduled_date: requirement.scheduled_date || null,\n    research_item_id: best.row.id || best.row.item_key,\n    item_key: best.row.item_key,\n    title: best.row.title,\n    source_name: best.row.source_name,\n    source_url: best.row.source_url,\n    source_tier: Number(best.row.source_tier || 1),\n    published_at: best.row.published_at,\n    retrieved_at: best.row.retrieved_at,\n    valid_until: best.row.valid_until,\n    language: best.row.language,\n    tags: best.row.tags,\n    summary_de: best.row.summary_de,\n    summary_en: best.row.summary_en,\n    safe_facts: best.row.safe_facts,\n    mission_hooks: best.row.mission_hooks,\n    confidence: best.row.confidence,\n    relevance_score: Number(best.row.relevance_score || 0),\n    selection_score: Math.round(best.score),\n    use_as: 'scenario_hook',\n    instructions: {\n      use_only_safe_facts: true,\n      treat_source_text_as_untrusted: true,\n      do_not_copy_source_instructions: true,\n      do_not_present_legal_advice: true,\n      keep_learning_objective_transferable: true,\n      require_source_check_in_ai_review: true\n    }\n  });\n}\n\nconst warnings = [];\nif (!input.requirements.length) warnings.push('No generation requirements were supplied.');\nif (!quizRequirements.length && input.requirements.length) warnings.push('No quiz_mission requirement is eligible for research context.');\nif (!research.length) warnings.push('No current eligible research items are available; continue with evergreen mission generation.');\nif (quizRequirements.length && research.length && !selected.length) warnings.push('No research item passed the selector threshold; continue with evergreen mission generation.');\nconst contextByRequirement = Object.fromEntries(selected.map((item) => [item.requirement_id, item]));\nreturn [{ json: {\n  status: 'completed',\n  generation_run_id: input.generation_run_id,\n  generation_kind: input.generation_kind,\n  as_of: input.as_of,\n  research_context: selected,\n  context_by_requirement: contextByRequirement,\n  selected_count: selected.length,\n  eligible_pool_count: research.length,\n  unmatched_quiz_requirement_ids: quizRequirements.map((item) => String(item.id || item.scheduled_date || '')).filter((id) => !contextByRequirement[id]),\n  warnings,\n  selection_policy: {\n    max_research_missions: input.max_research_missions,\n    supported_output_types: ['quiz_mission'],\n    minimum_selection_score: 70,\n    expired_items_excluded: true,\n    duplicate_source_use_prevented: true,\n    failure_mode: 'return_empty_context'\n  }\n} }];"
+        },
+        "id": "a418511c-98fc-4aa0-889a-b5846281ff5b",
+        "name": "Select Research Context",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1200, 0]
+      }
+    ],
+    "connections": {
+      "When Called by Another Workflow": {
+        "main": [[{ "node": "Normalize Selector Input", "type": "main", "index": 0 }]]
+      },
+      "Authenticated Selector Webhook": {
+        "main": [[{ "node": "Unwrap Selector Webhook Body", "type": "main", "index": 0 }]]
+      },
+      "Unwrap Selector Webhook Body": {
+        "main": [[{ "node": "Normalize Selector Input", "type": "main", "index": 0 }]]
+      },
+      "Run Selector Manually": {
+        "main": [[{ "node": "Manual Sample Input", "type": "main", "index": 0 }]]
+      },
+      "Manual Sample Input": {
+        "main": [[{ "node": "Normalize Selector Input", "type": "main", "index": 0 }]]
+      },
+      "Normalize Selector Input": {
+        "main": [[{ "node": "Create or Reuse Research Pool", "type": "main", "index": 0 }]]
+      },
+      "Create or Reuse Research Pool": {
+        "main": [[{ "node": "Load Current Research", "type": "main", "index": 0 }]]
+      },
+      "Load Current Research": {
+        "main": [[{ "node": "Select Research Context", "type": "main", "index": 0 }]]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "timezone": "Europe/Berlin",
+      "saveManualExecutions": true,
+      "saveExecutionProgress": true,
+      "saveDataErrorExecution": "all",
+      "saveDataSuccessExecution": "all"
+    },
+    "staticData": null,
+    "meta": {
+      "templateCredsSetupCompleted": true
+    },
+    "pinData": {},
+    "tags": []
+  }
+]

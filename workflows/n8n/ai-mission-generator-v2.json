@@ -1,0 +1,1399 @@
+[
+  {
+    "id": "MissionWorkerV2Prod",
+    "name": "AI Mission Worker V2",
+    "description": "Validates, reviews, and repairs exactly one generated mission.",
+    "active": false,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "mission-generation-worker-v2",
+          "authentication": "headerAuth",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "id": "19f5877f-c7ae-4da2-b568-2c9410e4a510",
+        "name": "Worker Start V2",
+        "webhookId": "585ca121-b5af-487d-9bba-b3dc56be26cc",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "VKHohALUbaf2u4a3",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const start = $('Worker Start V2').first().json;\nconst body = start.body ?? start;\nreturn [{ json: {\n  generation_run_id: body.generation_run_id,\n  orchestrator_execution_id: body.orchestrator_execution_id ?? null,\n  requirement_id: body.requirement_id,\n  output_type: body.output_type ?? null,\n  scheduled_date: body.scheduled_date ?? null,\n  mission_type: body.mission_type ?? null,\n  result: body.result ?? null,\n  failed: body.failed === true,\n  failure: body.failure ?? null,\n  repair_attempt: Number(body.repair_attempt ?? 0),\n} }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          224,
+          0
+        ],
+        "id": "657b726d-ea3b-4818-b356-37343942e6e9",
+        "name": "Extract Worker Input"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "db9ade6d-dd88-4804-9e5b-2327fefc6be6",
+                "leftValue": "={{ $json.failed === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          448,
+          0
+        ],
+        "id": "8552fceb-d614-4d76-b2b6-f441a1d76ab6",
+        "name": "Incoming Generation Failed?"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "return $input.all().map((item) => ({ json: {\n  requirement_id: item.json.requirement_id,\n  output_type: item.json.output_type,\n  scheduled_date: item.json.scheduled_date,\n  mission_type: item.json.mission_type ?? null,\n  failed: true,\n  worker_terminal: true,\n  failure: item.json.failure ?? {\n    requirement_id: item.json.requirement_id,\n    error_message: 'Mission generation failed before deterministic validation.',\n    repair_attempts: 0,\n  },\n} }));"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          672,
+          -176
+        ],
+        "id": "845fe1d8-ea82-4c26-8c90-9693768793cd",
+        "name": "Normalize Incoming Failure"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          2912,
+          160
+        ],
+        "id": "da622f0f-ebed-4d3c-bd69-fc6fe2e50d32",
+        "name": "Respond Worker Failure"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/generation-callback/' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ {\n  generation_run_id: $json.generation_run_id,\n  status: \"validating\",\n  n8n_execution_id: $json.orchestrator_execution_id ?? $execution.id\n} }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          672,
+          160
+        ],
+        "id": "56d9c6d2-2a92-4f34-96eb-3e304b828bd8",
+        "name": "Django - Worker Status Validating",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/validate-mission/' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ {\n  generation_run_id: $json.generation_run_id,\n  requirement_id: $json.requirement_id,\n  result: $json.result\n} }}",
+          "options": {
+            "timeout": 60000,
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          896,
+          16
+        ],
+        "id": "6d40dea8-d5b4-4a56-9531-b833afefff94",
+        "name": "Django - Worker Validate Mission",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          1120,
+          16
+        ],
+        "id": "d36beb12-b409-4636-9ff5-76a74d97ac66",
+        "name": "Merge Validation Context"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "return $input.all().map((item) => {\n  const value = item.json;\n  const transportMessage = value.error?.message ?? value.error ?? value.message;\n  const errors = Array.isArray(value.errors)\n    ? value.errors\n    : value.valid === true\n      ? []\n      : [String(transportMessage || 'Django validation did not return a valid response.')];\n  return { json: {\n    generation_run_id: value.generation_run_id,\n    orchestrator_execution_id: value.orchestrator_execution_id ?? null,\n    requirement_id: value.requirement_id,\n    output_type: value.output_type,\n    scheduled_date: value.scheduled_date,\n    mission_type: value.mission_type ?? null,\n    result: value.result,\n    repair_attempt: Number(value.repair_attempt ?? 0),\n    review: value.review ?? null,\n    validation_errors: value.validation_errors ?? [],\n    validation: {\n      valid: value.valid === true,\n      errors,\n      normalized_result: value.normalized_result ?? null,\n    },\n  } };\n});"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1344,
+          16
+        ],
+        "id": "c8f1f317-5531-440e-b2c3-948d4a245e3a",
+        "name": "Attach Validation Result"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "e6540c12-447f-467d-ba39-f0720379bd8f",
+                "leftValue": "={{ $json.validation.valid }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1568,
+          16
+        ],
+        "id": "d2829f4f-7110-4ef2-8e5e-5b8cbb841887",
+        "name": "Validation Passed?"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/generation-callback/' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ {\n  generation_run_id: $json.generation_run_id,\n  status: \"reviewing\",\n  n8n_execution_id: $json.orchestrator_execution_id ?? $execution.id\n} }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1792,
+          -176
+        ],
+        "id": "ad1091a7-6d10-49a2-b184-e22ad6cff7f8",
+        "name": "Django - Worker Status Reviewing",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.KICONNECT_BASE_URL || 'https://chat.kiconnect.nrw/api/v1').replace(/\\/$/, '') + ($env.KICONNECT_CHAT_COMPLETIONS_PATH || '/chat/completions') }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{\n  {\n    model: $env.KICONNECT_MODEL,\n    messages: [\n      {\n        role: \"system\",\n        content: `You are an independent quality reviewer for AI-generated finance learning missions.\n\nYour task is to review the generated mission critically. You did not generate the mission yourself.\n\nCheck especially:\n- factual and logical correctness\n- whether German and English content are semantically consistent\n- whether instructions and expected answers are unambiguous\n- whether easy, medium and hard represent meaningful difficulty progression\n- whether solutions and feedback match the actual task\n- whether the mission accidentally reveals the solution\n- whether the content is appropriate for finance employees with limited AI experience\n- whether confidential, personal or company-internal information is avoided\n- whether compliance claims are phrased appropriately\n- whether the mission is practically useful and understandable\n\nThe mission field is a deterministically validated, learner-facing projection. Review its educational and semantic content, not transport wrappers or compatibility fields. Do not request schema or wrapper changes. Use verdict \"revise\" only when at least one medium- or high-severity issue requires a content change; low-severity or purely stylistic observations alone must not trigger repair.\n\nReturn JSON only.\n\nReturn exactly:\n{\n  \"verdict\": \"pass\" | \"revise\",\n  \"score\": 0.0,\n  \"issues\": [\n    {\n      \"code\": \"short_issue_code\",\n      \"message\": \"clear explanation of the problem\",\n      \"severity\": \"low\" | \"medium\" | \"high\"\n    }\n  ]\n}\n\nUse verdict \"pass\" only if the mission can safely proceed without modification.\nThe score must be between 0 and 1.\nIf verdict is \"pass\", issues should normally be empty.`\n      },\n      {\n        role: \"user\",\n        content: JSON.stringify((() => {\n          const context = $json;\n          const normalized = context.validation.normalized_result;\n          const mission = normalized?.variants\n            ? {\n                mission_type: context.mission_type ?? normalized.mission_type ?? null,\n                topic_de: normalized.topic_de ?? null,\n                topic_en: normalized.topic_en ?? null,\n                learning_objective_de: normalized.learning_objective_de ?? null,\n                learning_objective_en: normalized.learning_objective_en ?? null,\n                scheduled_date: normalized.scheduled_date ?? context.scheduled_date,\n                variants: normalized.variants\n              }\n            : normalized;\n          return {\n            requirement_id: context.requirement_id,\n            output_type: context.output_type,\n            mission_type: context.mission_type,\n            mission\n          };\n        })())\n      }\n    ],\n    temperature: 0.2,\n    max_tokens: 2000,\n    response_format: {\n      type: \"json_object\"\n    }\n  }\n}}",
+          "options": {
+            "timeout": 180000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1792,
+          -16
+        ],
+        "id": "3f6e67dd-647f-424d-b7fb-200f13f87ad5",
+        "name": "AI Reviewer V2",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "T7OO5sQEPVKyuyym",
+            "name": "Header Auth account 3"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 5000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          2016,
+          -16
+        ],
+        "id": "892c379d-860f-4621-a097-160285d4bed3",
+        "name": "Merge Review Context"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "function extractJsonText(value) {\n  if (typeof value !== 'string' || !value.trim()) return '';\n  let text = value.trim().replace(/^\\uFEFF/, '');\n  if (text.startsWith('```')) {\n    const lines = text.split('\\n');\n    lines.shift();\n    if (lines.length && lines[lines.length - 1].trim().startsWith('```')) lines.pop();\n    text = lines.join('\\n').trim();\n  }\n\n  const objectStart = text.indexOf('{');\n  const arrayStart = text.indexOf('[');\n  const starts = [objectStart, arrayStart].filter((index) => index >= 0);\n  if (!starts.length) return text;\n  const start = Math.min(...starts);\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n\n  for (let index = start; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') inString = true;\n    else if (character === '{' || character === '[') stack.push(character);\n    else if (character === '}' || character === ']') {\n      const expected = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] === expected) stack.pop();\n      if (stack.length === 0) return text.slice(start, index + 1).trim();\n    }\n  }\n  return text.slice(start).trim();\n}\n\nfunction sanitizeJsonText(text) {\n  let output = '';\n  let inString = false;\n  let escaped = false;\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (!escaped && character.charCodeAt(0) < 32) {\n        if (character === '\\n') output += '\\\\n';\n        else if (character === '\\r') output += '\\\\r';\n        else if (character === '\\t') output += '\\\\t';\n        else output += '\\\\u' + character.charCodeAt(0).toString(16).padStart(4, '0');\n        continue;\n      }\n      output += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n\n    if (character === '\"') {\n      inString = true;\n      output += character;\n      continue;\n    }\n    if (character === '_' && /\\d/.test(text[index - 1] || '') && /\\d/.test(text[index + 1] || '')) {\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '/') {\n      while (index + 1 < text.length && text[index + 1] !== '\\n') index += 1;\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '*') {\n      index += 2;\n      while (index < text.length - 1 && !(text[index] === '*' && text[index + 1] === '/')) index += 1;\n      index += 1;\n      continue;\n    }\n    if (character === ',') {\n      let nextIndex = index + 1;\n      while (/\\s/.test(text[nextIndex] || '')) nextIndex += 1;\n      if (text[nextIndex] === '}' || text[nextIndex] === ']') continue;\n    }\n    output += character === '\\u00A0' ? ' ' : character;\n  }\n  return output;\n}\n\nfunction repairTerminalJsonStructure(text) {\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n  let repaired = '';\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      repaired += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') {\n      inString = true;\n      repaired += character;\n    } else if (character === '{' || character === '[') {\n      stack.push(character);\n      repaired += character;\n    } else if (character === '}' || character === ']') {\n      const expectedOpening = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] !== expectedOpening) {\n        const onlyWhitespaceRemains = !text.slice(index + 1).trim();\n        const matchingIndex = stack.lastIndexOf(expectedOpening);\n        if (!onlyWhitespaceRemains || matchingIndex < 0) return null;\n        repaired += stack.splice(matchingIndex + 1).reverse()\n          .map((opening) => opening === '{' ? '}' : ']').join('');\n      }\n      stack.pop();\n      repaired += character;\n    } else {\n      repaired += character;\n    }\n  }\n  if (inString || escaped) return null;\n  repaired += stack.reverse().map((opening) => opening === '{' ? '}' : ']').join('');\n  return repaired === text ? null : repaired;\n}\n\nfunction parseAiJson(value) {\n  const extracted = extractJsonText(value);\n  if (!extracted) return { ok: false, error: 'AI returned an empty JSON response', repairs: [] };\n  const sanitized = sanitizeJsonText(extracted);\n  const candidates = [{ text: extracted, repairs: [] }];\n  if (sanitized !== extracted) candidates.push({ text: sanitized, repairs: ['safe_json_syntax'] });\n\n  for (const candidate of [...candidates]) {\n    const terminal = repairTerminalJsonStructure(candidate.text);\n    if (terminal !== null) {\n      candidates.push({ text: terminal, repairs: [...candidate.repairs, 'terminal_structure'] });\n    }\n  }\n\n  let firstError = null;\n  const seen = new Set();\n  for (const candidate of candidates) {\n    if (seen.has(candidate.text)) continue;\n    seen.add(candidate.text);\n    try {\n      let payload = JSON.parse(candidate.text);\n      if (typeof payload === 'string') {\n        const nested = extractJsonText(payload);\n        if (nested && nested !== payload) payload = JSON.parse(sanitizeJsonText(nested));\n      }\n      return { ok: true, payload, repairs: candidate.repairs };\n    } catch (error) {\n      firstError = firstError || error;\n    }\n  }\n  return {\n    ok: false,\n    error: firstError ? firstError.message : 'AI returned invalid JSON',\n    repairs: [],\n  };\n}\n\nreturn $input.all().map((item) => {\n  const context = item.json;\n  const content = context.choices?.[0]?.message?.content;\n  const parsed = parseAiJson(content);\n  let review;\n  if (!parsed.ok || !parsed.payload || typeof parsed.payload !== 'object' || Array.isArray(parsed.payload)) {\n    const transportMessage = context.error?.message ?? context.error ?? context.message;\n    review = {\n      verdict: 'revise',\n      score: 0,\n      issues: [{\n        code: 'reviewer_response_invalid',\n        message: 'Reviewer response was unavailable or invalid after retry: ' + String(transportMessage || parsed.error || 'invalid review object'),\n        severity: 'medium',\n      }],\n    };\n  } else {\n    const candidate = parsed.payload;\n    const verdict = String(candidate.verdict ?? '').toLowerCase();\n    const score = Number(candidate.score);\n    const issues = Array.isArray(candidate.issues) ? candidate.issues : [];\n    review = {\n      verdict: verdict === 'pass' || verdict === 'revise' ? verdict : 'revise',\n      score: Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : 0,\n      issues: issues.map((issue) => ({\n        code: String(issue?.code || 'review_issue'),\n        message: String(issue?.message || 'Reviewer requested a revision.'),\n        severity: ['low', 'medium', 'high'].includes(issue?.severity) ? issue.severity : 'medium',\n      })),\n    };\n    if (!['pass', 'revise'].includes(verdict)) {\n      review.issues.push({ code: 'reviewer_verdict_invalid', message: 'Reviewer returned an invalid verdict.', severity: 'medium' });\n    }\n  }\n  return { json: {\n    generation_run_id: context.generation_run_id,\n    orchestrator_execution_id: context.orchestrator_execution_id ?? null,\n    requirement_id: context.requirement_id,\n    output_type: context.output_type,\n    scheduled_date: context.scheduled_date,\n    mission_type: context.mission_type ?? null,\n    result: context.result,\n    repair_attempt: Number(context.repair_attempt ?? 0),\n    validation: context.validation,\n    validation_errors: context.validation_errors ?? [],\n    review,\n    reviewer_json_repairs: parsed.repairs,\n  } };\n});"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2240,
+          -16
+        ],
+        "id": "91d7931e-6e42-4a26-b6f7-a2cb324987f8",
+        "name": "Parse Review Response"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "4a1367cb-a37c-4213-962f-2ec857d5a321",
+                "leftValue": "={{ $json.review.verdict }}",
+                "rightValue": "pass",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals",
+                  "name": "filter.operator.equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2464,
+          -16
+        ],
+        "id": "a650f11f-e539-4113-8f7d-03b1454e3eb8",
+        "name": "Review Passed?"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "return $input.all().map((item) => ({ json: {\n  requirement_id: item.json.requirement_id,\n  output_type: item.json.output_type,\n  scheduled_date: item.json.scheduled_date,\n  mission_type: item.json.mission_type ?? null,\n  result: item.json.result,\n  validation: item.json.validation,\n  review: item.json.review,\n  failed: false,\n  worker_terminal: true,\n} }));"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2688,
+          -176
+        ],
+        "id": "a463bc46-59dc-4884-89ea-a2a1de6aa742",
+        "name": "Prepare Worker Success"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          2912,
+          -176
+        ],
+        "id": "9dd45916-455c-4d43-b1a3-9047abf612cf",
+        "name": "Respond Worker Success"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "return $input.all().map((item) => {\n  const value = item.json;\n  const validationErrors = Array.isArray(value.validation?.errors)\n    ? value.validation.errors\n    : Array.isArray(value.validation_errors)\n      ? value.validation_errors\n      : [];\n  return { json: {\n    generation_run_id: value.generation_run_id,\n    orchestrator_execution_id: value.orchestrator_execution_id ?? null,\n    requirement_id: value.requirement_id,\n    output_type: value.output_type,\n    scheduled_date: value.scheduled_date,\n    mission_type: value.mission_type ?? null,\n    result: value.result,\n    review: value.review ?? null,\n    validation_errors: validationErrors,\n    repair_attempt: Number(value.repair_attempt ?? 0) + 1,\n  } };\n});"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1792,
+          240
+        ],
+        "id": "4dcedf82-7c30-4fc0-bfa5-7fed05fcf944",
+        "name": "Prepare Repair Context"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "4ee06954-a5af-4f58-b2bc-956365a439eb",
+                "leftValue": "={{ $json.repair_attempt }}",
+                "rightValue": 2,
+                "operator": {
+                  "type": "number",
+                  "operation": "lte"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2016,
+          240
+        ],
+        "id": "29a33b1f-abd1-45be-a408-0416b8dff38e",
+        "name": "Repair Attempts Left?"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/generation-callback/' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ {\n  generation_run_id: $json.generation_run_id,\n  status: \"repairing\",\n  n8n_execution_id: $json.orchestrator_execution_id ?? $execution.id\n} }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          2240,
+          400
+        ],
+        "id": "16c1a8f0-670e-4f80-a5c0-18fd66ed24ff",
+        "name": "Django - Worker Status Repairing",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.KICONNECT_BASE_URL || 'https://chat.kiconnect.nrw/api/v1').replace(/\\/$/, '') + ($env.KICONNECT_CHAT_COMPLETIONS_PATH || '/chat/completions') }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{\n  {\n    model: $env.KICONNECT_MODEL,\n    messages: [\n      {\n        role: \"system\",\n        content: \"You are a deterministic repair engine for AI-generated finance learning missions. Apply the smallest possible correction that resolves every supplied validation error and every medium or high reviewer issue. Copy all unmentioned valid content and all bilingual fields unchanged. Never shorten datasets or remove difficulty variants. Recalculate answers and feedback when source values change. Preserve the exact transport envelope required by output_type. For quiz_mission, return a payload object containing a missions array with exactly one complete mission. For task_mission, return a variants object containing the complete easy, medium, and hard variants. For training_task or training_chat, return the complete payload object. Never return only a mission object, only difficulty keys, a patch, a result wrapper, explanations, or markdown. For bulk_categorization, plan_actual_deviation, and duplicate_payment_hunt, every task variant must retain 24 to 60 rows. For invoice_extraction, preserve the required invoice count. Preserve the intended mission type and meaningful difficulty progression. German and English must be semantically consistent. Do not reveal learner answers in learner-visible case data. Do not introduce confidential, personal, or company-internal information. Before responding, silently verify the envelope, required keys, row counts, bilingual alignment, answers, and valid JSON. Return only the complete corrected JSON object.\"\n      },\n      {\n        role: \"user\",\n        content: JSON.stringify({\n          output_type: $json.output_type,\n          mission_type: $json.mission_type ?? null,\n          scheduled_date: $json.scheduled_date,\n          required_output_shape: $json.output_type === \"quiz_mission\"\n            ? { payload: { missions: [\"ONE_COMPLETE_MISSION_OBJECT\"] } }\n            : $json.output_type === \"task_mission\"\n              ? { variants: { easy: \"COMPLETE_VARIANT\", medium: \"COMPLETE_VARIANT\", hard: \"COMPLETE_VARIANT\" } }\n              : { payload: \"COMPLETE_CORRECTED_PAYLOAD\" },\n          original_result: $json.result,\n          validation_errors: $json.validation_errors ?? [],\n          reviewer_report: $json.review ?? null,\n          repair_attempt: $json.repair_attempt\n        })\n      }\n    ],\n    temperature: 0.1,\n    max_tokens: 9000,\n    response_format: {\n      type: \"json_object\"\n    }\n  }\n}}",
+          "options": {
+            "timeout": 180000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          2240,
+          240
+        ],
+        "id": "6e8cef6b-1d3d-47bd-83c4-885709f9e2ec",
+        "name": "Repair AI V2",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "T7OO5sQEPVKyuyym",
+            "name": "Header Auth account 3"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 5000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          2464,
+          240
+        ],
+        "id": "a3be4c9a-7d1c-4991-9d0c-3648ea3f7dc1",
+        "name": "Merge Repair Context"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "function extractJsonText(value) {\n  if (typeof value !== 'string' || !value.trim()) return '';\n  let text = value.trim().replace(/^\\uFEFF/, '');\n  if (text.startsWith('```')) {\n    const lines = text.split('\\n');\n    lines.shift();\n    if (lines.length && lines[lines.length - 1].trim().startsWith('```')) lines.pop();\n    text = lines.join('\\n').trim();\n  }\n\n  const objectStart = text.indexOf('{');\n  const arrayStart = text.indexOf('[');\n  const starts = [objectStart, arrayStart].filter((index) => index >= 0);\n  if (!starts.length) return text;\n  const start = Math.min(...starts);\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n\n  for (let index = start; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') inString = true;\n    else if (character === '{' || character === '[') stack.push(character);\n    else if (character === '}' || character === ']') {\n      const expected = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] === expected) stack.pop();\n      if (stack.length === 0) return text.slice(start, index + 1).trim();\n    }\n  }\n  return text.slice(start).trim();\n}\n\nfunction sanitizeJsonText(text) {\n  let output = '';\n  let inString = false;\n  let escaped = false;\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (!escaped && character.charCodeAt(0) < 32) {\n        if (character === '\\n') output += '\\\\n';\n        else if (character === '\\r') output += '\\\\r';\n        else if (character === '\\t') output += '\\\\t';\n        else output += '\\\\u' + character.charCodeAt(0).toString(16).padStart(4, '0');\n        continue;\n      }\n      output += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n\n    if (character === '\"') {\n      inString = true;\n      output += character;\n      continue;\n    }\n    if (character === '_' && /\\d/.test(text[index - 1] || '') && /\\d/.test(text[index + 1] || '')) {\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '/') {\n      while (index + 1 < text.length && text[index + 1] !== '\\n') index += 1;\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '*') {\n      index += 2;\n      while (index < text.length - 1 && !(text[index] === '*' && text[index + 1] === '/')) index += 1;\n      index += 1;\n      continue;\n    }\n    if (character === ',') {\n      let nextIndex = index + 1;\n      while (/\\s/.test(text[nextIndex] || '')) nextIndex += 1;\n      if (text[nextIndex] === '}' || text[nextIndex] === ']') continue;\n    }\n    output += character === '\\u00A0' ? ' ' : character;\n  }\n  return output;\n}\n\nfunction repairTerminalJsonStructure(text) {\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n  let repaired = '';\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      repaired += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') {\n      inString = true;\n      repaired += character;\n    } else if (character === '{' || character === '[') {\n      stack.push(character);\n      repaired += character;\n    } else if (character === '}' || character === ']') {\n      const expectedOpening = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] !== expectedOpening) {\n        const onlyWhitespaceRemains = !text.slice(index + 1).trim();\n        const matchingIndex = stack.lastIndexOf(expectedOpening);\n        if (!onlyWhitespaceRemains || matchingIndex < 0) return null;\n        repaired += stack.splice(matchingIndex + 1).reverse()\n          .map((opening) => opening === '{' ? '}' : ']').join('');\n      }\n      stack.pop();\n      repaired += character;\n    } else {\n      repaired += character;\n    }\n  }\n  if (inString || escaped) return null;\n  repaired += stack.reverse().map((opening) => opening === '{' ? '}' : ']').join('');\n  return repaired === text ? null : repaired;\n}\n\nfunction parseAiJson(value) {\n  const extracted = extractJsonText(value);\n  if (!extracted) return { ok: false, error: 'AI returned an empty JSON response', repairs: [] };\n  const sanitized = sanitizeJsonText(extracted);\n  const candidates = [{ text: extracted, repairs: [] }];\n  if (sanitized !== extracted) candidates.push({ text: sanitized, repairs: ['safe_json_syntax'] });\n\n  for (const candidate of [...candidates]) {\n    const terminal = repairTerminalJsonStructure(candidate.text);\n    if (terminal !== null) {\n      candidates.push({ text: terminal, repairs: [...candidate.repairs, 'terminal_structure'] });\n    }\n  }\n\n  let firstError = null;\n  const seen = new Set();\n  for (const candidate of candidates) {\n    if (seen.has(candidate.text)) continue;\n    seen.add(candidate.text);\n    try {\n      let payload = JSON.parse(candidate.text);\n      if (typeof payload === 'string') {\n        const nested = extractJsonText(payload);\n        if (nested && nested !== payload) payload = JSON.parse(sanitizeJsonText(nested));\n      }\n      return { ok: true, payload, repairs: candidate.repairs };\n    } catch (error) {\n      firstError = firstError || error;\n    }\n  }\n  return {\n    ok: false,\n    error: firstError ? firstError.message : 'AI returned invalid JSON',\n    repairs: [],\n  };\n}\n\nfunction objectValue(value) {\n  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;\n}\n\nfunction unwrapRepairCandidate(value) {\n  let candidate = objectValue(value);\n  for (let depth = 0; depth < 3 && candidate; depth += 1) {\n    const nested = objectValue(candidate.corrected_result) ?? objectValue(candidate.result) ?? objectValue(candidate.original_result);\n    if (!nested) break;\n    candidate = nested;\n  }\n  return candidate;\n}\n\nfunction canonicalizeRepairResult(value, context) {\n  const candidate = unwrapRepairCandidate(value);\n  if (!candidate) return null;\n  if (context.output_type === 'quiz_mission') {\n    if (Array.isArray(candidate.payload?.missions)) return { payload: candidate.payload };\n    if (Array.isArray(candidate.missions)) return { payload: candidate };\n    const mission = objectValue(candidate.mission) ?? (objectValue(candidate.payload)?.variants ? candidate.payload : null) ?? (candidate.variants ? candidate : null);\n    if (mission?.variants) return { payload: { missions: [mission] } };\n  }\n  if (context.output_type === 'task_mission') {\n    const variants = objectValue(candidate.variants) ?? objectValue(candidate.payload)?.variants ?? (['easy', 'medium', 'hard'].every((difficulty) => objectValue(candidate[difficulty])) ? { easy: candidate.easy, medium: candidate.medium, hard: candidate.hard } : null);\n    if (variants) return { variants };\n  }\n  if (context.output_type === 'training_task' || context.output_type === 'training_chat') {\n    return candidate.payload === undefined ? { payload: candidate } : candidate;\n  }\n  return candidate;\n}\n\nreturn $input.all().map((item) => {\n  const context = item.json;\n  const content = context.choices?.[0]?.message?.content;\n  const parsed = parseAiJson(content);\n  const canonical = parsed.ok ? canonicalizeRepairResult(parsed.payload, context) : null;\n  const transportMessage = context.error?.message ?? context.error ?? context.message;\n  const fallbackReason = parsed.ok && !canonical\n    ? 'Repair AI returned an unsupported result envelope.'\n    : String(transportMessage || parsed.error || 'Repair response unavailable.');\n  return { json: {\n    generation_run_id: context.generation_run_id,\n    orchestrator_execution_id: context.orchestrator_execution_id ?? null,\n    requirement_id: context.requirement_id,\n    output_type: context.output_type,\n    scheduled_date: context.scheduled_date,\n    mission_type: context.mission_type ?? null,\n    result: canonical ?? context.result,\n    repair_attempt: Number(context.repair_attempt ?? 1),\n    review: context.review ?? null,\n    validation_errors: fallbackReason\n      ? [...(context.validation_errors ?? []), 'Repair response could not be applied: ' + fallbackReason]\n      : (context.validation_errors ?? []),\n    repair_json_repairs: parsed.repairs,\n  } };\n});"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2688,
+          240
+        ],
+        "id": "34be9350-e1fa-4e8e-966f-b81272adbc20",
+        "name": "Parse Repair Response"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "return $input.all().map((item) => {\n  const value = item.json;\n  const validationErrors = Array.isArray(value.validation_errors) ? value.validation_errors : [];\n  const reviewIssues = Array.isArray(value.review?.issues) ? value.review.issues : [];\n  const messages = [...validationErrors, ...reviewIssues.map((issue) => issue.message).filter(Boolean)];\n  return { json: {\n    requirement_id: value.requirement_id,\n    output_type: value.output_type,\n    scheduled_date: value.scheduled_date,\n    mission_type: value.mission_type ?? null,\n    failed: true,\n    worker_terminal: true,\n    failure: {\n      requirement_id: value.requirement_id,\n      error_message: messages.join(' | ') || 'Mission did not pass validation and review after two focused repairs.',\n      repair_attempts: Math.max(0, Number(value.repair_attempt ?? 1) - 1),\n    },\n  } };\n});"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2464,
+          400
+        ],
+        "id": "a752a4c0-6048-4855-ac5d-774575331481",
+        "name": "Prepare Worker Failure"
+      }
+    ],
+    "connections": {
+      "Worker Start V2": {
+        "main": [
+          [
+            {
+              "node": "Extract Worker Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Worker Input": {
+        "main": [
+          [
+            {
+              "node": "Incoming Generation Failed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Incoming Generation Failed?": {
+        "main": [
+          [
+            {
+              "node": "Normalize Incoming Failure",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Django - Worker Status Validating",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Django - Worker Validate Mission",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge Validation Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize Incoming Failure": {
+        "main": [
+          [
+            {
+              "node": "Respond Worker Failure",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Django - Worker Validate Mission": {
+        "main": [
+          [
+            {
+              "node": "Merge Validation Context",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge Validation Context": {
+        "main": [
+          [
+            {
+              "node": "Attach Validation Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Attach Validation Result": {
+        "main": [
+          [
+            {
+              "node": "Validation Passed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validation Passed?": {
+        "main": [
+          [
+            {
+              "node": "Django - Worker Status Reviewing",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "AI Reviewer V2",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge Review Context",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Repair Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Reviewer V2": {
+        "main": [
+          [
+            {
+              "node": "Merge Review Context",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge Review Context": {
+        "main": [
+          [
+            {
+              "node": "Parse Review Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Review Response": {
+        "main": [
+          [
+            {
+              "node": "Review Passed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Review Passed?": {
+        "main": [
+          [
+            {
+              "node": "Prepare Worker Success",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Repair Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Worker Success": {
+        "main": [
+          [
+            {
+              "node": "Respond Worker Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Repair Context": {
+        "main": [
+          [
+            {
+              "node": "Repair Attempts Left?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Repair Attempts Left?": {
+        "main": [
+          [
+            {
+              "node": "Django - Worker Status Repairing",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Repair AI V2",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge Repair Context",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Worker Failure",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Repair AI V2": {
+        "main": [
+          [
+            {
+              "node": "Merge Repair Context",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge Repair Context": {
+        "main": [
+          [
+            {
+              "node": "Parse Repair Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Repair Response": {
+        "main": [
+          [
+            {
+              "node": "Django - Worker Validate Mission",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge Validation Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Worker Failure": {
+        "main": [
+          [
+            {
+              "node": "Respond Worker Failure",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate"
+    },
+    "staticData": null,
+    "meta": {
+      "templateCredsSetupCompleted": true
+    },
+    "pinData": {},
+    "versionId": "21c7c26c-ec6e-4499-94b0-33e786e4b686",
+    "activeVersionId": null,
+    "versionCounter": 1,
+    "triggerCount": 0,
+    "tags": []
+  },
+  {
+    "id": "MissionGeneratorV2Prod",
+    "name": "AI Mission Generator V2",
+    "active": false,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "mission-generation",
+          "authentication": "headerAuth",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "id": "ee4b4f60-73ec-4a8e-b8db-7377811a9beb",
+        "name": "Start Generation V2",
+        "webhookId": "c277b23c-fc51-4d40-ab3e-c9c591527509",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "VKHohALUbaf2u4a3",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ {\n  status: \"accepted\",\n  generation_run_id: $('Start Generation V2').first().json.body.generation_run_id,\n  execution_id: $execution.id,\n  workflow: \"v2\"\n} }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          224,
+          -192
+        ],
+        "id": "0ad9c821-262e-4f99-8eeb-87b3252f97c4",
+        "name": "Accept Generation V2"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/generation-callback/' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ {\n  generation_run_id: $('Start Generation V2').first().json.body.generation_run_id,\n  status: \"running\",\n  n8n_execution_id: $execution.id\n} }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          224,
+          192
+        ],
+        "id": "b4e5febf-95e3-41a2-bf2f-091977acd866",
+        "name": "Django - V2 Status Running",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const start = $('Start Generation V2').first().json;\nconst body = start.body ?? start;\nconst requirements = Array.isArray(body.requirements) ? body.requirements : [];\nconst output = [];\nfor (const requirement of requirements) {\n  const requests = Array.isArray(requirement.generator_requests) ? requirement.generator_requests : [];\n  for (let index = 0; index < requests.length; index += 1) {\n    const request = requests[index] ?? {};\n    output.push({ json: {\n      generation_run_id: body.generation_run_id,\n      orchestrator_execution_id: $execution.id,\n      requirement_id: requirement.id,\n      output_type: requirement.output_type ?? null,\n      scheduled_date: requirement.scheduled_date ?? null,\n      mission_type: requirement.mission_type ?? null,\n      call_index: index,\n      expected_calls: requests.length,\n      difficulty: request.difficulty ?? null,\n      ai_request: request,\n    } });\n  }\n}\nreturn output;"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          448,
+          0
+        ],
+        "id": "23f73760-c38f-41a6-8919-00823f7dde71",
+        "name": "Prepare Generator Calls"
+      },
+      {
+        "parameters": {
+          "batchSize": 2,
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          672,
+          0
+        ],
+        "id": "81894b37-b63f-42f8-8628-c9020aa82576",
+        "name": "Loop Generator Calls (2)"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.KICONNECT_BASE_URL || 'https://chat.kiconnect.nrw/api/v1').replace(/\\/$/, '') + ($env.KICONNECT_CHAT_COMPLETIONS_PATH || '/chat/completions') }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{\n  {\n    model: $env.KICONNECT_MODEL,\n    messages: [\n      {\n        role: \"system\",\n        content: \"Return exactly one strict RFC 8259 JSON object and nothing else. Never use markdown fences, comments, trailing commas, digit separators, NaN, Infinity, or undefined. Preserve every required bilingual field, exact row count, answer, feedback, and requested output shape. Before responding, silently verify that JSON.parse can parse the full response.\"\n      },\n      ...($json.ai_request.messages ?? [])\n    ],\n    temperature: Math.min(Number($json.ai_request.temperature ?? 0.25), 0.3),\n    max_tokens: $json.ai_request.max_tokens,\n    response_format: { type: \"json_object\" }\n  }\n}}",
+          "options": {
+            "timeout": 180000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          896,
+          64
+        ],
+        "id": "e2ff0fda-d62d-4975-9a53-d6c9a81b987d",
+        "name": "AI Generator V2",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "T7OO5sQEPVKyuyym",
+            "name": "Header Auth account 3"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 5000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          1120,
+          64
+        ],
+        "id": "2d9ca0f4-ec94-432f-9e38-bd2343e60925",
+        "name": "Merge Generator Context"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "function extractJsonText(value) {\n  if (typeof value !== 'string' || !value.trim()) return '';\n  let text = value.trim().replace(/^\\uFEFF/, '');\n  if (text.startsWith('```')) {\n    const lines = text.split('\\n');\n    lines.shift();\n    if (lines.length && lines[lines.length - 1].trim().startsWith('```')) lines.pop();\n    text = lines.join('\\n').trim();\n  }\n\n  const objectStart = text.indexOf('{');\n  const arrayStart = text.indexOf('[');\n  const starts = [objectStart, arrayStart].filter((index) => index >= 0);\n  if (!starts.length) return text;\n  const start = Math.min(...starts);\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n\n  for (let index = start; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') inString = true;\n    else if (character === '{' || character === '[') stack.push(character);\n    else if (character === '}' || character === ']') {\n      const expected = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] === expected) stack.pop();\n      if (stack.length === 0) return text.slice(start, index + 1).trim();\n    }\n  }\n  return text.slice(start).trim();\n}\n\nfunction sanitizeJsonText(text) {\n  let output = '';\n  let inString = false;\n  let escaped = false;\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (!escaped && character.charCodeAt(0) < 32) {\n        if (character === '\\n') output += '\\\\n';\n        else if (character === '\\r') output += '\\\\r';\n        else if (character === '\\t') output += '\\\\t';\n        else output += '\\\\u' + character.charCodeAt(0).toString(16).padStart(4, '0');\n        continue;\n      }\n      output += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n\n    if (character === '\"') {\n      inString = true;\n      output += character;\n      continue;\n    }\n    if (character === '_' && /\\d/.test(text[index - 1] || '') && /\\d/.test(text[index + 1] || '')) {\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '/') {\n      while (index + 1 < text.length && text[index + 1] !== '\\n') index += 1;\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '*') {\n      index += 2;\n      while (index < text.length - 1 && !(text[index] === '*' && text[index + 1] === '/')) index += 1;\n      index += 1;\n      continue;\n    }\n    if (character === ',') {\n      let nextIndex = index + 1;\n      while (/\\s/.test(text[nextIndex] || '')) nextIndex += 1;\n      if (text[nextIndex] === '}' || text[nextIndex] === ']') continue;\n    }\n    output += character === '\\u00A0' ? ' ' : character;\n  }\n  return output;\n}\n\nfunction repairTerminalJsonStructure(text) {\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n  let repaired = '';\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      repaired += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') {\n      inString = true;\n      repaired += character;\n    } else if (character === '{' || character === '[') {\n      stack.push(character);\n      repaired += character;\n    } else if (character === '}' || character === ']') {\n      const expectedOpening = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] !== expectedOpening) {\n        const onlyWhitespaceRemains = !text.slice(index + 1).trim();\n        const matchingIndex = stack.lastIndexOf(expectedOpening);\n        if (!onlyWhitespaceRemains || matchingIndex < 0) return null;\n        repaired += stack.splice(matchingIndex + 1).reverse()\n          .map((opening) => opening === '{' ? '}' : ']').join('');\n      }\n      stack.pop();\n      repaired += character;\n    } else {\n      repaired += character;\n    }\n  }\n  if (inString || escaped) return null;\n  repaired += stack.reverse().map((opening) => opening === '{' ? '}' : ']').join('');\n  return repaired === text ? null : repaired;\n}\n\nfunction parseAiJson(value) {\n  const extracted = extractJsonText(value);\n  if (!extracted) return { ok: false, error: 'AI returned an empty JSON response', repairs: [] };\n  const sanitized = sanitizeJsonText(extracted);\n  const candidates = [{ text: extracted, repairs: [] }];\n  if (sanitized !== extracted) candidates.push({ text: sanitized, repairs: ['safe_json_syntax'] });\n\n  for (const candidate of [...candidates]) {\n    const terminal = repairTerminalJsonStructure(candidate.text);\n    if (terminal !== null) {\n      candidates.push({ text: terminal, repairs: [...candidate.repairs, 'terminal_structure'] });\n    }\n  }\n\n  let firstError = null;\n  const seen = new Set();\n  for (const candidate of candidates) {\n    if (seen.has(candidate.text)) continue;\n    seen.add(candidate.text);\n    try {\n      let payload = JSON.parse(candidate.text);\n      if (typeof payload === 'string') {\n        const nested = extractJsonText(payload);\n        if (nested && nested !== payload) payload = JSON.parse(sanitizeJsonText(nested));\n      }\n      return { ok: true, payload, repairs: candidate.repairs };\n    } catch (error) {\n      firstError = firstError || error;\n    }\n  }\n  return {\n    ok: false,\n    error: firstError ? firstError.message : 'AI returned invalid JSON',\n    repairs: [],\n  };\n}\n\nreturn $input.all().map((item) => {\n  const value = item.json;\n  const content = value.choices?.[0]?.message?.content;\n  const parsed = parseAiJson(content);\n  const transportMessage = value.error?.message ?? value.error ?? value.message;\n  return { json: {\n    generation_run_id: value.generation_run_id,\n    orchestrator_execution_id: value.orchestrator_execution_id,\n    requirement_id: value.requirement_id,\n    output_type: value.output_type,\n    scheduled_date: value.scheduled_date,\n    mission_type: value.mission_type ?? null,\n    call_index: value.call_index,\n    expected_calls: value.expected_calls,\n    difficulty: value.difficulty ?? null,\n    generator_ok: parsed.ok,\n    generator_payload: parsed.ok ? parsed.payload : null,\n    generator_error: parsed.ok ? null : String(transportMessage || parsed.error || 'Generator response unavailable.'),\n    generator_json_repairs: parsed.repairs,\n  } };\n});"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1344,
+          64
+        ],
+        "id": "ebfe44f2-6b79-4a66-8f7b-edda85f5df83",
+        "name": "Parse Generator Response"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const start = $('Start Generation V2').first().json;\nconst body = start.body ?? start;\nconst requirements = Array.isArray(body.requirements) ? body.requirements : [];\nconst calls = $input.all().map((item) => item.json);\n\nfunction failed(requirement, message) {\n  return { json: {\n    generation_run_id: body.generation_run_id,\n    orchestrator_execution_id: $execution.id,\n    requirement_id: requirement.id,\n    output_type: requirement.output_type ?? null,\n    scheduled_date: requirement.scheduled_date ?? null,\n    mission_type: requirement.mission_type ?? null,\n    failed: true,\n    failure: { requirement_id: requirement.id, error_message: message, repair_attempts: 0 },\n  } };\n}\n\nconst output = [];\nfor (const requirement of requirements) {\n  const expected = Array.isArray(requirement.generator_requests) ? requirement.generator_requests.length : 0;\n  const group = calls.filter((call) => call.requirement_id === requirement.id)\n    .sort((left, right) => Number(left.call_index) - Number(right.call_index));\n  if (!expected) {\n    output.push(failed(requirement, 'Requirement contains no generator requests.'));\n    continue;\n  }\n  if (group.length !== expected) {\n    output.push(failed(requirement, 'Generator response count mismatch: expected ' + expected + ', received ' + group.length + '.'));\n    continue;\n  }\n  const errors = group.filter((call) => call.generator_ok !== true)\n    .map((call) => 'call ' + (Number(call.call_index) + 1) + ': ' + call.generator_error);\n  if (errors.length) {\n    output.push(failed(requirement, 'Generator failed after retry. ' + errors.join(' | ')));\n    continue;\n  }\n\n  let result;\n  if (['quiz_mission', 'training_task', 'training_chat'].includes(requirement.output_type)) {\n    if (group.length !== 1) {\n      output.push(failed(requirement, requirement.output_type + ' requires exactly one generator result.'));\n      continue;\n    }\n    result = { payload: group[0].generator_payload };\n  } else if (requirement.output_type === 'task_mission') {\n    const variants = {};\n    let variantError = null;\n    for (const call of group) {\n      if (!['easy', 'medium', 'hard'].includes(call.difficulty)) {\n        variantError = 'Invalid task difficulty: ' + call.difficulty;\n        break;\n      }\n      if (variants[call.difficulty]) {\n        variantError = 'Duplicate task difficulty: ' + call.difficulty;\n        break;\n      }\n      variants[call.difficulty] = call.generator_payload;\n    }\n    const missing = ['easy', 'medium', 'hard'].filter((difficulty) => !variants[difficulty]);\n    if (!variantError && missing.length) variantError = 'Missing task variants: ' + missing.join(', ');\n    if (variantError) {\n      output.push(failed(requirement, variantError));\n      continue;\n    }\n    result = { variants };\n  } else {\n    output.push(failed(requirement, 'Unsupported output_type: ' + requirement.output_type));\n    continue;\n  }\n\n  output.push({ json: {\n    generation_run_id: body.generation_run_id,\n    orchestrator_execution_id: $execution.id,\n    requirement_id: requirement.id,\n    output_type: requirement.output_type,\n    scheduled_date: requirement.scheduled_date ?? null,\n    mission_type: requirement.mission_type ?? null,\n    result,\n    failed: false,\n  } });\n}\nreturn output;"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          896,
+          -192
+        ],
+        "id": "9eae5463-ef35-4080-92a5-3f0064d22ec8",
+        "name": "Group Requirement Results"
+      },
+      {
+        "parameters": {
+          "batchSize": 2,
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          1120,
+          -192
+        ],
+        "id": "63c4893b-58c7-4496-aac7-de8b60b235d8",
+        "name": "Loop Mission Workers (2)"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.N8N_INTERNAL_BASE_URL || 'http://n8n:5678').replace(/\\/$/, '') + '/webhook/mission-generation-worker-v2' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Service-Secret",
+                "value": "={{ $env.N8N_SERVICE_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json }}",
+          "options": {
+            "timeout": 600000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1344,
+          -128
+        ],
+        "id": "d78309e1-a018-4480-9cba-d6442e294bb3",
+        "name": "Run Mission Worker V2",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          1568,
+          -128
+        ],
+        "id": "4f390d1f-928c-4848-acbc-799ffd076329",
+        "name": "Merge Worker Context"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "return $input.all().map((item) => {\n  const value = item.json;\n  if (value.worker_terminal === true && value.requirement_id) {\n    return { json: {\n      requirement_id: value.requirement_id,\n      output_type: value.output_type ?? null,\n      scheduled_date: value.scheduled_date ?? null,\n      mission_type: value.mission_type ?? null,\n      result: value.result ?? null,\n      validation: value.validation ?? null,\n      review: value.review ?? null,\n      failed: value.failed === true,\n      failure: value.failure ?? null,\n    } };\n  }\n  const message = value.error?.message ?? value.error ?? value.message ?? 'Mission worker returned an invalid response.';\n  return { json: {\n    requirement_id: value.requirement_id ?? 'unknown-requirement',\n    output_type: value.output_type ?? null,\n    scheduled_date: value.scheduled_date ?? null,\n    mission_type: value.mission_type ?? null,\n    failed: true,\n    failure: {\n      requirement_id: value.requirement_id ?? 'unknown-requirement',\n      error_message: String(message),\n      repair_attempts: 0,\n    },\n  } };\n});"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1792,
+          -128
+        ],
+        "id": "6744ae9f-0601-4c3c-a4fb-e211361ce168",
+        "name": "Normalize Worker Response"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const start = $('Start Generation V2').first().json;\nconst body = start.body ?? start;\nconst expectedIds = (Array.isArray(body.requirements) ? body.requirements : []).map((item) => item.id);\nconst items = $input.all().map((item) => item.json);\nconst byId = new Map(items.map((item) => [item.requirement_id, item]));\nconst ordered = expectedIds.map((requirementId) => byId.get(requirementId) ?? {\n  requirement_id: requirementId,\n  failed: true,\n  failure: { requirement_id: requirementId, error_message: 'Mission worker result is missing.', repair_attempts: 0 },\n});\nconst successful = ordered.filter((item) => item.failed !== true && item.result);\nconst failed = ordered.filter((item) => item.failed === true || !item.result);\nconst reviews = successful.map((item) => item.review).filter(Boolean);\nconst scores = reviews.map((review) => Number(review.score)).filter(Number.isFinite);\nconst averageScore = scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 1;\nreturn [{ json: {\n  results: successful.map((item) => ({ requirement_id: item.requirement_id, ...item.result })),\n  failed_requirements: failed.map((item) => item.failure ?? {\n    requirement_id: item.requirement_id,\n    error_message: 'Mission worker failed without a structured error.',\n    repair_attempts: 0,\n  }),\n  review_report: {\n    verdict: 'pass',\n    score: averageScore,\n    issues: reviews.flatMap((review) => review.issues ?? []),\n    partial_success: failed.length > 0 && successful.length > 0,\n  },\n} }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1344,
+          -384
+        ],
+        "id": "aafcd89e-8f5f-469b-9050-a37e0a184e4c",
+        "name": "Collect Final Results V2"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "5c1b2f20-b13d-4b3e-9e75-0a6cbd4dd48a",
+                "leftValue": "={{ $json.results.length }}",
+                "rightValue": 0,
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1568,
+          -384
+        ],
+        "id": "001dd5d8-55ad-4cad-aca3-f00926b40b2e",
+        "name": "Any Successful Results V2?"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/generation-callback/' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ {\n  generation_run_id: $('Start Generation V2').first().json.body.generation_run_id,\n  status: \"completed\",\n  n8n_execution_id: $execution.id,\n  results: $json.results,\n  review_report: $json.review_report,\n  failed_requirements: $json.failed_requirements ?? [],\n  research_context: $('Start Generation V2').first().json.body.research_context ?? []\n} }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1792,
+          -480
+        ],
+        "id": "c4fd6c43-c3e8-45fa-acc0-ab9d8688f1fa",
+        "name": "Django - V2 Completed Callback",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/generation-callback/' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ {\n  generation_run_id: $('Start Generation V2').first().json.body.generation_run_id,\n  status: \"failed\",\n  n8n_execution_id: $execution.id,\n  error_message: $json.failed_requirements?.length\n    ? \"All mission requirements failed: \" + $json.failed_requirements.map((item) => item.error_message).join(\" | \")\n    : \"Mission generation failed without results.\",\n  metadata: { failed_requirements: $json.failed_requirements ?? [] }\n} }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1792,
+          -288
+        ],
+        "id": "b707693d-3665-4cc4-9df1-b07dc840cbb6",
+        "name": "Django - V2 Failed Callback",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000
+      }
+    ],
+    "connections": {
+      "Start Generation V2": {
+        "main": [
+          [
+            {
+              "node": "Accept Generation V2",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Django - V2 Status Running",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Prepare Generator Calls",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Generator Calls": {
+        "main": [
+          [
+            {
+              "node": "Loop Generator Calls (2)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Loop Generator Calls (2)": {
+        "main": [
+          [
+            {
+              "node": "Group Requirement Results",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "AI Generator V2",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge Generator Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Generator V2": {
+        "main": [
+          [
+            {
+              "node": "Merge Generator Context",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge Generator Context": {
+        "main": [
+          [
+            {
+              "node": "Parse Generator Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Generator Response": {
+        "main": [
+          [
+            {
+              "node": "Loop Generator Calls (2)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Group Requirement Results": {
+        "main": [
+          [
+            {
+              "node": "Loop Mission Workers (2)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Loop Mission Workers (2)": {
+        "main": [
+          [
+            {
+              "node": "Collect Final Results V2",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Run Mission Worker V2",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge Worker Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run Mission Worker V2": {
+        "main": [
+          [
+            {
+              "node": "Merge Worker Context",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge Worker Context": {
+        "main": [
+          [
+            {
+              "node": "Normalize Worker Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize Worker Response": {
+        "main": [
+          [
+            {
+              "node": "Loop Mission Workers (2)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Collect Final Results V2": {
+        "main": [
+          [
+            {
+              "node": "Any Successful Results V2?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Any Successful Results V2?": {
+        "main": [
+          [
+            {
+              "node": "Django - V2 Completed Callback",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Django - V2 Failed Callback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate"
+    },
+    "staticData": null,
+    "meta": {
+      "templateCredsSetupCompleted": true
+    },
+    "pinData": {},
+    "versionId": "f0264c14-91bc-49c8-9824-5da98edf50fb",
+    "activeVersionId": null,
+    "versionCounter": 1,
+    "triggerCount": 0,
+    "tags": []
+  }
+]

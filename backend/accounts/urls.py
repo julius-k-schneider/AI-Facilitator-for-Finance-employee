@@ -26,6 +26,7 @@ urlpatterns = [
     path('missions/review/reject-all/', views.reject_all_review_missions_view, name='reject_all_review_missions'),
     path('missions/generate-next-week/', views.generate_next_week_missions_view, name='generate_next_week_missions'),
     path('missions/generate-task-challenge/', views.generate_task_challenge_view, name='generate_task_challenge'),
+    path('mission-generation-runs/current-weekly/', views.current_weekly_generation_run_view, name='current_weekly_generation_run'),
     path('mission-generation-runs/<uuid:run_id>/', views.generation_run_detail_view, name='generation_run_detail'),
     path('mission-generation-runs/<uuid:run_id>/retry/', views.retry_generation_run_view, name='retry_generation_run'),
     path('mission-generation-runs/<uuid:run_id>/consume/', views.consume_training_generation_view, name='consume_training_generation'),

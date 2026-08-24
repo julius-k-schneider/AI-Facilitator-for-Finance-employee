@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ActionIcon, Alert, Badge, Box, Button, Group, Menu, Modal, NumberInput, Paper, Select,
+  ActionIcon, Alert, Badge, Box, Button, Group, Loader, Menu, Modal, NumberInput, Paper, Select,
   SegmentedControl, SimpleGrid, Stack, Switch, Tabs, Text, Textarea, TextInput, ThemeIcon, Title,
 } from '@mantine/core'
 import {
@@ -12,10 +12,10 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
 import {
-  approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, generateTaskChallenge,
-  getArchivedMissions, getAvailableMissions, getDailyMissions,
+  approveAllReviewMissions, approveMission, createMission, deleteMission, generateTaskChallenge,
+  getArchivedMissions, getAvailableMissions, getCurrentWeeklyGenerationRun, getDailyMissions, getGenerationRun,
   getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, updateMission,
-  rejectAllReviewMissions,
+  rejectAllReviewMissions, startNextWeekMissionGeneration,
 } from '../services/missionService'
 import { createMissionTypeDefaults, createTestMissions, defaultMissionType, getMissionType, missionTypes, taskChallengeTypes } from './missions/missionTypes'
 import MissionRunner from './missions/MissionRunner'
@@ -494,11 +494,95 @@ function Creator({ opened, onClose, onCreated }) {
   )
 }
 
+const visibleGenerationStatuses = ['running', 'validating', 'reviewing', 'repairing']
+const activeGenerationStatuses = new Set(['queued', 'dispatched', ...visibleGenerationStatuses])
+const weeklyGenerationStorageKey = 'missions.current-weekly-generation-run'
+
+function rememberWeeklyGenerationRun(runId) {
+  try {
+    if (runId) window.localStorage.setItem(weeklyGenerationStorageKey, runId)
+  } catch {
+    // The backend lookup still restores active runs if storage is unavailable.
+  }
+}
+
+function rememberedWeeklyGenerationRun() {
+  try {
+    return window.localStorage.getItem(weeklyGenerationStorageKey)
+  } catch {
+    return null
+  }
+}
+
+function forgetWeeklyGenerationRun() {
+  try {
+    window.localStorage.removeItem(weeklyGenerationStorageKey)
+  } catch {
+    // Nothing else is required when storage is unavailable.
+  }
+}
+
+function GenerationStatus({ run }) {
+  const { i18n, t } = useTranslation()
+  const status = run?.status || 'queued'
+  const displayStatus = ['queued', 'dispatched'].includes(status) ? 'preparing' : status
+  const locale = i18n.resolvedLanguage || i18n.language
+  const updatedAt = run?.updated_at
+    ? new Date(run.updated_at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null
+  const weekStart = run?.week_start
+    ? new Date(`${run.week_start}T12:00:00`).toLocaleDateString(locale)
+    : null
+  const weekEnd = run?.week_end
+    ? new Date(`${run.week_end}T12:00:00`).toLocaleDateString(locale)
+    : null
+
+  return (
+    <Paper className="mission-generation-status" withBorder radius="md" p="md" role="status" aria-live="polite">
+      <Group align="flex-start" wrap="nowrap">
+        <Loader color="brand" size="sm" mt={3} />
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" justify="space-between" align="center">
+            <Text fw={700}>{t('missions.review.generationStatus.title')}</Text>
+            <Badge color="brand" variant="light">
+              {t(`missions.review.generationStatus.statuses.${displayStatus}`)}
+            </Badge>
+          </Group>
+          <Text c="dimmed" fz="sm" mt={4}>
+            {t(`missions.review.generationStatus.descriptions.${displayStatus}`)}
+          </Text>
+          {(weekStart || updatedAt) && <Group gap="md" mt={6}>
+            {weekStart && <Text c="dimmed" fz="xs">
+              {t('missions.review.generationStatus.week', { start: weekStart, end: weekEnd || weekStart })}
+            </Text>}
+            {updatedAt && <Text c="dimmed" fz="xs">
+              {t('missions.review.generationStatus.lastUpdate', { time: updatedAt })}
+            </Text>}
+          </Group>}
+          <Group className="mission-generation-status__steps" gap="xs" mt="sm">
+            {visibleGenerationStatuses.map((step) => (
+              <Badge
+                className={displayStatus === step ? 'is-active' : ''}
+                color={displayStatus === step ? 'brand' : 'gray'}
+                key={step}
+                variant={displayStatus === step ? 'filled' : 'light'}
+              >
+                {t(`missions.review.generationStatus.statuses.${step}`)}
+              </Badge>
+            ))}
+          </Group>
+        </Box>
+      </Group>
+    </Paper>
+  )
+}
+
 function MissionReview({ enabled, onPublished }) {
   const { i18n, t } = useTranslation()
   const [missions, setMissions] = useState([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [generationRun, setGenerationRun] = useState(null)
   const [activeAction, setActiveAction] = useState('')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -543,18 +627,126 @@ function MissionReview({ enabled, onPublished }) {
     return () => { active = false }
   }, [enabled, generationWeek])
 
+  const finalizeGeneration = useCallback(async (run) => {
+    forgetWeeklyGenerationRun()
+    setGenerating(false)
+    setGenerationRun(null)
+    if (run.status === 'completed') {
+      setError('')
+      setMessage(run.failed_count > 0
+        ? t('missions.review.generatedPartial', {
+          count: run.created_count || 0,
+          failedCount: run.failed_count,
+        })
+        : t('missions.review.generated', { count: run.created_count || 0 }))
+      await Promise.all([loadReview(), loadGenerationSchedule()])
+      return
+    }
+    setMessage('')
+    setError(run.error_message || t('missions.review.generationStatus.failed'))
+  }, [loadGenerationSchedule, loadReview, t])
+  const finalizeGenerationRef = useRef(finalizeGeneration)
+
+  useEffect(() => {
+    finalizeGenerationRef.current = finalizeGeneration
+  }, [finalizeGeneration])
+
+  useEffect(() => {
+    if (!enabled) return undefined
+    let active = true
+
+    const restoreGeneration = async () => {
+      let run = null
+      let lookupError = null
+      try {
+        const data = await getCurrentWeeklyGenerationRun()
+        run = data.generation_run
+      } catch (nextError) {
+        lookupError = nextError
+      }
+
+      const rememberedRunId = rememberedWeeklyGenerationRun()
+      if (!run && rememberedRunId) {
+        try {
+          const data = await getGenerationRun(rememberedRunId)
+          run = data.generation_run
+        } catch (nextError) {
+          if (nextError.status === 404 || nextError.status === 403) forgetWeeklyGenerationRun()
+          else lookupError = lookupError || nextError
+        }
+      }
+
+      if (!active) return
+      if (!run) {
+        if (lookupError) setError(lookupError.message)
+        return
+      }
+
+      if (run.week_start) {
+        setGenerationWeek(run.week_start)
+        setGenerationMonth(new Date(`${run.week_start}T12:00:00`))
+      }
+      if (!activeGenerationStatuses.has(run.status)) {
+        await finalizeGenerationRef.current(run)
+        return
+      }
+      rememberWeeklyGenerationRun(run.id)
+      setGenerationRun(run)
+      setGenerating(true)
+    }
+
+    restoreGeneration()
+    return () => { active = false }
+  }, [enabled])
+
+  useEffect(() => {
+    const runId = generationRun?.id
+    if (!enabled || !runId) return undefined
+    let active = true
+    let timerId = null
+
+    const pollGeneration = async () => {
+      try {
+        const data = await getGenerationRun(runId)
+        if (!active) return
+        const run = data.generation_run
+        setGenerationRun(run)
+        if (!activeGenerationStatuses.has(run.status)) {
+          await finalizeGenerationRef.current(run)
+          return
+        }
+        setGenerating(true)
+        timerId = window.setTimeout(pollGeneration, 1500)
+      } catch (nextError) {
+        if (!active) return
+        setError(nextError.message)
+        timerId = window.setTimeout(pollGeneration, 3000)
+      }
+    }
+
+    timerId = window.setTimeout(pollGeneration, 500)
+
+    return () => {
+      active = false
+      if (timerId) window.clearTimeout(timerId)
+    }
+  }, [enabled, generationRun?.id])
+
   const generate = async () => {
     setGenerating(true)
+    setGenerationRun({ status: 'queued' })
     setError('')
     setMessage('')
     try {
-      const data = await generateNextWeekMissions(generationWeek)
-      setMessage(t('missions.review.generated', { count: data.created_count }))
-      await Promise.all([loadReview(), loadGenerationSchedule()])
+      const data = await startNextWeekMissionGeneration(generationWeek, false)
+      const run = data.generation_run
+      rememberWeeklyGenerationRun(run.id)
+      setGenerationRun(run)
+      if (!activeGenerationStatuses.has(run.status)) await finalizeGeneration(run)
     } catch (nextError) {
       setError(nextError.message)
-    } finally {
       setGenerating(false)
+      setGenerationRun(null)
     }
   }
 
@@ -658,6 +850,7 @@ function MissionReview({ enabled, onPublished }) {
         </Modal>
         {error && <Alert color="red">{error}</Alert>}
         {message && <Alert color="green">{message}</Alert>}
+        {generating && generationRun && <GenerationStatus run={generationRun} />}
         {loading ? <Text c="dimmed">{t('missions.review.loading')}</Text> : missions.length === 0 ? (
           <Paper withBorder radius="md" p="xl" bg="gray.0"><Text ta="center" c="dimmed">{t('missions.review.empty')}</Text></Paper>
         ) : <Stack gap="md">

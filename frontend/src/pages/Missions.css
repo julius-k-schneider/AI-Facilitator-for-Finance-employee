@@ -6,6 +6,23 @@
 .mission-calendar-count { padding: 1px 6px; border-radius: 999px; background: var(--mantine-color-brand-0); color: var(--mantine-color-brand-8); font-size: 10px; font-weight: 700; }
 .mission-calendar-count.is-full { background: var(--mantine-color-green-0); color: var(--mantine-color-green-8); }
 
+.mission-generation-status {
+  border-color: var(--mantine-color-brand-2);
+  background: linear-gradient(135deg, var(--mantine-color-brand-0), #fff 70%);
+}
+
+.mission-generation-status__steps {
+  flex-wrap: wrap;
+}
+
+.mission-generation-status__steps .mantine-Badge-root {
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.mission-generation-status__steps .is-active {
+  transform: translateY(-1px);
+}
+
 .archive-filter-grid {
   display: grid;
   grid-template-columns: minmax(190px, 220px) minmax(300px, 390px) minmax(210px, 250px);

@@ -45,6 +45,9 @@ class GenerationContractError(ValueError):
 
 def generation_run_payload(run):
     metadata = run.result_metadata if isinstance(run.result_metadata, dict) else {}
+    failed_requirements = metadata.get('failed_requirements', [])
+    if not isinstance(failed_requirements, list):
+        failed_requirements = []
     return {
         'id': str(run.id),
         'kind': run.kind,
@@ -57,8 +60,12 @@ def generation_run_payload(run):
         'error_message': run.error_message,
         'review_report': run.review_report,
         'created_count': metadata.get('created_count', 0),
+        'failed_count': len(failed_requirements),
+        'failed_requirements': failed_requirements,
+        'partial_success': run.status == GenerationRun.STATUS_COMPLETED and bool(failed_requirements),
         'mission_ids': list(run.missions.order_by('scheduled_date').values_list('id', flat=True)),
         'created_at': run.created_at.isoformat() if run.created_at else None,
+        'updated_at': run.updated_at.isoformat() if run.updated_at else None,
         'started_at': run.started_at.isoformat() if run.started_at else None,
         'completed_at': run.completed_at.isoformat() if run.completed_at else None,
         'failed_at': run.failed_at.isoformat() if run.failed_at else None,
@@ -361,9 +368,13 @@ def _json_safe(value):
     return value
 
 
-def _validated_results(run, results):
+def _validated_results(run, results, failed_requirements=None):
     if not isinstance(results, list):
         raise GenerationContractError('completed callback requires a results array')
+    if failed_requirements is None:
+        failed_requirements = []
+    if not isinstance(failed_requirements, list):
+        raise GenerationContractError('failed_requirements must be an array')
     requirements = run.request_payload.get('requirements', [])
     expected_ids = {item['id'] for item in requirements}
     result_by_id = {}
@@ -374,15 +385,41 @@ def _validated_results(run, results):
         if requirement_id in result_by_id:
             raise GenerationContractError('completed results contain a duplicate requirement_id')
         result_by_id[requirement_id] = validate_requirement_result(run, requirement_id, item)
-    if set(result_by_id) != expected_ids:
+
+    failure_by_id = {}
+    for item in failed_requirements:
+        if not isinstance(item, dict) or not isinstance(item.get('requirement_id'), str):
+            raise GenerationContractError('every failed requirement needs a requirement_id')
+        requirement_id = item['requirement_id']
+        _requirement(run, requirement_id)
+        if requirement_id in failure_by_id:
+            raise GenerationContractError('failed requirements contain a duplicate requirement_id')
+        try:
+            repair_attempts = max(0, int(item.get('repair_attempts', 0)))
+        except (TypeError, ValueError):
+            repair_attempts = 0
+        failure_by_id[requirement_id] = {
+            'requirement_id': requirement_id,
+            'error_message': str(item.get('error_message') or 'Mission requirement failed')[:2000],
+            'repair_attempts': repair_attempts,
+        }
+
+    if set(result_by_id) & set(failure_by_id):
+        raise GenerationContractError('a generation requirement cannot both pass and fail')
+    if failure_by_id and run.kind != GenerationRun.KIND_WEEKLY_MISSIONS:
+        raise GenerationContractError('partial completion is only supported for weekly mission generation')
+    if set(result_by_id) | set(failure_by_id) != expected_ids:
         raise GenerationContractError('completed results do not fill every generation requirement')
-    return result_by_id
+    if failure_by_id and not result_by_id:
+        raise GenerationContractError('partial completion requires at least one successful result')
+    return result_by_id, list(failure_by_id.values())
 
 
 def _store_new_missions(run, candidates):
     if run.kind == GenerationRun.KIND_WEEKLY_MISSIONS and run.force:
+        candidate_dates = [candidate['scheduled_date'] for candidate in candidates]
         Mission.objects.filter(
-            scheduled_date__range=(run.week_start, run.week_end),
+            scheduled_date__in=candidate_dates,
             status=Mission.STATUS_REVIEW,
             generated_by_ai=True,
         ).delete()
@@ -409,7 +446,9 @@ def _store_new_missions(run, candidates):
     return missions
 
 
-def complete_generation_run(run_id, *, results, review_report, n8n_execution_id='', research_context=None):
+def complete_generation_run(
+    run_id, *, results, review_report, n8n_execution_id='', research_context=None, failed_requirements=None,
+):
     if not isinstance(review_report, dict) or review_report.get('verdict') != 'pass':
         raise GenerationContractError('completed callback requires a passed AI review')
     with transaction.atomic():
@@ -420,7 +459,7 @@ def complete_generation_run(run_id, *, results, review_report, n8n_execution_id=
         run = GenerationRun.objects.select_for_update().get(id=run_id)
         if run.status == GenerationRun.STATUS_COMPLETED:
             return run, list(run.missions.order_by('scheduled_date'))
-        validated = _validated_results(run, results)
+        validated, normalized_failures = _validated_results(run, results, failed_requirements)
         missions = []
         if run.kind in {GenerationRun.KIND_WEEKLY_MISSIONS, GenerationRun.KIND_SCHEDULED_TASK}:
             missions = _store_new_missions(run, list(validated.values()))
@@ -463,6 +502,7 @@ def complete_generation_run(run_id, *, results, review_report, n8n_execution_id=
             **(run.result_metadata or {}),
             'created_count': len(missions),
             'mission_ids': [mission.id for mission in missions],
+            'failed_requirements': normalized_failures,
         }
         run.save(update_fields=[
             'status', 'completed_at', 'failed_at', 'error_message', 'review_report', 'research_context',

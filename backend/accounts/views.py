@@ -1410,6 +1410,20 @@ def generate_task_challenge_view(request):
 
 
 @require_http_methods(['GET'])
+def current_weekly_generation_run_view(request):
+    if not can_create_missions(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    run = GenerationRun.objects.prefetch_related('missions').filter(
+        requested_by=request.user,
+        kind=GenerationRun.KIND_WEEKLY_MISSIONS,
+        status__in=GenerationRun.ACTIVE_STATUSES,
+    ).order_by('-created_at').first()
+    return JsonResponse({
+        'generation_run': generation_run_payload(run) if run is not None else None,
+    })
+
+
+@require_http_methods(['GET'])
 def generation_run_detail_view(request, run_id):
     run = GenerationRun.objects.prefetch_related('missions').filter(id=run_id).first()
     if run is None:

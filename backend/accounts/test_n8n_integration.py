@@ -124,6 +124,62 @@ class N8NGenerationApiTests(TestCase):
         self.assertEqual(response.status_code, 403)
         start_mock.assert_not_called()
 
+    def test_current_weekly_generation_run_returns_only_requesters_active_run(self):
+        completed = GenerationRun.objects.create(
+            requested_by=self.creator,
+            kind=GenerationRun.KIND_WEEKLY_MISSIONS,
+            status=GenerationRun.STATUS_COMPLETED,
+            week_start=timezone.localdate(),
+        )
+        active = GenerationRun.objects.create(
+            requested_by=self.creator,
+            kind=GenerationRun.KIND_WEEKLY_MISSIONS,
+            status=GenerationRun.STATUS_REVIEWING,
+            week_start=timezone.localdate() + timedelta(days=7),
+        )
+        other_creator = get_user_model().objects.create_user(
+            username='other-creator@example.com', email='other-creator@example.com', password='Test1234!',
+        )
+        Profile.objects.create(
+            user=other_creator,
+            role=Profile.ROLE_CONTENT_CREATOR,
+            onboarding_completed=True,
+        )
+        GenerationRun.objects.create(
+            requested_by=other_creator,
+            kind=GenerationRun.KIND_WEEKLY_MISSIONS,
+            status=GenerationRun.STATUS_REPAIRING,
+            week_start=timezone.localdate() + timedelta(days=14),
+        )
+        client = Client()
+        client.force_login(self.creator)
+
+        response = client.get('/api/auth/mission-generation-runs/current-weekly/', secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()['generation_run']
+        self.assertEqual(payload['id'], str(active.id))
+        self.assertEqual(payload['status'], GenerationRun.STATUS_REVIEWING)
+        self.assertIn('updated_at', payload)
+        self.assertNotEqual(payload['id'], str(completed.id))
+
+        active.status = GenerationRun.STATUS_FAILED
+        active.save(update_fields=['status', 'updated_at'])
+        response = client.get('/api/auth/mission-generation-runs/current-weekly/', secure=True)
+        self.assertIsNone(response.json()['generation_run'])
+
+    def test_current_weekly_generation_run_requires_creator_permission(self):
+        learner = get_user_model().objects.create_user(
+            username='learner@example.com', email='learner@example.com', password='Test1234!',
+        )
+        Profile.objects.create(user=learner, role=Profile.ROLE_USER, onboarding_completed=True)
+        client = Client()
+        client.force_login(learner)
+
+        response = client.get('/api/auth/mission-generation-runs/current-weekly/', secure=True)
+
+        self.assertEqual(response.status_code, 403)
+
     @patch('accounts.services.n8n_mission_generation.start_mission_generation')
     def test_unreachable_n8n_marks_run_failed(self, start_mock):
         start_mock.side_effect = N8NConnectionError('offline')
@@ -258,6 +314,77 @@ class N8NGenerationApiTests(TestCase):
         run.refresh_from_db()
         self.assertEqual(run.status, GenerationRun.STATUS_COMPLETED)
         self.assertEqual(run.review_report['score'], 0.94)
+
+    def test_weekly_callback_saves_successes_and_records_failed_requirements(self):
+        first_date = timezone.localdate() + timedelta(days=7)
+        second_date = first_date + timedelta(days=1)
+        run = GenerationRun.objects.create(
+            kind=GenerationRun.KIND_WEEKLY_MISSIONS,
+            status=GenerationRun.STATUS_REVIEWING,
+            requested_by=self.creator,
+            week_start=first_date,
+            week_end=second_date,
+            request_payload={'requirements': [
+                {
+                    'id': 'quiz-success',
+                    'output_type': 'quiz_mission',
+                    'scheduled_date': first_date.isoformat(),
+                    'requested_mission_type': None,
+                },
+                {
+                    'id': 'quiz-failed',
+                    'output_type': 'quiz_mission',
+                    'scheduled_date': second_date.isoformat(),
+                    'requested_mission_type': None,
+                },
+            ]},
+        )
+
+        response = self.callback({
+            'generation_run_id': str(run.id),
+            'status': 'completed',
+            'results': [{
+                'requirement_id': 'quiz-success',
+                'payload': self.raw_quiz_payload(first_date),
+            }],
+            'failed_requirements': [{
+                'requirement_id': 'quiz-failed',
+                'error_message': 'Reviewer rejected the mission after repairs',
+                'repair_attempts': 2,
+            }],
+            'review_report': {'verdict': 'pass', 'score': 0.93, 'issues': []},
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Mission.objects.count(), 1)
+        self.assertEqual(Mission.objects.get().scheduled_date, first_date)
+        payload = response.json()['generation_run']
+        self.assertEqual(payload['status'], GenerationRun.STATUS_COMPLETED)
+        self.assertEqual(payload['created_count'], 1)
+        self.assertEqual(payload['failed_count'], 1)
+        self.assertTrue(payload['partial_success'])
+        self.assertEqual(payload['failed_requirements'][0]['requirement_id'], 'quiz-failed')
+        run.refresh_from_db()
+        self.assertEqual(run.result_metadata['failed_requirements'][0]['repair_attempts'], 2)
+
+    def test_weekly_callback_does_not_complete_when_every_requirement_failed(self):
+        run, _ = self.one_quiz_run()
+        response = self.callback({
+            'generation_run_id': str(run.id),
+            'status': 'completed',
+            'results': [],
+            'failed_requirements': [{
+                'requirement_id': 'quiz-1',
+                'error_message': 'No acceptable mission generated',
+                'repair_attempts': 2,
+            }],
+            'review_report': {'verdict': 'pass', 'issues': []},
+        })
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(Mission.objects.count(), 0)
+        run.refresh_from_db()
+        self.assertNotEqual(run.status, GenerationRun.STATUS_COMPLETED)
 
     def test_regeneration_callback_updates_existing_review_mission(self):
         scheduled_date = timezone.localdate() + timedelta(days=3)

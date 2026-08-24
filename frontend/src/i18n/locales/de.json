@@ -227,6 +227,27 @@
       "approveAllSuccess": "{{count}} Missionen wurden freigegeben.",
       "rejectAllSuccess": "{{count}} Missionen wurden verworfen.",
       "generated": "{{count}} neue Missionsvorschläge wurden erstellt.",
+      "generatedPartial": "{{count}} Missionsvorschläge wurden erstellt. {{failedCount}} Missionen konnten nicht erfolgreich generiert werden.",
+      "generationStatus": {
+        "title": "Wochengenerierung läuft",
+        "week": "Woche: {{start}} bis {{end}}",
+        "lastUpdate": "Letztes Statusupdate: {{time}}",
+        "failed": "Die Missionsgenerierung ist fehlgeschlagen.",
+        "statuses": {
+          "preparing": "Vorbereitung",
+          "running": "Generierung",
+          "validating": "Validierung",
+          "reviewing": "Review",
+          "repairing": "Reparatur"
+        },
+        "descriptions": {
+          "preparing": "Der Generierungslauf wird vorbereitet und an n8n übergeben.",
+          "running": "Die KI erstellt gerade die Missionen und Schwierigkeitsvarianten.",
+          "validating": "Django prüft Struktur, Pflichtfelder und fachliche Grenzwerte.",
+          "reviewing": "Ein unabhängiger KI-Reviewer prüft Qualität und Konsistenz.",
+          "repairing": "Beanstandete Inhalte werden korrigiert und anschließend erneut geprüft."
+        }
+      },
       "generateTask": "KI-Praxisaufgabe generieren",
       "taskGenerated": "Eine neue KI-Praxisaufgabe wurde als Vorschlag erstellt.",
       "loading": "Review-Missionen werden geladen...",

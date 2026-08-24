@@ -227,6 +227,27 @@
       "approveAllSuccess": "{{count}} missions were approved.",
       "rejectAllSuccess": "{{count}} missions were rejected.",
       "generated": "{{count}} new mission proposals were created.",
+      "generatedPartial": "{{count}} mission proposals were created. {{failedCount}} missions could not be generated successfully.",
+      "generationStatus": {
+        "title": "Weekly generation in progress",
+        "week": "Week: {{start}} to {{end}}",
+        "lastUpdate": "Last status update: {{time}}",
+        "failed": "Mission generation failed.",
+        "statuses": {
+          "preparing": "Preparing",
+          "running": "Generating",
+          "validating": "Validating",
+          "reviewing": "Reviewing",
+          "repairing": "Repairing"
+        },
+        "descriptions": {
+          "preparing": "The generation run is being prepared and handed over to n8n.",
+          "running": "AI is generating the missions and their difficulty variants.",
+          "validating": "Django is checking the structure, required fields, and domain constraints.",
+          "reviewing": "An independent AI reviewer is checking quality and consistency.",
+          "repairing": "Flagged content is being repaired and will then be validated again."
+        }
+      },
       "generateTask": "Generate AI hands-on task",
       "taskGenerated": "A new AI hands-on task was created as a proposal.",
       "loading": "Loading review missions...",
