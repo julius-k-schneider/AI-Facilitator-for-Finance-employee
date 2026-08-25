@@ -109,7 +109,8 @@
     "tabs": {
       "today": "Heute",
       "available": "Verfügbar",
-      "archive": "Archiv"
+      "archive": "Archiv",
+      "manage": "Missionen verwalten"
     },
     "status": { "open": "Offen", "completed": "Abgeschlossen" },
     "archive": {
@@ -169,6 +170,8 @@
     },
     "creator": {
       "button": "Missionen verwalten",
+      "manageTitle": "Missionen verwalten",
+      "manageDescription": "Wähle einen Tag in der Monatsübersicht aus, prüfe die dort geplante Mission oder bearbeite alle deutschen und englischen Inhalte.",
       "title": "Mission erstellen",
       "editTitle": "Mission bearbeiten",
       "editing": "Bearbeitungsmodus",
@@ -211,7 +214,33 @@
       "deleteConfirm": "Soll die Mission „{{title}}“ wirklich gelöscht werden?",
       "deleteBlocked": "Diese Mission wurde bereits bearbeitet und kann nicht mehr gelöscht werden.",
       "previewTitle": "Missionsvorschau auf Deutsch und Englisch",
-      "weekDays": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+      "weekDays": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+      "task": {
+        "caseFormat": "Format der Falldaten",
+        "table": "Tabelle / Zeilen",
+        "prose": "Textabschnitte",
+        "caseData": "Zweisprachige Falldaten",
+        "caseDataHint": "Deutsch und Englisch müssen dieselbe Anzahl inhaltlich übereinstimmender Zeilen oder Abschnitte enthalten.",
+        "addCaseRow": "Zeile hinzufügen",
+        "removeCaseRow": "Zeile entfernen",
+        "resultFields": "Auswertbare Ergebnisfelder",
+        "resultFieldsHint": "Diese Felder bestimmen, welche Ergebnisse Lernende eingeben und wie sie automatisch bewertet werden.",
+        "addResultField": "Ergebnisfeld hinzufügen",
+        "resultField": "Ergebnisfeld {{number}}",
+        "fieldId": "Technische ID",
+        "fieldType": "Ergebnistyp",
+        "number": "Zahl",
+        "text": "Text",
+        "labelDe": "Bezeichnung (Deutsch)",
+        "labelEn": "Bezeichnung (Englisch)",
+        "solution": "Richtige Zahl",
+        "solutionDe": "Richtige Textlösung (Deutsch)",
+        "solutionEn": "Richtige Textlösung (Englisch)",
+        "tolerance": "Toleranz",
+        "unit": "Einheit",
+        "feedbackDe": "Feedback (Deutsch)",
+        "feedbackEn": "Feedback (Englisch)"
+      }
     },
     "review": {
       "title": "KI-generierte Missionen zur Prüfung",
@@ -253,6 +282,7 @@
       "loading": "Review-Missionen werden geladen...",
       "empty": "Aktuell warten keine KI-generierten Missionen auf eine Prüfung.",
       "status": "Entwurf / Review",
+      "missionNavigation": "Generierte Missionen dieser Woche",
       "learningObjective": "Lernziel",
       "correct": "richtig",
       "showSolution": "Lösung und Feedback anzeigen",

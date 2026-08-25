@@ -109,7 +109,8 @@
     "tabs": {
       "today": "Today",
       "available": "Available",
-      "archive": "Archive"
+      "archive": "Archive",
+      "manage": "Manage missions"
     },
     "status": { "open": "Open", "completed": "Completed" },
     "archive": {
@@ -169,6 +170,8 @@
     },
     "creator": {
       "button": "Manage missions",
+      "manageTitle": "Manage missions",
+      "manageDescription": "Select a day in the monthly overview, inspect its scheduled mission, or edit every German and English content field.",
       "title": "Create mission",
       "editTitle": "Edit mission",
       "editing": "Editing mode",
@@ -211,7 +214,33 @@
       "deleteConfirm": "Are you sure you want to delete the mission “{{title}}”?",
       "deleteBlocked": "This mission has already been completed and can no longer be deleted.",
       "previewTitle": "Mission preview in German and English",
-      "weekDays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+      "weekDays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      "task": {
+        "caseFormat": "Case-data format",
+        "table": "Table / rows",
+        "prose": "Text sections",
+        "caseData": "Bilingual case data",
+        "caseDataHint": "German and English must contain the same number of semantically aligned rows or sections.",
+        "addCaseRow": "Add row",
+        "removeCaseRow": "Remove row",
+        "resultFields": "Scored result fields",
+        "resultFieldsHint": "These fields define which results learners enter and how they are scored automatically.",
+        "addResultField": "Add result field",
+        "resultField": "Result field {{number}}",
+        "fieldId": "Technical ID",
+        "fieldType": "Result type",
+        "number": "Number",
+        "text": "Text",
+        "labelDe": "Label (German)",
+        "labelEn": "Label (English)",
+        "solution": "Correct number",
+        "solutionDe": "Correct text solution (German)",
+        "solutionEn": "Correct text solution (English)",
+        "tolerance": "Tolerance",
+        "unit": "Unit",
+        "feedbackDe": "Feedback (German)",
+        "feedbackEn": "Feedback (English)"
+      }
     },
     "review": {
       "title": "AI-generated missions for review",
@@ -253,6 +282,7 @@
       "loading": "Loading review missions...",
       "empty": "There are currently no AI-generated missions awaiting review.",
       "status": "Draft / review",
+      "missionNavigation": "Generated missions for this week",
       "learningObjective": "Learning objective",
       "correct": "correct",
       "showSolution": "Show solution and feedback",

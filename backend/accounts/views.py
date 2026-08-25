@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from datetime import date, datetime, time, timedelta
 
@@ -476,6 +477,9 @@ def mission_schedule_payload(mission, user):
                 'label_en': translated(field.get('label', {}), 'en'),
                 'unit': field.get('unit', ''),
                 'solution': field.get('solution'),
+                'tolerance': field.get('tolerance', 0),
+                'feedback_de': translated(field.get('feedback', {}), 'de'),
+                'feedback_en': translated(field.get('feedback', {}), 'en'),
             }
             for field in content.get('result_fields', [])
         ],
@@ -516,14 +520,7 @@ def parse_iso_date(value):
         return None
 
 
-MANUAL_MISSION_TYPES = {
-    Mission.TYPE_SINGLE_CHOICE,
-    Mission.TYPE_MULTIPLE_CHOICE,
-    Mission.TYPE_COMPLIANCE_DECISION,
-    Mission.TYPE_PROMPT_SELECTION,
-    Mission.TYPE_PROMPT_RANKING,
-    Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT,
-}
+MANUAL_MISSION_TYPES = Mission.CHOICE_TYPES | Mission.TASK_TYPES
 
 
 def validate_mission_identity(data, allow_past_date=False):
@@ -543,6 +540,8 @@ def validate_choice_mission_data(data, allow_past_date=False):
     if identity_error:
         return None, identity_error
     mission_type, scheduled_date = identity
+    if mission_type not in Mission.CHOICE_TYPES:
+        return None, 'unsupported choice mission type'
 
     required_text = (
         'title_de', 'title_en', 'description_de', 'description_en', 'question_de', 'question_en',
@@ -673,6 +672,123 @@ def validate_choice_mission_data(data, allow_past_date=False):
     }, None
 
 
+def validate_task_mission_data(data, allow_past_date=False):
+    identity, identity_error = validate_mission_identity(data, allow_past_date)
+    if identity_error:
+        return None, identity_error
+    mission_type, scheduled_date = identity
+    if mission_type not in Mission.TASK_TYPES:
+        return None, 'unsupported task mission type'
+
+    required_text = (
+        'title_de', 'title_en', 'description_de', 'description_en', 'question_de', 'question_en',
+    )
+    if any(not str(data.get(field, '')).strip() for field in required_text):
+        return None, 'all bilingual task text fields are required'
+
+    case_format = str(data.get('case_format', 'table')).strip()
+    case_data_de = data.get('case_data_de')
+    case_data_en = data.get('case_data_en')
+    if case_format not in {'table', 'prose'}:
+        return None, 'task case format must be table or prose'
+    if (
+        not isinstance(case_data_de, list)
+        or not isinstance(case_data_en, list)
+        or not 1 <= len(case_data_de) <= 100
+        or len(case_data_de) != len(case_data_en)
+        or any(not str(value).strip() for value in [*case_data_de, *case_data_en])
+    ):
+        return None, 'task case data must contain 1 to 100 aligned bilingual rows'
+
+    raw_fields = data.get('result_fields')
+    if not isinstance(raw_fields, list) or not 1 <= len(raw_fields) <= 12:
+        return None, 'task missions require 1 to 12 result fields'
+    result_fields = []
+    field_ids = set()
+    for position, raw_field in enumerate(raw_fields, start=1):
+        if not isinstance(raw_field, dict):
+            return None, f'task result field {position} is invalid'
+        field_id = str(raw_field.get('id', '')).strip()
+        field_type = str(raw_field.get('type', '')).strip()
+        label_de = str(raw_field.get('label_de', '')).strip()
+        label_en = str(raw_field.get('label_en', '')).strip()
+        feedback_de = str(raw_field.get('feedback_de', '')).strip()
+        feedback_en = str(raw_field.get('feedback_en', '')).strip()
+        if (
+            not field_id
+            or len(field_id) > 80
+            or field_id in field_ids
+            or field_type not in {'number', 'text'}
+            or not label_de
+            or not label_en
+            or not feedback_de
+            or not feedback_en
+        ):
+            return None, f'task result field {position} needs a unique id, type, bilingual label, and feedback'
+        field_ids.add(field_id)
+
+        if field_type == 'number':
+            try:
+                solution = float(raw_field.get('solution'))
+                tolerance = float(raw_field.get('tolerance', 0))
+            except (TypeError, ValueError):
+                return None, f'task result field {position} needs a numeric solution and tolerance'
+            if not math.isfinite(solution) or not math.isfinite(tolerance) or tolerance < 0:
+                return None, f'task result field {position} needs a finite solution and non-negative tolerance'
+        else:
+            raw_solution = raw_field.get('solution')
+            solution_de = str(
+                raw_solution.get('de', '') if isinstance(raw_solution, dict) else raw_field.get('solution_de', '')
+            ).strip()
+            solution_en = str(
+                raw_solution.get('en', '') if isinstance(raw_solution, dict) else raw_field.get('solution_en', '')
+            ).strip()
+            if not solution_de or not solution_en:
+                return None, f'task result field {position} needs a bilingual text solution'
+            solution = {'de': solution_de, 'en': solution_en}
+            tolerance = 0
+
+        result_fields.append({
+            'id': field_id,
+            'type': field_type,
+            'label': {'de': label_de, 'en': label_en},
+            'unit': str(raw_field.get('unit', '')).strip(),
+            'solution': solution,
+            'tolerance': tolerance,
+            'feedback': {'de': feedback_de, 'en': feedback_en},
+        })
+
+    try:
+        max_points = int(data.get('max_points', 100))
+    except (TypeError, ValueError):
+        return None, 'invalid points'
+    if not 1 <= max_points <= 1000:
+        return None, 'invalid points'
+
+    return {
+        'mission_type': mission_type,
+        'scheduled_date': scheduled_date,
+        'title_de': str(data['title_de']).strip(),
+        'title_en': str(data['title_en']).strip(),
+        'description_de': str(data['description_de']).strip(),
+        'description_en': str(data['description_en']).strip(),
+        'content': {
+            'task': {'de': str(data['question_de']).strip(), 'en': str(data['question_en']).strip()},
+            'case_data': {
+                'de': [str(value).strip() for value in case_data_de],
+                'en': [str(value).strip() for value in case_data_en],
+            },
+            'case_format': case_format,
+            'result_fields': result_fields,
+            'micro_learning': {
+                'de': str(data.get('micro_learning_de', '')).strip(),
+                'en': str(data.get('micro_learning_en', '')).strip(),
+            },
+        },
+        'max_points': max_points,
+    }, None
+
+
 def validate_manual_mission_data(data, allow_past_date=False):
     identity, identity_error = validate_mission_identity(data, allow_past_date)
     if identity_error:
@@ -692,7 +808,10 @@ def validate_manual_mission_data(data, allow_past_date=False):
         raw_variant = raw_variants[difficulty]
         if not isinstance(raw_variant, dict):
             return None, f'{difficulty} variant must be an object'
-        variant_values, variant_error = validate_choice_mission_data({
+        variant_validator = (
+            validate_task_mission_data if mission_type in Mission.TASK_TYPES else validate_choice_mission_data
+        )
+        variant_values, variant_error = variant_validator({
             **raw_variant,
             'type': mission_type,
             'scheduled_date': scheduled_date.isoformat(),

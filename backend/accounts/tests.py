@@ -143,6 +143,49 @@ class AccountsApiTests(TestCase):
             'variants': variants,
         }
 
+    def manual_task_mission_payload(self, scheduled_date, mission_type=Mission.TYPE_BULK_CATEGORIZATION):
+        variants = {}
+        for position, difficulty in enumerate(Mission.DIFFICULTIES):
+            variants[difficulty] = {
+                'title_de': f'Praxisaufgabe {difficulty}',
+                'title_en': f'Hands-on task {difficulty}',
+                'description_de': f'Bearbeite einen Finance-Fall auf Stufe {difficulty}.',
+                'description_en': f'Complete a finance case at {difficulty} level.',
+                'question_de': f'Werte die Falldaten für {difficulty} aus.',
+                'question_en': f'Evaluate the {difficulty} case data.',
+                'case_format': 'prose' if mission_type == Mission.TYPE_INVOICE_EXTRACTION else 'table',
+                'case_data_de': ['2026-08-01 | Beispiel GmbH | 125,00 EUR'],
+                'case_data_en': ['2026-08-01 | Example Ltd | EUR 125.00'],
+                'result_fields': [
+                    {
+                        'id': 'total_amount', 'type': 'number',
+                        'label_de': 'Gesamtbetrag', 'label_en': 'Total amount',
+                        'unit': 'EUR', 'solution': 125, 'tolerance': 0.01,
+                        'feedback_de': 'Der Gesamtbetrag beträgt 125 EUR.',
+                        'feedback_en': 'The total amount is EUR 125.',
+                    },
+                    {
+                        'id': 'vendor', 'type': 'text',
+                        'label_de': 'Lieferant', 'label_en': 'Vendor', 'unit': '',
+                        'solution': {'de': 'Beispiel GmbH', 'en': 'Example Ltd'},
+                        'feedback_de': 'Der Lieferant ist Beispiel GmbH.',
+                        'feedback_en': 'The vendor is Example Ltd.',
+                    },
+                ],
+                'micro_learning_de': 'Prüfe strukturierte Ergebnisse immer gegen die Quelldaten.',
+                'micro_learning_en': 'Always verify structured results against the source data.',
+                'max_points': 30 + position * 10,
+            }
+        return {
+            'type': mission_type,
+            'scheduled_date': scheduled_date.isoformat(),
+            'topic_de': 'Finance-Falldaten strukturiert auswerten',
+            'topic_en': 'Evaluate finance case data in a structured way',
+            'learning_objective_de': 'Falldaten zweisprachig analysieren und Ergebnisse prüfen.',
+            'learning_objective_en': 'Analyze bilingual case data and verify the results.',
+            'variants': variants,
+        }
+
     def test_daily_missions_only_include_today_and_hide_correct_answer(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         player = self.create_user('player@example.com')
@@ -504,6 +547,45 @@ class AccountsApiTests(TestCase):
         self.assertEqual(mission.title_de, 'Prompt-Auswahl')
         self.assertEqual(mission.content['feedback']['en'], 'Feedback easy')
         self.assertEqual(mission.variants[Mission.DIFFICULTY_MEDIUM]['title_en'], 'Prompt selection')
+
+    def test_creator_can_create_and_edit_every_task_mission_type(self):
+        creator = self.create_user('creator-task-editor@example.com', Profile.ROLE_CONTENT_CREATOR)
+        self.client.force_login(creator)
+        scheduled_date = self.next_business_day()
+        created_ids = []
+
+        for mission_type in sorted(Mission.TASK_TYPES):
+            payload = self.manual_task_mission_payload(scheduled_date, mission_type)
+            response = self.client.post(
+                '/api/auth/missions/schedule/', payload, content_type='application/json', secure=True,
+            )
+            self.assertEqual(response.status_code, 201, response.json())
+            mission = Mission.objects.get(scheduled_date=scheduled_date)
+            self.assertEqual(mission.mission_type, mission_type)
+            self.assertEqual(mission.variants['medium']['content']['case_data']['en'][0], '2026-08-01 | Example Ltd | EUR 125.00')
+            self.assertEqual(mission.variants['hard']['content']['result_fields'][1]['solution']['de'], 'Beispiel GmbH')
+            created_ids.append(mission.id)
+            scheduled_date = self.next_business_day(scheduled_date)
+
+        mission = Mission.objects.get(id=created_ids[0])
+        payload = self.manual_task_mission_payload(mission.scheduled_date, mission.mission_type)
+        payload['variants']['hard']['result_fields'][1]['solution']['en'] = 'Updated Vendor Ltd'
+        payload['variants']['hard']['result_fields'][1]['feedback_en'] = 'The updated vendor is correct.'
+        updated = self.client.patch(
+            f'/api/auth/missions/{mission.id}/', payload, content_type='application/json', secure=True,
+        )
+        self.assertEqual(updated.status_code, 200, updated.json())
+        mission.refresh_from_db()
+        hard_field = mission.variants['hard']['content']['result_fields'][1]
+        self.assertEqual(hard_field['solution']['en'], 'Updated Vendor Ltd')
+        self.assertEqual(hard_field['feedback']['en'], 'The updated vendor is correct.')
+
+        schedule = self.client.get(
+            f'/api/auth/missions/schedule/?from={mission.scheduled_date}&to={mission.scheduled_date}', secure=True,
+        )
+        result_field = schedule.json()['missions'][mission.scheduled_date.isoformat()][0]['result_fields'][0]
+        self.assertEqual(result_field['tolerance'], 0.01)
+        self.assertEqual(result_field['feedback_en'], 'The total amount is EUR 125.')
 
     def test_manual_creator_requires_all_three_difficulty_variants(self):
         creator = self.create_user('creator-variants@example.com', Profile.ROLE_CONTENT_CREATOR)
