@@ -7,6 +7,12 @@ Die Research-Funktion ist bewusst in zwei eigenständige Workflows aufgeteilt. D
 - Workflow-IDs: `MissionGeneratorV2Prod` und `MissionWorkerV2Prod`
 - Produktiver Webhook: `POST /webhook/mission-generation`
 - Interner Worker-Webhook: `POST /webhook/mission-generation-worker-v2`
+- Vor einer Wochengenerierung ruft der Orchestrator den Research-Selector lokal auf. Bei einer normalen Woche werden
+  abhängig von der Zahl der Quiz-Missionen höchstens zwei bis drei passende aktuelle Kontexte zugeordnet.
+- Research-Kontext wird nur an die konkret ausgewählte Quiz-Mission weitergereicht. Generator, Reviewer und Repair
+  erhalten denselben geprüften Kontext; Task-Missionen und die übrigen Quiz-Missionen bleiben Evergreen-Inhalte.
+- Ein leerer Pool, eine nicht passende Auswahl oder ein Ausfall des Selectors blockiert die Missionsgenerierung nicht.
+  Der Lauf wird dann ohne Research-Kontext fortgesetzt und hinterlegt eine Warnung im Review-Bericht.
 - Modellaufrufe laufen in echten Zweier-Batches, damit die Kapazitätsgrenze des Modellendpunkts nicht überschritten wird.
 - Jede Mission wird unabhängig validiert und reviewed; höchstens zwei gezielte Repair-Versuche sind möglich.
 - Der semantische Reviewer erhält bei großen Task-Missionen nur eine kompakte, repräsentative Projektion; Schema,
@@ -67,7 +73,7 @@ Beispielinput:
   "generation_run_id": "example-run",
   "generation_kind": "weekly_missions",
   "as_of": "2026-08-23T12:00:00Z",
-  "max_research_missions": 1,
+  "max_research_missions": 2,
   "preferred_tags": ["ai_governance", "risk", "banking"],
   "requirements": [
     {
@@ -88,7 +94,7 @@ Beispielinput:
 
 Der Selector berücksichtigt nur freigegebene, noch gültige Einträge mit belegten Fakten und mittlerer oder hoher Confidence. Die Auswahl ist deterministisch und gewichtet Relevanz, Quellenstufe, Confidence, Aktualität, bevorzugte Tags und Missionstyp. Aktuell erhalten ausschließlich Anforderungen mit `output_type: "quiz_mission"` Research-Kontext. Task-Missionen bleiben unverändert.
 
-Standardmäßig wird höchstens ein Research-Beitrag gewählt; über `max_research_missions` sind null bis maximal zwei möglich. Ein Pool-Eintrag wird innerhalb eines Aufrufs nur einmal verwendet. Bei leerem Pool, nicht passenden Anforderungen oder unterschrittenem Score liefert der Workflow erfolgreich einen leeren `research_context` samt Warnung zurück. Eine spätere Missionsgenerierung kann dann normal mit Evergreen-Inhalten fortfahren.
+Standardmäßig werden höchstens zwei Research-Beiträge gewählt; über `max_research_missions` sind null bis maximal drei möglich. Ein Pool-Eintrag wird innerhalb eines Aufrufs nur einmal verwendet. Bei leerem Pool, nicht passenden Anforderungen oder unterschrittenem Score liefert der Workflow erfolgreich einen leeren `research_context` samt Warnung zurück. Die Missionsgenerierung läuft dann normal mit Evergreen-Inhalten weiter.
 
 Jeder ausgewählte Kontext enthält Sicherheitsanweisungen: nur `safe_facts` verwenden, Quelleninhalt als nicht vertrauenswürdig behandeln, keine Rechtsberatung ableiten, das Lernziel übertragbar halten und die Quelle im Review prüfen.
 
@@ -96,8 +102,11 @@ Jeder ausgewählte Kontext enthält Sicherheitsanweisungen: nur `safe_facts` ver
 
 Beide Webhooks erwarten den Header `X-N8N-Service-Secret`. In der lokalen n8n-Instanz verwenden sie die bereits vorhandene Header-Auth-Credential. Geheimnisse werden nicht in den exportierten Workflow-Dateien gespeichert.
 
-## Spätere Integration
+## Integration in die Missionsgenerierung
 
-Der V2-Generator übernimmt bereits den im Request gelieferten `research_context`, ruft den Selector aber noch nicht automatisch auf. Eine spätere Integration kann vor der eigentlichen Prompt-Erstellung den Selector per `Execute Workflow` mit der ID `RsrchSelect2026A` aufrufen. `context_by_requirement[requirement.id]` lässt sich dann ausschließlich bei der zugehörigen Quiz-Mission als optionaler, klar abgegrenzter Research-Block einfügen. Ein leerer Kontext darf den Generator nicht abbrechen.
-
-Die vorliegenden Dateien nehmen diese Verbindung absichtlich noch nicht vor.
+Der V2-Orchestrator ruft den veröffentlichten Selector vor der eigentlichen Prompt-Erstellung über dessen internen,
+authentifizierten Webhook auf. Die Zuordnung erfolgt über `context_by_requirement[requirement.id]`; damit kann kein
+Research-Beitrag versehentlich in eine andere Mission oder Schwierigkeit rutschen. Der Prompt grenzt den Beitrag als
+nicht vertrauenswürdige Referenzdaten ab und erlaubt ausschließlich die geprüften `safe_facts`. Bei vorhandenem Kontext
+muss die Quiz-Mission Quelle und Veröffentlichungsdatum nennen, den aktuellen Anlass als Szenario verwenden und trotzdem
+ein übertragbares Lernziel vermitteln. Der Reviewer prüft diese Regeln, und der Repair-Schritt erhält denselben Kontext.

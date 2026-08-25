@@ -12,7 +12,10 @@
         "name": "When Called by Another Workflow",
         "type": "n8n-nodes-base.executeWorkflowTrigger",
         "typeVersion": 1.1,
-        "position": [0, -100]
+        "position": [
+          0,
+          -100
+        ]
       },
       {
         "parameters": {
@@ -26,7 +29,10 @@
         "name": "Authenticated Selector Webhook",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 2.1,
-        "position": [0, -300],
+        "position": [
+          0,
+          -300
+        ],
         "webhookId": "1a1fcbf8-a074-4544-9ed1-c09dcc585eca",
         "credentials": {
           "httpHeaderAuth": {
@@ -43,7 +49,10 @@
         "name": "Unwrap Selector Webhook Body",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [240, -300]
+        "position": [
+          240,
+          -300
+        ]
       },
       {
         "parameters": {},
@@ -51,27 +60,36 @@
         "name": "Run Selector Manually",
         "type": "n8n-nodes-base.manualTrigger",
         "typeVersion": 1,
-        "position": [0, 120]
+        "position": [
+          0,
+          120
+        ]
       },
       {
         "parameters": {
-          "jsCode": "const now = new Date();\nconst day = now.getUTCDay();\nconst daysToMonday = day === 0 ? 1 : 8 - day;\nconst monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysToMonday));\nconst dateAt = (offset) => new Date(monday.getTime() + offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);\nreturn [{ json: {\n  generation_run_id: 'manual-selector-test',\n  generation_kind: 'weekly_missions',\n  as_of: now.toISOString(),\n  max_research_missions: 1,\n  preferred_tags: ['ai_governance', 'operational_resilience', 'human_review'],\n  requirements: [\n    { id: dateAt(0), scheduled_date: dateAt(0), output_type: 'quiz_mission', requested_mission_type: 'single_choice' },\n    { id: dateAt(1), scheduled_date: dateAt(1), output_type: 'task_mission', mission_type: 'invoice_extraction' },\n    { id: dateAt(2), scheduled_date: dateAt(2), output_type: 'quiz_mission', requested_mission_type: 'compliance_traffic_light' }\n  ]\n} }];"
+          "jsCode": "const now = new Date();\nconst day = now.getUTCDay();\nconst daysToMonday = day === 0 ? 1 : 8 - day;\nconst monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysToMonday));\nconst dateAt = (offset) => new Date(monday.getTime() + offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);\nreturn [{ json: {\n  generation_run_id: 'manual-selector-test',\n  generation_kind: 'weekly_missions',\n  as_of: now.toISOString(),\n  max_research_missions: 2,\n  preferred_tags: ['ai_governance', 'operational_resilience', 'human_review'],\n  requirements: [\n    { id: dateAt(0), scheduled_date: dateAt(0), output_type: 'quiz_mission', requested_mission_type: 'single_choice' },\n    { id: dateAt(1), scheduled_date: dateAt(1), output_type: 'task_mission', mission_type: 'invoice_extraction' },\n    { id: dateAt(2), scheduled_date: dateAt(2), output_type: 'quiz_mission', requested_mission_type: 'compliance_traffic_light' }\n  ]\n} }];"
         },
         "id": "b9bb1ff5-82cc-42a2-b1e9-3309e47eec6d",
         "name": "Manual Sample Input",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [240, 120]
+        "position": [
+          240,
+          120
+        ]
       },
       {
         "parameters": {
-          "jsCode": "const input = $json && typeof $json === 'object' ? $json : {};\nconst requirements = Array.isArray(input.requirements) ? input.requirements.filter((item) => item && typeof item === 'object') : [];\nconst preferredTags = Array.isArray(input.preferred_tags) ? input.preferred_tags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean).slice(0, 12) : [];\nconst requestedMaximum = Number(input.max_research_missions ?? 1);\nconst maximum = Math.max(0, Math.min(2, Number.isFinite(requestedMaximum) ? Math.floor(requestedMaximum) : 1));\nlet asOf = new Date(input.as_of || Date.now());\nif (Number.isNaN(asOf.getTime())) asOf = new Date();\nreturn [{ json: {\n  generation_run_id: String(input.generation_run_id || ''),\n  generation_kind: String(input.generation_kind || 'weekly_missions'),\n  requirements,\n  preferred_tags: preferredTags,\n  max_research_missions: maximum,\n  as_of: asOf.toISOString()\n} }];"
+          "jsCode": "const input = $json && typeof $json === 'object' ? $json : {};\nconst requirements = Array.isArray(input.requirements) ? input.requirements.filter((item) => item && typeof item === 'object') : [];\nconst preferredTags = Array.isArray(input.preferred_tags) ? input.preferred_tags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean).slice(0, 12) : [];\nconst requestedMaximum = Number(input.max_research_missions ?? 2);\nconst maximum = Math.max(0, Math.min(3, Number.isFinite(requestedMaximum) ? Math.floor(requestedMaximum) : 2));\nlet asOf = new Date(input.as_of || Date.now());\nif (Number.isNaN(asOf.getTime())) asOf = new Date();\nreturn [{ json: {\n  generation_run_id: String(input.generation_run_id || ''),\n  generation_kind: String(input.generation_kind || 'weekly_missions'),\n  requirements,\n  preferred_tags: preferredTags,\n  max_research_missions: maximum,\n  as_of: asOf.toISOString()\n} }];"
         },
         "id": "ba89163f-8b47-4c0a-ac17-4ca7fd5c4378",
         "name": "Normalize Selector Input",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [480, 0]
+        "position": [
+          480,
+          0
+        ]
       },
       {
         "parameters": {
@@ -80,28 +98,94 @@
           "tableName": "ai_finance_research_pool",
           "columns": {
             "column": [
-              { "name": "item_key", "type": "string" },
-              { "name": "title", "type": "string" },
-              { "name": "source_name", "type": "string" },
-              { "name": "source_url", "type": "string" },
-              { "name": "source_feed", "type": "string" },
-              { "name": "source_tier", "type": "number" },
-              { "name": "published_at", "type": "date" },
-              { "name": "retrieved_at", "type": "date" },
-              { "name": "last_seen_at", "type": "date" },
-              { "name": "language", "type": "string" },
-              { "name": "tags_json", "type": "string" },
-              { "name": "summary_de", "type": "string" },
-              { "name": "summary_en", "type": "string" },
-              { "name": "safe_facts_json", "type": "string" },
-              { "name": "mission_hooks_json", "type": "string" },
-              { "name": "relevance_score", "type": "number" },
-              { "name": "confidence", "type": "string" },
-              { "name": "valid_until", "type": "date" },
-              { "name": "risk_flags_json", "type": "string" },
-              { "name": "eligible", "type": "boolean" },
-              { "name": "content_hash", "type": "string" },
-              { "name": "analysis_method", "type": "string" }
+              {
+                "name": "item_key",
+                "type": "string"
+              },
+              {
+                "name": "title",
+                "type": "string"
+              },
+              {
+                "name": "source_name",
+                "type": "string"
+              },
+              {
+                "name": "source_url",
+                "type": "string"
+              },
+              {
+                "name": "source_feed",
+                "type": "string"
+              },
+              {
+                "name": "source_tier",
+                "type": "number"
+              },
+              {
+                "name": "published_at",
+                "type": "date"
+              },
+              {
+                "name": "retrieved_at",
+                "type": "date"
+              },
+              {
+                "name": "last_seen_at",
+                "type": "date"
+              },
+              {
+                "name": "language",
+                "type": "string"
+              },
+              {
+                "name": "tags_json",
+                "type": "string"
+              },
+              {
+                "name": "summary_de",
+                "type": "string"
+              },
+              {
+                "name": "summary_en",
+                "type": "string"
+              },
+              {
+                "name": "safe_facts_json",
+                "type": "string"
+              },
+              {
+                "name": "mission_hooks_json",
+                "type": "string"
+              },
+              {
+                "name": "relevance_score",
+                "type": "number"
+              },
+              {
+                "name": "confidence",
+                "type": "string"
+              },
+              {
+                "name": "valid_until",
+                "type": "date"
+              },
+              {
+                "name": "risk_flags_json",
+                "type": "string"
+              },
+              {
+                "name": "eligible",
+                "type": "boolean"
+              },
+              {
+                "name": "content_hash",
+                "type": "string"
+              },
+              {
+                "name": "analysis_method",
+                "type": "string"
+              }
             ]
           },
           "options": {
@@ -112,7 +196,10 @@
         "name": "Create or Reuse Research Pool",
         "type": "n8n-nodes-base.dataTable",
         "typeVersion": 1.1,
-        "position": [720, 0]
+        "position": [
+          720,
+          0
+        ]
       },
       {
         "parameters": {
@@ -147,7 +234,10 @@
         "name": "Load Current Research",
         "type": "n8n-nodes-base.dataTable",
         "typeVersion": 1.1,
-        "position": [960, 0],
+        "position": [
+          960,
+          0
+        ],
         "alwaysOutputData": true
       },
       {
@@ -158,33 +248,100 @@
         "name": "Select Research Context",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1200, 0]
+        "position": [
+          1200,
+          0
+        ]
       }
     ],
     "connections": {
       "When Called by Another Workflow": {
-        "main": [[{ "node": "Normalize Selector Input", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Normalize Selector Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Authenticated Selector Webhook": {
-        "main": [[{ "node": "Unwrap Selector Webhook Body", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Unwrap Selector Webhook Body",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Unwrap Selector Webhook Body": {
-        "main": [[{ "node": "Normalize Selector Input", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Normalize Selector Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Run Selector Manually": {
-        "main": [[{ "node": "Manual Sample Input", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Manual Sample Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Manual Sample Input": {
-        "main": [[{ "node": "Normalize Selector Input", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Normalize Selector Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Normalize Selector Input": {
-        "main": [[{ "node": "Create or Reuse Research Pool", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Create or Reuse Research Pool",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Create or Reuse Research Pool": {
-        "main": [[{ "node": "Load Current Research", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Load Current Research",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Load Current Research": {
-        "main": [[{ "node": "Select Research Context", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Select Research Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "settings": {
