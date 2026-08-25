@@ -8,7 +8,6 @@ import { PERMISSIONS, hasPermission } from './auth/permissions'
 import LoginScreen from './components/LoginScreen'
 import Sidebar from './components/Sidebar'
 import { NAV_LABEL_KEYS } from './nav'
-import Library from './pages/Library'
 import YourAgent from './pages/YourAgent'
 import Basics from './pages/Basics'
 import Home from './pages/Home'
@@ -135,7 +134,6 @@ function App() {
             <Route path="/missions" element={<Missions key={location.key} user={user} />} />
             <Route path="/training" element={<Training />} />
             <Route path="/agent" element={<YourAgent />} />
-            <Route path="/library" element={<Library />} />
             <Route path="/leaderboard" element={<Leaderboard user={user} />} />
             <Route path="/profile" element={<Profile user={user} />} />
             <Route

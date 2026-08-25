@@ -17,7 +17,6 @@
   "nav": {
     "home": "Home",
     "basics": "Basics",
-    "library": "Library",
     "leaderboard": "Leaderboard",
     "missions": "Missions",
     "training": "Training",
@@ -417,10 +416,6 @@
     "basics": {
       "title": "Basics",
       "description": "The most important AI basics for your day-to-day work in finance"
-    },
-    "library": {
-      "title": "Library",
-      "description": "Materials, templates and links for reference"
     },
     "leaderboard": {
       "title": "Leaderboard",
