@@ -12,15 +12,16 @@ import {
 import { PERMISSIONS } from './auth/permissions'
 
 export const NAV_ITEMS = [
-  { value: 'home', label: 'Home', labelKey: 'nav.home', icon: IconLayoutDashboard },
-  { value: 'basics', label: 'Basics', labelKey: 'nav.basics', icon: IconSchool },
-  { value: 'missions', label: 'Missions', labelKey: 'nav.missions', icon: IconTargetArrow, requiresOnboarding: true },
-  { value: 'training', label: 'Training', labelKey: 'nav.training', icon: IconDeviceGamepad2, requiresOnboarding: true },
-  { value: 'agent', label: 'Your Agent', labelKey: 'nav.agent', icon: IconMessageChatbot, requiresOnboarding: true },
-  { value: 'library', label: 'Library', labelKey: 'nav.library', icon: IconBooks },
-  { value: 'leaderboard', label: 'Leaderboard', labelKey: 'nav.leaderboard', icon: IconTrophy },
+  { value: 'home', path: '/', label: 'Home', labelKey: 'nav.home', icon: IconLayoutDashboard },
+  { value: 'basics', path: '/basics', label: 'Basics', labelKey: 'nav.basics', icon: IconSchool },
+  { value: 'missions', path: '/missions', label: 'Missions', labelKey: 'nav.missions', icon: IconTargetArrow, requiresOnboarding: true },
+  { value: 'training', path: '/training', label: 'Training', labelKey: 'nav.training', icon: IconDeviceGamepad2, requiresOnboarding: true },
+  { value: 'agent', path: '/agent', label: 'Your Agent', labelKey: 'nav.agent', icon: IconMessageChatbot, requiresOnboarding: true },
+  { value: 'library', path: '/library', label: 'Library', labelKey: 'nav.library', icon: IconBooks },
+  { value: 'leaderboard', path: '/leaderboard', label: 'Leaderboard', labelKey: 'nav.leaderboard', icon: IconTrophy },
   {
     value: 'user-management',
+    path: '/user-management',
     label: 'User management',
     labelKey: 'nav.userManagement',
     icon: IconUserCog,
@@ -30,11 +31,12 @@ export const NAV_ITEMS = [
 
 export const PROFILE_ITEM = {
   value: 'profile',
+  path: '/profile',
   label: 'Profile',
   labelKey: 'nav.profile',
   icon: IconUserCircle,
 }
 
 export const NAV_LABEL_KEYS = Object.fromEntries(
-  [...NAV_ITEMS, PROFILE_ITEM].map((item) => [item.value, item.labelKey]),
+  [...NAV_ITEMS, PROFILE_ITEM].map((item) => [item.path, item.labelKey]),
 )
