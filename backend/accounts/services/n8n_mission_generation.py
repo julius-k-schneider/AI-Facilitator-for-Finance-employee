@@ -48,6 +48,29 @@ def generation_run_payload(run):
     failed_requirements = metadata.get('failed_requirements', [])
     if not isinstance(failed_requirements, list):
         failed_requirements = []
+    requirements = run.request_payload.get('requirements', []) if isinstance(run.request_payload, dict) else []
+    requirements_by_id = {
+        item.get('id'): item for item in requirements
+        if isinstance(item, dict) and isinstance(item.get('id'), str)
+    }
+    failed_requirements = [
+        {
+            **failure,
+            'scheduled_date': failure.get('scheduled_date') or requirements_by_id.get(
+                failure.get('requirement_id'), {},
+            ).get('scheduled_date'),
+            'output_type': failure.get('output_type') or requirements_by_id.get(
+                failure.get('requirement_id'), {},
+            ).get('output_type'),
+            'mission_type': failure.get('mission_type') or requirements_by_id.get(
+                failure.get('requirement_id'), {},
+            ).get('mission_type') or requirements_by_id.get(
+                failure.get('requirement_id'), {},
+            ).get('requested_mission_type'),
+        }
+        for failure in failed_requirements
+        if isinstance(failure, dict)
+    ]
     return {
         'id': str(run.id),
         'kind': run.kind,
@@ -398,7 +421,7 @@ def _validated_results(run, results, failed_requirements=None):
         if not isinstance(item, dict) or not isinstance(item.get('requirement_id'), str):
             raise GenerationContractError('every failed requirement needs a requirement_id')
         requirement_id = item['requirement_id']
-        _requirement(run, requirement_id)
+        requirement = _requirement(run, requirement_id)
         if requirement_id in failure_by_id:
             raise GenerationContractError('failed requirements contain a duplicate requirement_id')
         try:
@@ -407,6 +430,9 @@ def _validated_results(run, results, failed_requirements=None):
             repair_attempts = 0
         failure_by_id[requirement_id] = {
             'requirement_id': requirement_id,
+            'scheduled_date': requirement.get('scheduled_date'),
+            'output_type': requirement.get('output_type'),
+            'mission_type': requirement.get('mission_type') or requirement.get('requested_mission_type'),
             'error_message': str(item.get('error_message') or 'Mission requirement failed')[:2000],
             'repair_attempts': repair_attempts,
         }

@@ -364,6 +364,10 @@ class N8NGenerationApiTests(TestCase):
         self.assertEqual(payload['failed_count'], 1)
         self.assertTrue(payload['partial_success'])
         self.assertEqual(payload['failed_requirements'][0]['requirement_id'], 'quiz-failed')
+        self.assertEqual(payload['failed_requirements'][0]['scheduled_date'], second_date.isoformat())
+        self.assertEqual(payload['failed_requirements'][0]['output_type'], 'quiz_mission')
+        self.assertIsNone(payload['failed_requirements'][0]['mission_type'])
+        self.assertEqual(payload['failed_requirements'][0]['error_message'], 'Reviewer rejected the mission after repairs')
         run.refresh_from_db()
         self.assertEqual(run.result_metadata['failed_requirements'][0]['repair_attempts'], 2)
 
