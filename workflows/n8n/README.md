@@ -14,6 +14,9 @@ Die Research-Funktion ist bewusst in zwei eigenständige Workflows aufgeteilt. D
 - Ein leerer Pool, eine nicht passende Auswahl oder ein Ausfall des Selectors blockiert die Missionsgenerierung nicht.
   Der Lauf wird dann ohne Research-Kontext fortgesetzt und hinterlegt eine Warnung im Review-Bericht.
 - Modellaufrufe laufen in echten Zweier-Batches, damit die Kapazitätsgrenze des Modellendpunkts nicht überschritten wird.
+- Generator, Reviewer und Repair übergeben `reasoning_effort: "low"` als echten KI:connect-API-Parameter.
+- Laufzeit, Prompt-, Completion- und Gesamttokens sowie `finish_reason` werden für jeden Generator-, Reviewer- und
+  Repair-Aufruf pro Missionsanforderung in `GenerationRun.result_metadata.mission_metrics` gespeichert.
 - Jede Mission wird unabhängig validiert und reviewed; höchstens zwei gezielte Repair-Versuche sind möglich.
 - Der semantische Reviewer erhält bei großen Task-Missionen nur eine kompakte, repräsentative Projektion; Schema,
   Zeilenzahlen, Berechnungen und Lösungen werden weiterhin deterministisch von Django geprüft.

@@ -89,6 +89,7 @@ def generation_callback_view(request):
                 n8n_execution_id=data.get('n8n_execution_id', ''),
                 research_context=data.get('research_context'),
                 failed_requirements=data.get('failed_requirements'),
+                mission_metrics=data.get('mission_metrics'),
             )
             return JsonResponse({
                 'generation_run': generation_run_payload(run),

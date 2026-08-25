@@ -83,6 +83,7 @@ def generation_run_payload(run):
         'error_message': run.error_message,
         'review_report': run.review_report,
         'created_count': metadata.get('created_count', 0),
+        'mission_metrics': metadata.get('mission_metrics', []),
         'failed_count': len(failed_requirements),
         'failed_requirements': failed_requirements,
         'partial_success': run.status == GenerationRun.STATUS_COMPLETED and bool(failed_requirements),
@@ -398,6 +399,74 @@ def _json_safe(value):
     return value
 
 
+def _normalize_mission_metrics(run, mission_metrics):
+    """Bound and normalize untrusted per-requirement LLM timing metadata."""
+    if mission_metrics is None:
+        return []
+    if not isinstance(mission_metrics, list):
+        raise GenerationContractError('mission_metrics must be an array')
+
+    requirements = run.request_payload.get('requirements', []) if isinstance(run.request_payload, dict) else []
+    requirements_by_id = {
+        item.get('id'): item for item in requirements
+        if isinstance(item, dict) and isinstance(item.get('id'), str)
+    }
+    normalized = []
+    seen = set()
+
+    def optional_int(value, maximum):
+        if value is None:
+            return None
+        try:
+            return max(0, min(maximum, int(value)))
+        except (TypeError, ValueError):
+            return None
+
+    for item in mission_metrics[:100]:
+        if not isinstance(item, dict):
+            continue
+        requirement_id = item.get('requirement_id')
+        if requirement_id not in requirements_by_id or requirement_id in seen:
+            continue
+        seen.add(requirement_id)
+        requirement = requirements_by_id[requirement_id]
+        phases = {}
+        for phase in ('generator', 'reviewer', 'repair'):
+            calls = item.get(phase, [])
+            if not isinstance(calls, list):
+                calls = []
+            normalized_calls = []
+            for call in calls[:20]:
+                if not isinstance(call, dict):
+                    continue
+                normalized_calls.append({
+                    'duration_ms': optional_int(call.get('duration_ms'), 3_600_000),
+                    'prompt_tokens': optional_int(call.get('prompt_tokens'), 10_000_000),
+                    'completion_tokens': optional_int(call.get('completion_tokens'), 10_000_000),
+                    'total_tokens': optional_int(call.get('total_tokens'), 20_000_000),
+                    'finish_reason': (
+                        str(call.get('finish_reason'))[:64]
+                        if call.get('finish_reason') is not None else None
+                    ),
+                    'call_index': optional_int(call.get('call_index'), 1000),
+                    'difficulty': (
+                        str(call.get('difficulty'))[:32]
+                        if call.get('difficulty') is not None else None
+                    ),
+                    'repair_attempt': optional_int(call.get('repair_attempt'), 100),
+                })
+            phases[phase] = normalized_calls
+        normalized.append({
+            'requirement_id': requirement_id,
+            'scheduled_date': requirement.get('scheduled_date'),
+            'output_type': requirement.get('output_type'),
+            'mission_type': requirement.get('mission_type') or requirement.get('requested_mission_type'),
+            'failed': item.get('failed') is True,
+            **phases,
+        })
+    return normalized
+
+
 def _validated_results(run, results, failed_requirements=None):
     if not isinstance(results, list):
         raise GenerationContractError('completed callback requires a results array')
@@ -481,6 +550,7 @@ def _store_new_missions(run, candidates):
 
 def complete_generation_run(
     run_id, *, results, review_report, n8n_execution_id='', research_context=None, failed_requirements=None,
+    mission_metrics=None,
 ):
     if not isinstance(review_report, dict) or review_report.get('verdict') != 'pass':
         raise GenerationContractError('completed callback requires a passed AI review')
@@ -493,6 +563,7 @@ def complete_generation_run(
         if run.status == GenerationRun.STATUS_COMPLETED:
             return run, list(run.missions.order_by('scheduled_date'))
         validated, normalized_failures = _validated_results(run, results, failed_requirements)
+        normalized_metrics = _normalize_mission_metrics(run, mission_metrics)
         missions = []
         if run.kind in {GenerationRun.KIND_WEEKLY_MISSIONS, GenerationRun.KIND_SCHEDULED_TASK}:
             missions = _store_new_missions(run, list(validated.values()))
@@ -536,6 +607,7 @@ def complete_generation_run(
             'created_count': len(missions),
             'mission_ids': [mission.id for mission in missions],
             'failed_requirements': normalized_failures,
+            'mission_metrics': normalized_metrics,
         }
         run.save(update_fields=[
             'status', 'completed_at', 'failed_at', 'error_message', 'review_report', 'research_context',
@@ -565,6 +637,9 @@ def update_generation_run(run_id, *, status, n8n_execution_id='', error_message=
         if n8n_execution_id:
             run.n8n_execution_id = str(n8n_execution_id)[:160]
         if isinstance(metadata, dict):
+            metadata = dict(metadata)
+            if 'mission_metrics' in metadata:
+                metadata['mission_metrics'] = _normalize_mission_metrics(run, metadata['mission_metrics'])
             run.result_metadata = {**(run.result_metadata or {}), **metadata}
         update_fields = ['status', 'started_at', 'n8n_execution_id', 'result_metadata', 'updated_at']
         if status == GenerationRun.STATUS_FAILED:
