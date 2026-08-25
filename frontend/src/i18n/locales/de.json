@@ -17,7 +17,6 @@
   "nav": {
     "home": "Home",
     "basics": "Grundlagen",
-    "library": "Bibliothek",
     "leaderboard": "Rangliste",
     "missions": "Missionen",
     "training": "Training",
@@ -468,10 +467,6 @@
     "basics": {
       "title": "Grundlagen",
       "description": "Die wichtigsten AI-Basics für deinen Finance-Alltag"
-    },
-    "library": {
-      "title": "Bibliothek",
-      "description": "Materialien, Vorlagen und Links zum Nachschlagen"
     },
     "leaderboard": {
       "title": "Rangliste",

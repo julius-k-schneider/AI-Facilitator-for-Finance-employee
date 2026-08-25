@@ -26,7 +26,7 @@ from .services.ai_mission_generator import (
     split_target_slots,
 )
 from .services.ai_chat_challenge import evaluate_final_answers, validate_challenge
-from .services.email_notifications import send_daily_mission_reminders
+from .services.email_notifications import send_daily_mission_reminder, send_daily_mission_reminders
 from .services.mission_validation import MissionValidationError, validate_generated_payload
 from .services.skill_progression import evaluate_skill_progression, set_skill_level_manually
 
@@ -460,19 +460,19 @@ class AccountsApiTests(TestCase):
         payload['variants']['easy']['title_de'] = 'Titel 2'
         self.assertEqual(self.client.post('/api/auth/missions/schedule/', payload, content_type='application/json', secure=True).status_code, 409)
 
-    @patch('accounts.views.send_published_mission_email')
-    def test_published_mission_creation_sends_email_reminder(self, send_email_mock):
+    @patch('accounts.services.email_notifications.send_mail')
+    def test_published_mission_creation_does_not_send_email(self, send_mail_mock):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         self.create_user('player@example.com')
         payload = self.manual_mission_payload()
         self.client.force_login(creator)
 
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post('/api/auth/missions/schedule/', payload, content_type='application/json', secure=True)
+        response = self.client.post(
+            '/api/auth/missions/schedule/', payload, content_type='application/json', secure=True,
+        )
 
         self.assertEqual(response.status_code, 201)
-        send_email_mock.assert_called_once()
-        self.assertEqual(send_email_mock.call_args.args[0].title_de, 'Titel easy')
+        send_mail_mock.assert_not_called()
 
     @patch('accounts.services.email_notifications.send_daily_mission_reminder', return_value=1)
     def test_daily_mission_reminders_target_only_incomplete_users_once_on_friday(self, send_mock):
@@ -516,6 +516,23 @@ class AccountsApiTests(TestCase):
         self.assertEqual(result['sent'], 0)
         send_mock.assert_not_called()
         self.assertFalse(DailyMissionReminder.objects.exists())
+
+    @patch('accounts.services.email_notifications.send_mail', return_value=1)
+    def test_weekly_reminder_uses_german_dates_and_mentions_monday_noon_deadline(self, send_mail_mock):
+        user = self.create_user('reminder-copy@example.com')
+        creator = self.create_user('creator-copy@example.com', Profile.ROLE_CONTENT_CREATOR)
+        friday = date(2026, 8, 21)
+        monday = date(2026, 8, 17)
+        mission = self.create_mission(creator, monday)
+
+        result = send_daily_mission_reminder(user, friday, [mission], [mission])
+
+        self.assertEqual(result, 1)
+        message = send_mail_mock.call_args.args[1]
+        self.assertIn('17.08.2026', message)
+        self.assertIn('Zeitraum: 17.08.2026 bis 21.08.2026', message)
+        self.assertIn('bis Montag, den 24.08.2026, um 12:00 Uhr bearbeiten', message)
+        self.assertIn('until Monday, 2026-08-24, at 12:00 noon', message)
 
     def test_creator_can_create_supported_types_and_edit_from_calendar(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -817,20 +834,18 @@ class AccountsApiTests(TestCase):
         self.assertEqual(approved.reviewed_by, creator)
         self.assertEqual(rejected.status, Mission.STATUS_REJECTED)
 
-    @patch('accounts.views.send_published_mission_email')
-    def test_approving_review_mission_sends_email_reminder(self, send_email_mock):
+    @patch('accounts.services.email_notifications.send_mail')
+    def test_approving_review_mission_does_not_send_email(self, send_mail_mock):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         mission = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
         mission.status = Mission.STATUS_REVIEW
         mission.save(update_fields=['status'])
         self.client.force_login(creator)
 
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(f'/api/auth/missions/{mission.id}/approve/', secure=True)
+        response = self.client.post(f'/api/auth/missions/{mission.id}/approve/', secure=True)
 
         self.assertEqual(response.status_code, 200)
-        send_email_mock.assert_called_once()
-        self.assertEqual(send_email_mock.call_args.args[0].id, mission.id)
+        send_mail_mock.assert_not_called()
 
     def test_creator_can_approve_and_reject_all_review_missions(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -856,20 +871,18 @@ class AccountsApiTests(TestCase):
         third.refresh_from_db()
         self.assertEqual(third.status, Mission.STATUS_REJECTED)
 
-    @patch('accounts.views.send_published_mission_emails')
-    def test_approve_all_review_missions_sends_email_reminders(self, send_emails_mock):
+    @patch('accounts.services.email_notifications.send_mail')
+    def test_approve_all_review_missions_does_not_send_emails(self, send_mail_mock):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         first = self.create_mission(creator, timezone.localdate() + timedelta(days=1))
         second = self.create_mission(creator, timezone.localdate() + timedelta(days=2))
         Mission.objects.filter(id__in=[first.id, second.id]).update(status=Mission.STATUS_REVIEW)
         self.client.force_login(creator)
 
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post('/api/auth/missions/review/approve-all/', secure=True)
+        response = self.client.post('/api/auth/missions/review/approve-all/', secure=True)
 
         self.assertEqual(response.status_code, 200)
-        send_emails_mock.assert_called_once()
-        self.assertEqual({mission.id for mission in send_emails_mock.call_args.args[0]}, {first.id, second.id})
+        send_mail_mock.assert_not_called()
 
     def test_review_list_and_bulk_action_are_limited_to_selected_week(self):
         creator = self.create_user('creator-filter@example.com', Profile.ROLE_CONTENT_CREATOR)
