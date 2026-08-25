@@ -28,7 +28,6 @@ from .services.ai_task_challenge import (
     evaluate_task_answers,
     public_content as task_public_content,
 )
-from .services.email_notifications import send_published_mission_email, send_published_mission_emails
 from .services.n8n_client import N8NClientError, N8NConfigurationError
 from .services.n8n_mission_generation import (
     GenerationContractError,
