@@ -161,32 +161,6 @@ class AccountsApiTests(TestCase):
         self.assertNotIn('micro_learning', missions[0]['content'])
 
     @patch('accounts.views.timezone.now')
-    def test_daily_mission_is_selected_for_the_users_finance_role(self, now_mock):
-        monday = date(2026, 8, 24)
-        now_mock.return_value = self.local_datetime(monday)
-        creator = self.create_user('role-creator@example.com', Profile.ROLE_CONTENT_CREATOR)
-        accountant = self.create_user('accountant@example.com', Profile.ROLE_ACCOUNTANT)
-        controller = self.create_user('controller@example.com', Profile.ROLE_CONTROLLER)
-        accountant_mission = self.create_mission(creator, monday)
-        accountant_mission.target_role = Mission.TARGET_ACCOUNTANT
-        accountant_mission.title_en = 'Accounting close'
-        accountant_mission.save(update_fields=['target_role', 'title_en'])
-        controller_mission = self.create_mission(creator, monday)
-        controller_mission.target_role = Mission.TARGET_CONTROLLER
-        controller_mission.title_en = 'Variance analysis'
-        controller_mission.save(update_fields=['target_role', 'title_en'])
-
-        self.client.force_login(accountant)
-        accountant_payload = self.client.get('/api/auth/missions/today/?lang=en', secure=True).json()['missions']
-        self.client.force_login(controller)
-        controller_payload = self.client.get('/api/auth/missions/today/?lang=en', secure=True).json()['missions']
-
-        self.assertEqual([item['id'] for item in accountant_payload], [accountant_mission.id])
-        self.assertEqual([item['id'] for item in controller_payload], [controller_mission.id])
-        self.assertEqual(accountant_payload[0]['target_role'], Mission.TARGET_ACCOUNTANT)
-        self.assertEqual(controller_payload[0]['target_role'], Mission.TARGET_CONTROLLER)
-
-    @patch('accounts.views.timezone.now')
     def test_available_missions_include_open_week_missions_but_not_today_completed_or_expired(self, now_mock):
         creator = self.create_user('creator-available@example.com', Profile.ROLE_CONTENT_CREATOR)
         player = self.create_user('player-available@example.com')
@@ -1507,7 +1481,7 @@ class AiMissionServiceTests(TestCase):
             content={'question': {'de': 'Frage', 'en': 'Question'}, 'options': [], 'correct_index': 0},
             max_points=20, created_by=creator, status=Mission.STATUS_PUBLISHED,
         )
-        call_ai_mock.side_effect = lambda target_slots, *_args, **_kwargs: self.valid_payload(target_slots)
+        call_ai_mock.side_effect = self.valid_payload
         generate_task_mock.side_effect = lambda *args, **kwargs: self.task_candidate()
 
         created, actual_start, actual_end = generate_next_week(creator)
@@ -1522,19 +1496,18 @@ class AiMissionServiceTests(TestCase):
         weekend_days = [start + timedelta(days=offset) for offset in (5, 6)]
         self.assertEqual(Mission.objects.filter(scheduled_date__in=weekend_days).count(), 0)
 
-        # 4 open weekdays (Tue-Fri): each profession gets its own mission topic.
-        self.assertEqual(len(created), 8)
+        # 4 open weekdays (Tue-Fri): each gets exactly one mission topic.
+        self.assertEqual(len(created), 4)
         self.assertTrue(all(mission.status == Mission.STATUS_REVIEW for mission in created))
         self.assertTrue(all(mission.generated_by_ai for mission in created))
         task_created = [mission for mission in created if mission.mission_type in Mission.TASK_TYPES]
         quiz_created = [mission for mission in created if mission.mission_type in Mission.CHOICE_TYPES]
-        self.assertEqual(len(task_created), 4)
-        self.assertEqual(len(quiz_created), 4)
+        self.assertEqual(len(task_created), 2)
+        self.assertEqual(len(quiz_created), 2)
         for day in (start + timedelta(days=offset) for offset in range(1, 5)):
             day_missions = [mission for mission in created if mission.scheduled_date == day]
-            self.assertEqual(len(day_missions), 2)
-            self.assertEqual({mission.target_role for mission in day_missions}, {'accountant', 'controller'})
-            self.assertTrue(all(mission.has_difficulty_variants for mission in day_missions))
+            self.assertEqual(len(day_missions), 1)
+            self.assertTrue(day_missions[0].has_difficulty_variants)
 
     @patch('accounts.services.ai_task_challenge.generate_task_challenge')
     @patch('accounts.services.ai_mission_generator.call_ai')

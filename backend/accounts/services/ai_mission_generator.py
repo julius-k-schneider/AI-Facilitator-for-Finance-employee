@@ -9,7 +9,6 @@ from datetime import timedelta
 from urllib import error, request
 
 from django.db import transaction
-from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import Mission
@@ -101,16 +100,11 @@ def next_calendar_week(reference_date=None):
     return start, start + timedelta(days=6)
 
 
-def build_user_prompt(target_slots, requested_type=None, target_role=None):
+def build_user_prompt(target_slots, requested_type=None):
     schedule = ', '.join(f'{day.isoformat()}: {count}' for day, count in sorted(target_slots.items()))
     type_requirement = f'Every mission must use exactly the type {requested_type}.' if requested_type else ''
-    role_instruction = {
-        Mission.TARGET_ACCOUNTANT: 'Tailor every scenario specifically to accountants: bookkeeping, invoices, reconciliations, accruals, closing and transaction-level controls.',
-        Mission.TARGET_CONTROLLER: 'Tailor every scenario specifically to controllers: planning, forecasting, variance analysis, management reporting and decision support.',
-    }.get(target_role, 'Use a scenario that is equally relevant to accountants and controllers.')
     return f"""Create exactly one daily mission topic for every requested date in this schedule: {schedule}.
 {type_requirement}
-{role_instruction}
 Every mission must use one common type and contain exactly easy, medium, and hard. Use one shared bilingual topic and
 learning objective. Each variant uses 10-50 points. Return this structure:
 {{"missions":[{{"date":"YYYY-MM-DD","type":"single_choice|multiple_choice|compliance_decision|prompt_selection|prompt_ranking|compliance_traffic_light",
@@ -173,7 +167,7 @@ def extract_json(content):
         raise AiMissionGenerationError('AI returned invalid JSON, likely due to a truncated response') from error_value
 
 
-def call_ai(target_slots, requested_type=None, target_role=None):
+def call_ai(target_slots, requested_type=None):
     api_key = os.environ.get('KICONNECT_API_KEY', '').strip()
     model = os.environ.get('KICONNECT_MODEL', '').strip()
     base_url = os.environ.get('KICONNECT_BASE_URL', 'https://chat.kiconnect.nrw/api/v1').rstrip('/')
@@ -185,7 +179,7 @@ def call_ai(target_slots, requested_type=None, target_role=None):
         'model': model,
         'messages': [
             {'role': 'system', 'content': SYSTEM_PROMPT},
-            {'role': 'user', 'content': build_user_prompt(target_slots, requested_type, target_role)},
+            {'role': 'user', 'content': build_user_prompt(target_slots, requested_type)},
         ],
         'temperature': 0.4,
         'max_tokens': max(1000, int(os.environ.get('KICONNECT_MAX_TOKENS', DEFAULT_MAX_TOKENS))),
@@ -233,11 +227,11 @@ def call_ai(target_slots, requested_type=None, target_role=None):
         raise AiMissionGenerationError('AI service is currently unavailable') from exception
 
 
-def generate_candidates(target_slots, requested_type=None, target_role=None):
+def generate_candidates(target_slots, requested_type=None):
     if not target_slots:
         return []
     try:
-        payload = call_ai(target_slots, requested_type, target_role)
+        payload = call_ai(target_slots, requested_type) if requested_type else call_ai(target_slots)
         candidates = validate_generated_payload(payload, target_slots)
         if requested_type and any(candidate['mission_type'] != requested_type for candidate in candidates):
             raise MissionValidationError(f'AI did not return the requested type {requested_type}')
@@ -263,12 +257,12 @@ def split_target_slots(target_slots, max_missions=MAX_MISSIONS_PER_REQUEST):
     return batches
 
 
-def generate_candidate_batch(target_slots, target_role=None):
+def generate_candidate_batch(target_slots):
     retries = max(0, int(os.environ.get('KICONNECT_GENERATION_RETRIES', DEFAULT_GENERATION_RETRIES)))
     last_error = None
     for attempt in range(retries + 1):
         try:
-            return generate_candidates(target_slots, target_role=target_role)
+            return generate_candidates(target_slots)
         except AiMissionGenerationError as exception:
             last_error = exception
             if attempt < retries:
@@ -278,17 +272,17 @@ def generate_candidate_batch(target_slots, target_role=None):
     raise last_error
 
 
-def generate_candidates_parallel(target_slots, target_role=None):
+def generate_candidates_parallel(target_slots):
     batches = split_target_slots(target_slots)
     if len(batches) <= 1:
-        return generate_candidate_batch(target_slots, target_role)
+        return generate_candidate_batch(target_slots)
     workers = max(1, min(
         len(batches),
         int(os.environ.get('KICONNECT_GENERATION_WORKERS', DEFAULT_GENERATION_WORKERS)),
     ))
     candidates = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = {executor.submit(generate_candidate_batch, batch, target_role): batch for batch in batches}
+        futures = {executor.submit(generate_candidate_batch, batch): batch for batch in batches}
         for future in as_completed(futures):
             candidates.extend(future.result())
     return sorted(candidates, key=lambda candidate: candidate['scheduled_date'])
@@ -320,7 +314,7 @@ def task_days_per_week():
         return 2
 
 
-def generate_task_day_candidates(task_days, target_role=None):
+def generate_task_day_candidates(task_days):
     """Generate one task challenge per requested day.
 
     Task challenges use a separate generator with a different schema, so they are
@@ -334,7 +328,7 @@ def generate_task_day_candidates(task_days, target_role=None):
     failed_days = []
     for day in task_days:
         try:
-            candidate = generate_task_challenge_variants(target_role=target_role)
+            candidate = generate_task_challenge_variants()
         except AiMissionGenerationError as exception:
             logger.warning('Task challenge generation failed for %s, falling back to a quiz day: %s', day.isoformat(), exception)
             failed_days.append(day)
@@ -376,37 +370,32 @@ def generate_next_week(created_by, force=False, reference_date=None, week_start=
     task_days = set(random.sample(open_weekdays, wanted_task_days)) if wanted_task_days else set()
     quiz_days = [day for day in open_weekdays if day not in task_days]
 
-    candidates = []
-    expected_slots = []
-    for target_role in (Mission.TARGET_ACCOUNTANT, Mission.TARGET_CONTROLLER):
-        task_candidates, failed_task_days = generate_task_day_candidates(task_days, target_role)
-        quiz_slots = {day: 1 for day in [*quiz_days, *failed_task_days]}
-        role_candidates = generate_candidates_parallel(quiz_slots, target_role) if quiz_slots else []
-        role_candidates.extend(task_candidates)
-        for candidate in role_candidates:
-            candidate['target_role'] = target_role
-            candidates.append(candidate)
-            expected_slots.append((candidate['scheduled_date'], target_role))
+    task_candidates, failed_task_days = generate_task_day_candidates(task_days)
+    quiz_slots = {day: 1 for day in [*quiz_days, *failed_task_days]}
+    candidates = generate_candidates_parallel(quiz_slots) if quiz_slots else []
+    candidates.extend(task_candidates)
+
+    expected_counts = {day: 1 for day in task_days if day not in failed_task_days}
+    expected_counts.update({day: 1 for day in quiz_slots})
 
     with transaction.atomic():
         missions = Mission.objects.select_for_update().filter(scheduled_date__range=(week_start, week_end))
         if force:
             missions.filter(status=Mission.STATUS_REVIEW, generated_by_ai=True).delete()
-        for day, target_role in expected_slots:
+        for day, expected_count in expected_counts.items():
             occupied = Mission.objects.filter(
                 scheduled_date=day,
                 status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
-            )
-            if occupied.filter(Q(target_role=Mission.TARGET_ALL) | Q(target_role=target_role)).exists():
+            ).count()
+            if occupied + expected_count > 1:
                 raise AiMissionGenerationError(
-                    f'mission schedule changed during generation for {day.isoformat()} and {target_role}; please try again'
+                    f'mission schedule changed during generation for {day.isoformat()}; please try again'
                 )
         batch_id = uuid.uuid4()
         created = []
         for candidate in candidates:
             mission = Mission(
                 created_by=created_by,
-                target_role=candidate['target_role'],
                 status=Mission.STATUS_REVIEW,
                 generated_by_ai=True,
                 generation_batch_id=batch_id,
@@ -422,10 +411,10 @@ def regenerate_review_mission(mission, requested_by):
         raise AiMissionGenerationError('Only AI review missions can be regenerated')
     if mission.mission_type in Mission.TASK_TYPES:
         from accounts.services.ai_task_challenge import generate_task_challenge_variants
-        candidate = generate_task_challenge_variants(mission.mission_type, target_role=mission.target_role)
+        candidate = generate_task_challenge_variants(mission.mission_type)
         candidate['scheduled_date'] = mission.scheduled_date
     else:
-        candidate = generate_candidates({mission.scheduled_date: 1}, target_role=mission.target_role)[0]
+        candidate = generate_candidates({mission.scheduled_date: 1})[0]
     with transaction.atomic():
         locked = Mission.objects.select_for_update().get(id=mission.id)
         apply_candidate(locked, candidate)

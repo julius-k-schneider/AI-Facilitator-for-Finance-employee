@@ -565,26 +565,22 @@ def validate_task_challenge(payload, mission_type):
     }
 
 
-def generate_task_challenge(mission_type=None, difficulty=None, target_role=None):
+def generate_task_challenge(mission_type=None, difficulty=None):
     mission_type = mission_type or random.choice(TASK_CHALLENGE_TYPES)
     if mission_type not in TASK_CHALLENGE_PROMPTS:
         raise AiMissionGenerationError('Unsupported task challenge type')
     difficulty_instruction = DIFFICULTY_INSTRUCTIONS.get(difficulty, '')
-    role_instruction = {
-        'accountant': 'Use an accounting-specific scenario involving invoices, postings, reconciliation, accruals or closing controls.',
-        'controller': 'Use a controlling-specific scenario involving budgets, forecasts, variances, management reporting or decision support.',
-    }.get(target_role, '')
     payload = extract_json(_completion([
         {'role': 'system', 'content': SYSTEM_PROMPT},
-        {'role': 'user', 'content': f'{TASK_CHALLENGE_PROMPTS[mission_type]}\n\n{difficulty_instruction}\n\n{role_instruction}'},
+        {'role': 'user', 'content': f'{TASK_CHALLENGE_PROMPTS[mission_type]}\n\n{difficulty_instruction}'},
     ], json_mode=True, temperature=0.5, max_tokens=4500))
     return validate_task_challenge(payload, mission_type)
 
 
-def generate_task_challenge_variants(mission_type=None, target_role=None):
+def generate_task_challenge_variants(mission_type=None):
     mission_type = mission_type or random.choice(TASK_CHALLENGE_TYPES)
     variants = {
-        difficulty: generate_task_challenge(mission_type, difficulty=difficulty, target_role=target_role)
+        difficulty: generate_task_challenge(mission_type, difficulty=difficulty)
         for difficulty in ('easy', 'medium', 'hard')
     }
     easy = variants['easy']
