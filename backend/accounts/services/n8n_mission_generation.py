@@ -21,11 +21,11 @@ from accounts.services.ai_mission_generator import (
     plan_next_week,
 )
 from accounts.services.ai_task_challenge import (
-    DIFFICULTY_INSTRUCTIONS,
     SYSTEM_PROMPT as TASK_SYSTEM_PROMPT,
     TASK_CHALLENGE_PROMPTS,
     TASK_CHALLENGE_TYPES,
     TASK_TOPICS,
+    build_difficulty_instruction,
     validate_task_challenge,
 )
 from accounts.services.mission_validation import MissionValidationError, validate_generated_payload
@@ -108,7 +108,10 @@ def _task_requirement(requirement_id, scheduled_date, mission_type, difficulties
                     {'role': 'system', 'content': TASK_SYSTEM_PROMPT},
                     {
                         'role': 'user',
-                        'content': f'{TASK_CHALLENGE_PROMPTS[mission_type]}\n\n{DIFFICULTY_INSTRUCTIONS[difficulty]}',
+                        'content': (
+                            f'{TASK_CHALLENGE_PROMPTS[mission_type]}\n\n'
+                            f'{build_difficulty_instruction(mission_type, difficulty)}'
+                        ),
                     },
                 ], temperature=0.5, max_tokens=4500),
             }
@@ -301,7 +304,9 @@ def _validated_task_mission(requirement, result):
     variants = {}
     for difficulty in Mission.DIFFICULTIES:
         try:
-            variants[difficulty] = validate_task_challenge(raw_variants[difficulty], mission_type)
+            variants[difficulty] = validate_task_challenge(
+                raw_variants[difficulty], mission_type, difficulty=difficulty,
+            )
         except AiMissionGenerationError as exception:
             raise GenerationContractError(str(exception)) from exception
     easy = variants[Mission.DIFFICULTY_EASY]
@@ -347,7 +352,9 @@ def validate_requirement_result(run, requirement_id, result):
         if raw_payload is None and isinstance(result.get('variants'), dict):
             raw_payload = result['variants'].get(difficulty)
         try:
-            return validate_task_challenge(raw_payload, requirement.get('mission_type'))
+            return validate_task_challenge(
+                raw_payload, requirement.get('mission_type'), difficulty=difficulty,
+            )
         except AiMissionGenerationError as exception:
             raise GenerationContractError(str(exception)) from exception
     if output_type == OUTPUT_TRAINING_CHAT:

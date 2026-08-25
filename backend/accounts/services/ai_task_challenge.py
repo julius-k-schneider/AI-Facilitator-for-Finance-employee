@@ -31,8 +31,8 @@ by miscalculating sums over dozens of rows.
 import random
 
 from accounts.prompts.task_challenges import (
-    DIFFICULTY_INSTRUCTIONS,
     SYSTEM_PROMPT,
+    build_difficulty_instruction,
     build_task_challenge_prompts,
 )
 from accounts.services.ai_chat_challenge import _completion
@@ -49,6 +49,33 @@ MIN_ROWS = 24
 MAX_ROWS = 60
 MIN_INVOICES = 12
 MAX_INVOICES = 20
+
+DIFFICULTY_POINTS = {'easy': 30, 'medium': 40, 'hard': 50}
+DEFAULT_RESULT_FIELD_IDS = {
+    TYPE_PLAN_ACTUAL_DEVIATION: ('total_overrun', 'count_over_threshold', 'max_deviation'),
+    TYPE_DUPLICATE_PAYMENT_HUNT: ('duplicate_pairs_count', 'risk_amount_sum'),
+    TYPE_INVOICE_EXTRACTION: ('top_invoice_number', 'top_vendor', 'total_amount'),
+}
+DIFFICULTY_RESULT_FIELD_IDS = {
+    TYPE_PLAN_ACTUAL_DEVIATION: {
+        'easy': ('total_overrun', 'count_over_threshold'),
+        'medium': ('total_overrun', 'count_over_threshold', 'max_deviation'),
+        'hard': (
+            'total_overrun', 'count_over_threshold', 'max_deviation',
+            'average_positive_overrun', 'total_underrun',
+        ),
+    },
+    TYPE_DUPLICATE_PAYMENT_HUNT: {
+        'easy': ('duplicate_pairs_count',),
+        'medium': ('duplicate_pairs_count', 'risk_amount_sum'),
+        'hard': ('duplicate_pairs_count', 'risk_amount_sum', 'largest_duplicate_amount'),
+    },
+    TYPE_INVOICE_EXTRACTION: {
+        'easy': ('top_invoice_number', 'total_amount'),
+        'medium': ('top_invoice_number', 'total_amount', 'top_vendor'),
+        'hard': ('top_invoice_number', 'total_amount', 'top_vendor', 'average_invoice_amount'),
+    },
+}
 
 TASK_TOPICS = {
     TYPE_BULK_CATEGORIZATION: {
@@ -87,6 +114,10 @@ def _format_amount(amount):
     # German number format (period thousands, comma decimal) so pasted case data is
     # recognized as a real number in a German-locale Excel, not as text.
     return f'{amount:,.2f}'.replace(',', ' ').replace('.', ',').replace(' ', '.')
+
+
+def _format_amount_en(amount):
+    return f'{amount:,.2f}'
 
 
 def _bilingual(payload, prefix, field):
@@ -160,9 +191,8 @@ def _validate_bulk_categorization(payload):
             raise AiMissionGenerationError(f'AI task challenge row {index + 1} category is out of range')
         totals[category_index] += amount
         counts[category_index] += 1
-        formatted = _format_amount(amount)
-        case_de.append(f'{date} | {formatted} € | {description_de}')
-        case_en.append(f'{date} | {formatted} € | {description_en}')
+        case_de.append(f'{date} | {_format_amount(amount)} € | {description_de}')
+        case_en.append(f'{date} | €{_format_amount_en(amount)} | {description_en}')
 
     if any(count < 3 for count in counts):
         raise AiMissionGenerationError('AI task challenge must use every category at least three times')
@@ -175,7 +205,7 @@ def _validate_bulk_categorization(payload):
             {'de': f'Summe {category["de"]} (€)', 'en': f'Total {category["en"]} (€)'},
             '€', total, 0.5,
             f'Die korrekte Summe für {category["de"]} beträgt {_format_amount(total)} €.',
-            f'The correct total for {category["en"]} is {_format_amount(total)} €.',
+            f'The correct total for {category["en"]} is €{_format_amount_en(total)}.',
         ))
 
     return {'de': case_de, 'en': case_en}, result_fields, 'table'
@@ -189,6 +219,8 @@ def _validate_plan_actual_deviation(payload):
     case_de = []
     case_en = []
     total_overrun = 0.0
+    positive_overrun_count = 0
+    total_underrun = 0.0
     over_threshold = 0
     max_deviation = None
     for index, row in enumerate(rows):
@@ -203,26 +235,31 @@ def _validate_plan_actual_deviation(payload):
         deviation = round(actual - plan, 2)
         if deviation > 0:
             total_overrun += deviation
+            positive_overrun_count += 1
             if deviation / plan > 0.10:
                 over_threshold += 1
+        elif deviation < 0:
+            total_underrun += abs(deviation)
         if max_deviation is None or deviation > max_deviation:
             max_deviation = deviation
-        plan_fmt = _format_amount(plan)
-        actual_fmt = _format_amount(actual)
-        case_de.append(f'{name_de} | Plan {plan_fmt} € | Ist {actual_fmt} €')
-        case_en.append(f'{name_en} | Plan {plan_fmt} € | Actual {actual_fmt} €')
+        case_de.append(f'{name_de} | Plan {_format_amount(plan)} € | Ist {_format_amount(actual)} €')
+        case_en.append(
+            f'{name_en} | Plan €{_format_amount_en(plan)} | Actual €{_format_amount_en(actual)}'
+        )
 
     if over_threshold < 4:
         raise AiMissionGenerationError('AI task challenge needs at least 4 cost centers overrunning plan by more than 10%')
 
     total_overrun = round(total_overrun, 2)
     max_deviation = round(max_deviation, 2)
+    average_positive_overrun = round(total_overrun / positive_overrun_count, 2)
+    total_underrun = round(total_underrun, 2)
     result_fields = [
         _number_field(
             'total_overrun', {'de': 'Summe der Budgetüberschreitungen (€)', 'en': 'Total budget overruns (€)'},
             '€', total_overrun, 0.5,
             f'Die Summe aller Überschreitungen beträgt {_format_amount(total_overrun)} €.',
-            f'The total of all overruns is {_format_amount(total_overrun)} €.',
+            f'The total of all overruns is €{_format_amount_en(total_overrun)}.',
         ),
         _number_field(
             'count_over_threshold',
@@ -235,7 +272,21 @@ def _validate_plan_actual_deviation(payload):
             'max_deviation', {'de': 'Größte Einzelabweichung (€)', 'en': 'Largest single deviation (€)'},
             '€', max_deviation, 0.5,
             f'Die größte Einzelabweichung beträgt {_format_amount(max_deviation)} €.',
-            f'The largest single deviation is {_format_amount(max_deviation)} €.',
+            f'The largest single deviation is €{_format_amount_en(max_deviation)}.',
+        ),
+        _number_field(
+            'average_positive_overrun',
+            {'de': 'Durchschnittliche positive Überschreitung (€)', 'en': 'Average positive overrun (€)'},
+            '€', average_positive_overrun, 0.5,
+            f'Die durchschnittliche positive Überschreitung beträgt {_format_amount(average_positive_overrun)} €.',
+            f'The average positive overrun is €{_format_amount_en(average_positive_overrun)}.',
+        ),
+        _number_field(
+            'total_underrun',
+            {'de': 'Summe der Budgetunterschreitungen (€)', 'en': 'Total budget underruns (€)'},
+            '€', total_underrun, 0.5,
+            f'Die Summe aller absoluten Unterschreitungen beträgt {_format_amount(total_underrun)} €.',
+            f'The absolute total of all underruns is €{_format_amount_en(total_underrun)}.',
         ),
     ]
     return {'de': case_de, 'en': case_en}, result_fields, 'table'
@@ -260,12 +311,12 @@ def _validate_duplicate_payment_hunt(payload):
         if amount <= 0:
             raise AiMissionGenerationError(f'AI task challenge row {index + 1} amount must be positive')
         by_invoice.setdefault(invoice_number, []).append(amount)
-        formatted = _format_amount(amount)
-        case_de.append(f'{date} | {vendor_de} | Rechnung {invoice_number} | {formatted} €')
-        case_en.append(f'{date} | {vendor_en} | Invoice {invoice_number} | {formatted} €')
+        case_de.append(f'{date} | {vendor_de} | Rechnung {invoice_number} | {_format_amount(amount)} €')
+        case_en.append(f'{date} | {vendor_en} | Invoice {invoice_number} | €{_format_amount_en(amount)}')
 
     duplicate_pairs = 0
     risk_amount = 0.0
+    largest_duplicate_amount = 0.0
     for invoice_number, amounts in by_invoice.items():
         if len(amounts) > 2:
             raise AiMissionGenerationError(f'AI task challenge invoice number {invoice_number} appears more than twice')
@@ -274,6 +325,7 @@ def _validate_duplicate_payment_hunt(payload):
                 raise AiMissionGenerationError(f'AI task challenge duplicate pair {invoice_number} amounts must match')
             duplicate_pairs += 1
             risk_amount += amounts[1]
+            largest_duplicate_amount = max(largest_duplicate_amount, amounts[1])
 
     if duplicate_pairs < 3:
         raise AiMissionGenerationError('AI task challenge needs at least 3 duplicate payment pairs')
@@ -290,7 +342,14 @@ def _validate_duplicate_payment_hunt(payload):
             'risk_amount_sum', {'de': 'Summe Doppelzahlungsrisiko (€)', 'en': 'Total duplicate payment risk (€)'},
             '€', risk_amount, 0.5,
             f'Das Doppelzahlungsrisiko beträgt {_format_amount(risk_amount)} €.',
-            f'The duplicate payment risk totals {_format_amount(risk_amount)} €.',
+            f'The duplicate payment risk totals €{_format_amount_en(risk_amount)}.',
+        ),
+        _number_field(
+            'largest_duplicate_amount',
+            {'de': 'Größte einzelne Doppelzahlung (€)', 'en': 'Largest single duplicate payment (€)'},
+            '€', largest_duplicate_amount, 0.5,
+            f'Die größte einzelne Doppelzahlung beträgt {_format_amount(largest_duplicate_amount)} €.',
+            f'The largest single duplicate payment is €{_format_amount_en(largest_duplicate_amount)}.',
         ),
     ]
     return {'de': case_de, 'en': case_en}, result_fields, 'table'
@@ -347,6 +406,7 @@ def _validate_invoice_extraction(payload):
     top_vendor_de = max(vendor_totals_de, key=vendor_totals_de.get)
     top_vendor_en = max(vendor_totals_en, key=vendor_totals_en.get)
     total_amount = round(total_amount, 2)
+    average_invoice_amount = round(total_amount / len(invoices), 2)
 
     result_fields = [
         _text_field(
@@ -365,7 +425,14 @@ def _validate_invoice_extraction(payload):
             'total_amount', {'de': 'Summe aller Rechnungen (€)', 'en': 'Total of all invoices (€)'},
             '€', total_amount, 0.5,
             f'Die Summe aller Rechnungen beträgt {_format_amount(total_amount)} €.',
-            f'The total of all invoices is {_format_amount(total_amount)} €.',
+            f'The total of all invoices is €{_format_amount_en(total_amount)}.',
+        ),
+        _number_field(
+            'average_invoice_amount',
+            {'de': 'Durchschnittlicher Rechnungsbetrag (€)', 'en': 'Average invoice amount (€)'},
+            '€', average_invoice_amount, 0.5,
+            f'Der durchschnittliche Rechnungsbetrag beträgt {_format_amount(average_invoice_amount)} €.',
+            f'The average invoice amount is €{_format_amount_en(average_invoice_amount)}.',
         ),
     ]
     return {'de': case_de, 'en': case_en}, result_fields, 'prose'
@@ -393,14 +460,140 @@ TASK_CHALLENGE_VALIDATORS = {
 TASK_CHALLENGE_TYPES = list(TASK_CHALLENGE_PROMPTS)
 
 
-def validate_task_challenge(payload, mission_type):
+def _validate_difficulty_contract(payload, mission_type, difficulty):
+    if difficulty not in DIFFICULTY_POINTS:
+        raise AiMissionGenerationError('Unsupported task challenge difficulty')
+    if mission_type == TYPE_INVOICE_EXTRACTION:
+        expected_items = {'easy': 12, 'medium': 16, 'hard': 20}[difficulty]
+        items = payload.get('invoices')
+        label = 'invoices'
+    else:
+        expected_items = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        items = payload.get('rows')
+        label = 'rows'
+    if not isinstance(items, list) or len(items) != expected_items:
+        raise AiMissionGenerationError(
+            f'AI task challenge difficulty {difficulty} needs exactly {expected_items} {label}'
+        )
+    if mission_type == TYPE_BULK_CATEGORIZATION:
+        expected_categories = {'easy': 3, 'medium': 4, 'hard': 5}[difficulty]
+        categories = payload.get('categories_de')
+        if not isinstance(categories, list) or len(categories) != expected_categories:
+            raise AiMissionGenerationError(
+                f'AI task challenge difficulty {difficulty} needs exactly {expected_categories} categories'
+            )
+    if mission_type == TYPE_DUPLICATE_PAYMENT_HUNT:
+        expected_pairs = {'easy': 3, 'medium': 4, 'hard': 6}[difficulty]
+        invoice_counts = {}
+        for row in items:
+            if isinstance(row, dict):
+                invoice_number = row.get('invoice_number')
+                invoice_counts[invoice_number] = invoice_counts.get(invoice_number, 0) + 1
+        actual_pairs = sum(1 for count in invoice_counts.values() if count == 2)
+        if actual_pairs != expected_pairs:
+            raise AiMissionGenerationError(
+                f'AI task challenge difficulty {difficulty} needs exactly {expected_pairs} duplicate pairs'
+            )
+    if mission_type == TYPE_PLAN_ACTUAL_DEVIATION and difficulty == 'hard':
+        underruns = sum(
+            1 for row in items
+            if isinstance(row, dict) and _amount(row.get('actual'), 'actual') < _amount(row.get('plan'), 'plan')
+        )
+        if underruns < 6:
+            raise AiMissionGenerationError('AI hard task challenge needs at least 6 cost centers below plan')
+
+
+def _task_instruction(payload, mission_type, difficulty):
+    if difficulty is None:
+        return _bilingual(payload, 'task', 'task')
+    if mission_type == TYPE_BULK_CATEGORIZATION:
+        categories_de = ', '.join(_text(value, 'category_de') for value in payload.get('categories_de', []))
+        categories_en = ', '.join(_text(value, 'category_en') for value in payload.get('categories_en', []))
+        return {
+            'de': (
+                f'Ordnen Sie jede Zeile genau einmal einer dieser Kategorien zu: {categories_de}. '
+                'Berichten Sie anschließend die Gesamtsumme für jede Kategorie.'
+            ),
+            'en': (
+                f'Assign every row exactly once to one of these categories: {categories_en}. '
+                'Then report the total for every category.'
+            ),
+        }
+    if mission_type == TYPE_PLAN_ACTUAL_DEVIATION:
+        instructions = {
+            'easy': {
+                'de': 'Berechnen Sie die Summe aller positiven Überschreitungen und die Anzahl der Kostenstellen, die mehr als 10 % über Plan liegen.',
+                'en': 'Calculate the total of all positive overruns and the number of cost centers more than 10% over plan.',
+            },
+            'medium': {
+                'de': 'Berechnen Sie die Summe aller positiven Überschreitungen, die Anzahl der Kostenstellen über 10 % und die größte positive Einzelabweichung.',
+                'en': 'Calculate total positive overruns, the count of cost centers over 10%, and the largest positive deviation.',
+            },
+            'hard': {
+                'de': 'Berechnen Sie die Summe aller positiven Überschreitungen, die Anzahl über 10 %, die größte und die durchschnittliche positive Überschreitung sowie die Summe aller absoluten Unterschreitungen.',
+                'en': 'Calculate total positive overruns, the count over 10%, the largest and average positive overrun, and the absolute total of all underruns.',
+            },
+        }
+        return instructions[difficulty]
+    if mission_type == TYPE_DUPLICATE_PAYMENT_HUNT:
+        instructions = {
+            'easy': {
+                'de': 'Ermitteln Sie die Anzahl der Doppelzahlungspaare anhand gleicher Rechnungsnummer und gleichen Betrags.',
+                'en': 'Determine the number of duplicate-payment pairs using matching invoice numbers and amounts.',
+            },
+            'medium': {
+                'de': 'Ermitteln Sie die Anzahl der Doppelzahlungspaare und die Summe des Doppelzahlungsrisikos.',
+                'en': 'Determine the number of duplicate-payment pairs and the total duplicate-payment risk.',
+            },
+            'hard': {
+                'de': 'Ermitteln Sie die Anzahl der Doppelzahlungspaare, die Summe des Doppelzahlungsrisikos und den größten einzelnen Doppelzahlungsbetrag.',
+                'en': 'Determine the number of duplicate-payment pairs, total duplicate-payment risk, and largest single duplicate-payment amount.',
+            },
+        }
+        return instructions[difficulty]
+    instructions = {
+        'easy': {
+            'de': 'Ermitteln Sie die Rechnungsnummer mit dem höchsten Betrag und die Gesamtsumme aller Rechnungen.',
+            'en': 'Determine the invoice number with the highest amount and the total across all invoices.',
+        },
+        'medium': {
+            'de': 'Ermitteln Sie die Rechnungsnummer mit dem höchsten Betrag, die Gesamtsumme und den Lieferanten mit dem größten Rechnungsvolumen.',
+            'en': 'Determine the highest-amount invoice number, total amount, and vendor with the largest invoice volume.',
+        },
+        'hard': {
+            'de': 'Ermitteln Sie die Rechnungsnummer mit dem höchsten Betrag, Gesamtsumme, Lieferant mit dem größten Volumen und durchschnittlichen Rechnungsbetrag.',
+            'en': 'Determine the highest-amount invoice number, total amount, vendor with the largest volume, and average invoice amount.',
+        },
+    }
+    return instructions[difficulty]
+
+
+def _result_fields_for_difficulty(result_fields, mission_type, difficulty):
+    if mission_type == TYPE_BULK_CATEGORIZATION:
+        return result_fields
+    field_ids = (
+        DIFFICULTY_RESULT_FIELD_IDS[mission_type][difficulty]
+        if difficulty is not None
+        else DEFAULT_RESULT_FIELD_IDS[mission_type]
+    )
+    by_id = {field['id']: field for field in result_fields}
+    try:
+        return [by_id[field_id] for field_id in field_ids]
+    except KeyError as exception:
+        raise AiMissionGenerationError('Task challenge result-field contract is incomplete') from exception
+
+
+def validate_task_challenge(payload, mission_type, difficulty=None):
     if not isinstance(payload, dict):
         raise AiMissionGenerationError('AI task challenge is invalid')
     if mission_type not in TASK_CHALLENGE_VALIDATORS:
         raise AiMissionGenerationError('Unsupported task challenge type')
+    if difficulty is not None:
+        _validate_difficulty_contract(payload, mission_type, difficulty)
     case_data, result_fields, case_format = TASK_CHALLENGE_VALIDATORS[mission_type](payload)
+    result_fields = _result_fields_for_difficulty(result_fields, mission_type, difficulty)
     content = {
-        'task': _bilingual(payload, 'task', 'task'),
+        'task': _task_instruction(payload, mission_type, difficulty),
         'case_data': case_data,
         'case_format': case_format,
         'result_fields': result_fields,
@@ -412,7 +605,7 @@ def validate_task_challenge(payload, mission_type):
         'title_en': _text(payload.get('title_en'), 'title_en'),
         'description_de': _text(payload.get('description_de'), 'description_de'),
         'description_en': _text(payload.get('description_en'), 'description_en'),
-        'max_points': DEFAULT_POINTS,
+        'max_points': DIFFICULTY_POINTS.get(difficulty, DEFAULT_POINTS),
         'content': content,
     }
 
@@ -421,12 +614,12 @@ def generate_task_challenge(mission_type=None, difficulty=None):
     mission_type = mission_type or random.choice(TASK_CHALLENGE_TYPES)
     if mission_type not in TASK_CHALLENGE_PROMPTS:
         raise AiMissionGenerationError('Unsupported task challenge type')
-    difficulty_instruction = DIFFICULTY_INSTRUCTIONS.get(difficulty, '')
+    difficulty_instruction = build_difficulty_instruction(mission_type, difficulty) if difficulty else ''
     payload = extract_json(_completion([
         {'role': 'system', 'content': SYSTEM_PROMPT},
         {'role': 'user', 'content': f'{TASK_CHALLENGE_PROMPTS[mission_type]}\n\n{difficulty_instruction}'},
     ], json_mode=True, temperature=0.5, max_tokens=4500))
-    return validate_task_challenge(payload, mission_type)
+    return validate_task_challenge(payload, mission_type, difficulty=difficulty)
 
 
 def generate_task_challenge_variants(mission_type=None):

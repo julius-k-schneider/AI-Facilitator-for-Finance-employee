@@ -274,7 +274,7 @@
           "genericAuthType": "httpHeaderAuth",
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{\n  {\n    model: $env.KICONNECT_MODEL,\n    messages: [\n      {\n        role: \"system\",\n        content: `You are an independent quality reviewer for AI-generated finance learning missions.\n\nYour task is to review the generated mission critically. You did not generate the mission yourself.\n\nCheck especially:\n- factual and logical correctness\n- whether German and English content are semantically consistent\n- whether instructions and expected answers are unambiguous\n- whether easy, medium and hard represent meaningful difficulty progression\n- whether solutions and feedback match the actual task\n- whether the mission accidentally reveals the solution\n- whether the content is appropriate for finance employees with limited AI experience\n- whether confidential, personal or company-internal information is avoided\n- whether compliance claims are phrased appropriately\n- whether the mission is practically useful and understandable\n\nThe mission field is a deterministically validated, learner-facing projection. Review its educational and semantic content, not transport wrappers or compatibility fields. Do not request schema or wrapper changes. Use verdict \"revise\" only when at least one medium- or high-severity issue requires a content change; low-severity or purely stylistic observations alone must not trigger repair.\n\nReturn JSON only.\n\nReturn exactly:\n{\n  \"verdict\": \"pass\" | \"revise\",\n  \"score\": 0.0,\n  \"issues\": [\n    {\n      \"code\": \"short_issue_code\",\n      \"message\": \"clear explanation of the problem\",\n      \"severity\": \"low\" | \"medium\" | \"high\"\n    }\n  ]\n}\n\nUse verdict \"pass\" only if the mission can safely proceed without modification.\nThe score must be between 0 and 1.\nIf verdict is \"pass\", issues should normally be empty.`\n      },\n      {\n        role: \"user\",\n        content: JSON.stringify((() => {\n          const context = $json;\n          const normalized = context.validation.normalized_result;\n          const mission = normalized?.variants\n            ? {\n                mission_type: context.mission_type ?? normalized.mission_type ?? null,\n                topic_de: normalized.topic_de ?? null,\n                topic_en: normalized.topic_en ?? null,\n                learning_objective_de: normalized.learning_objective_de ?? null,\n                learning_objective_en: normalized.learning_objective_en ?? null,\n                scheduled_date: normalized.scheduled_date ?? context.scheduled_date,\n                variants: normalized.variants\n              }\n            : normalized;\n          return {\n            requirement_id: context.requirement_id,\n            output_type: context.output_type,\n            mission_type: context.mission_type,\n            mission\n          };\n        })())\n      }\n    ],\n    temperature: 0.2,\n    max_tokens: 2000,\n    response_format: {\n      type: \"json_object\"\n    }\n  }\n}}",
+          "jsonBody": "={{\n  (() => {\n    const context = $json;\n    const normalized = context.validation.normalized_result;\n    const sampleIndices = (length) => [...new Set([0, 1, Math.floor(length / 2), length - 2, length - 1]\n      .filter((index) => index >= 0 && index < length))];\n    const collectionName = context.mission_type === 'invoice_extraction' ? 'invoices' : 'rows';\n    const bilingualField = {\n      bulk_categorization: 'description',\n      plan_actual_deviation: 'cost_center',\n      duplicate_payment_hunt: 'vendor',\n      invoice_extraction: 'text',\n    }[context.mission_type] ?? 'description';\n    const compactTaskVariant = (variant, difficulty) => {\n      const content = variant?.content ?? {};\n      const caseDe = Array.isArray(content.case_data?.de) ? content.case_data.de : [];\n      const caseEn = Array.isArray(content.case_data?.en) ? content.case_data.en : [];\n      const sample = sampleIndices(Math.max(caseDe.length, caseEn.length)).map((index) => ({\n        index,\n        source_path_de: '/variants/' + difficulty + '/' + collectionName + '/' + index + '/' + bilingualField + '_de',\n        source_path_en: '/variants/' + difficulty + '/' + collectionName + '/' + index + '/' + bilingualField + '_en',\n        de: caseDe[index] ?? null,\n        en: caseEn[index] ?? null,\n      }));\n      return {\n        title_de: variant?.title_de,\n        title_en: variant?.title_en,\n        description_de: variant?.description_de,\n        description_en: variant?.description_en,\n        task_de: content.task?.de,\n        task_en: content.task?.en,\n        case_format: content.case_format,\n        dataset: { rows_de: caseDe.length, rows_en: caseEn.length, sample },\n        result_fields: (Array.isArray(content.result_fields) ? content.result_fields : []).map((field) => ({\n          id: field.id,\n          type: field.type,\n          label: field.label,\n          unit: field.unit,\n        })),\n        micro_learning_de: content.micro_learning?.de,\n        micro_learning_en: content.micro_learning?.en,\n      };\n    };\n    let mission = normalized;\n    if (context.output_type === 'task_mission' && normalized?.variants) {\n      mission = {\n        representation_note: 'Canonical review projection; no duplicate compatibility fields are present.',\n        mission_type: context.mission_type ?? normalized.mission_type ?? null,\n        topic_de: normalized.topic_de ?? null,\n        topic_en: normalized.topic_en ?? null,\n        learning_objective_de: normalized.learning_objective_de ?? null,\n        learning_objective_en: normalized.learning_objective_en ?? null,\n        scheduled_date: normalized.scheduled_date ?? context.scheduled_date,\n        variants: Object.fromEntries(Object.entries(normalized.variants)\n          .map(([difficulty, variant]) => [difficulty, compactTaskVariant(variant, difficulty)])),\n      };\n    } else if (context.output_type === 'quiz_mission' && normalized?.variants) {\n      mission = {\n        representation_note: 'Canonical review projection; top-level easy compatibility fields are intentionally omitted.',\n        mission_type: normalized.mission_type ?? normalized.type ?? null,\n        topic_de: normalized.topic_de ?? null,\n        topic_en: normalized.topic_en ?? null,\n        learning_objective_de: normalized.learning_objective_de ?? null,\n        learning_objective_en: normalized.learning_objective_en ?? null,\n        scheduled_date: normalized.scheduled_date ?? context.scheduled_date,\n        variants: normalized.variants,\n      };\n    }\n    return {\n      model: $env.KICONNECT_MODEL,\n      messages: [\n        { role: 'system', content: \"Reasoning: low.\\nYou are the independent semantic reviewer for a deterministically validated finance learning mission.\\nDjango already verified JSON shape, row counts, calculations, answer indices, and required fields. Review only:\\n- clear and equivalent German/English meaning\\n- one unambiguous task and answer\\n- consistent output format and learner instructions\\n- useful easy/medium/hard progression\\n- feedback and micro-learning that match the task\\n- safe, fictional, non-confidential content\\nThe mission field is a canonical review projection. Never report duplicate top-level/easy content or missing storage-wrapper fields. Task result_fields are generated by Django and are not repair targets; judge only whether the task requests exactly those visible results.\\nDo not request transport, schema, row-count, or purely stylistic changes. Locale-specific number presentation is handled by the application. Use revise only for an actionable medium/high issue. For each issue, include 1-6 exact raw patch paths when the supplied projection exposes them. Return strict JSON only:\\n{\\\"verdict\\\":\\\"pass|revise\\\",\\\"score\\\":0.0,\\\"issues\\\":[{\\\"code\\\":\\\"short_code\\\",\\\"message\\\":\\\"actionable problem\\\",\\\"severity\\\":\\\"low|medium|high\\\",\\\"paths\\\":[\\\"/variants/easy/task_de\\\"]}]}\\nFor pass, return an empty issues array.\" },\n        { role: 'user', content: JSON.stringify({\n          requirement_id: context.requirement_id,\n          output_type: context.output_type,\n          mission_type: context.mission_type,\n          mission,\n        }) },\n      ],\n      temperature: 0.1,\n      max_tokens: 1000,\n      response_format: { type: 'json_object' },\n    };\n  })()\n}}",
           "options": {
             "timeout": 180000
           }
@@ -316,7 +316,7 @@
       {
         "parameters": {
           "mode": "runOnceForAllItems",
-          "jsCode": "function extractJsonText(value) {\n  if (typeof value !== 'string' || !value.trim()) return '';\n  let text = value.trim().replace(/^\\uFEFF/, '');\n  if (text.startsWith('```')) {\n    const lines = text.split('\\n');\n    lines.shift();\n    if (lines.length && lines[lines.length - 1].trim().startsWith('```')) lines.pop();\n    text = lines.join('\\n').trim();\n  }\n\n  const objectStart = text.indexOf('{');\n  const arrayStart = text.indexOf('[');\n  const starts = [objectStart, arrayStart].filter((index) => index >= 0);\n  if (!starts.length) return text;\n  const start = Math.min(...starts);\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n\n  for (let index = start; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') inString = true;\n    else if (character === '{' || character === '[') stack.push(character);\n    else if (character === '}' || character === ']') {\n      const expected = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] === expected) stack.pop();\n      if (stack.length === 0) return text.slice(start, index + 1).trim();\n    }\n  }\n  return text.slice(start).trim();\n}\n\nfunction sanitizeJsonText(text) {\n  let output = '';\n  let inString = false;\n  let escaped = false;\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (!escaped && character.charCodeAt(0) < 32) {\n        if (character === '\\n') output += '\\\\n';\n        else if (character === '\\r') output += '\\\\r';\n        else if (character === '\\t') output += '\\\\t';\n        else output += '\\\\u' + character.charCodeAt(0).toString(16).padStart(4, '0');\n        continue;\n      }\n      output += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n\n    if (character === '\"') {\n      inString = true;\n      output += character;\n      continue;\n    }\n    if (character === '_' && /\\d/.test(text[index - 1] || '') && /\\d/.test(text[index + 1] || '')) {\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '/') {\n      while (index + 1 < text.length && text[index + 1] !== '\\n') index += 1;\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '*') {\n      index += 2;\n      while (index < text.length - 1 && !(text[index] === '*' && text[index + 1] === '/')) index += 1;\n      index += 1;\n      continue;\n    }\n    if (character === ',') {\n      let nextIndex = index + 1;\n      while (/\\s/.test(text[nextIndex] || '')) nextIndex += 1;\n      if (text[nextIndex] === '}' || text[nextIndex] === ']') continue;\n    }\n    output += character === '\\u00A0' ? ' ' : character;\n  }\n  return output;\n}\n\nfunction repairTerminalJsonStructure(text) {\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n  let repaired = '';\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      repaired += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') {\n      inString = true;\n      repaired += character;\n    } else if (character === '{' || character === '[') {\n      stack.push(character);\n      repaired += character;\n    } else if (character === '}' || character === ']') {\n      const expectedOpening = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] !== expectedOpening) {\n        const onlyWhitespaceRemains = !text.slice(index + 1).trim();\n        const matchingIndex = stack.lastIndexOf(expectedOpening);\n        if (!onlyWhitespaceRemains || matchingIndex < 0) return null;\n        repaired += stack.splice(matchingIndex + 1).reverse()\n          .map((opening) => opening === '{' ? '}' : ']').join('');\n      }\n      stack.pop();\n      repaired += character;\n    } else {\n      repaired += character;\n    }\n  }\n  if (inString || escaped) return null;\n  repaired += stack.reverse().map((opening) => opening === '{' ? '}' : ']').join('');\n  return repaired === text ? null : repaired;\n}\n\nfunction parseAiJson(value) {\n  const extracted = extractJsonText(value);\n  if (!extracted) return { ok: false, error: 'AI returned an empty JSON response', repairs: [] };\n  const sanitized = sanitizeJsonText(extracted);\n  const candidates = [{ text: extracted, repairs: [] }];\n  if (sanitized !== extracted) candidates.push({ text: sanitized, repairs: ['safe_json_syntax'] });\n\n  for (const candidate of [...candidates]) {\n    const terminal = repairTerminalJsonStructure(candidate.text);\n    if (terminal !== null) {\n      candidates.push({ text: terminal, repairs: [...candidate.repairs, 'terminal_structure'] });\n    }\n  }\n\n  let firstError = null;\n  const seen = new Set();\n  for (const candidate of candidates) {\n    if (seen.has(candidate.text)) continue;\n    seen.add(candidate.text);\n    try {\n      let payload = JSON.parse(candidate.text);\n      if (typeof payload === 'string') {\n        const nested = extractJsonText(payload);\n        if (nested && nested !== payload) payload = JSON.parse(sanitizeJsonText(nested));\n      }\n      return { ok: true, payload, repairs: candidate.repairs };\n    } catch (error) {\n      firstError = firstError || error;\n    }\n  }\n  return {\n    ok: false,\n    error: firstError ? firstError.message : 'AI returned invalid JSON',\n    repairs: [],\n  };\n}\n\nreturn $input.all().map((item) => {\n  const context = item.json;\n  const content = context.choices?.[0]?.message?.content;\n  const parsed = parseAiJson(content);\n  let review;\n  if (!parsed.ok || !parsed.payload || typeof parsed.payload !== 'object' || Array.isArray(parsed.payload)) {\n    const transportMessage = context.error?.message ?? context.error ?? context.message;\n    review = {\n      verdict: 'revise',\n      score: 0,\n      issues: [{\n        code: 'reviewer_response_invalid',\n        message: 'Reviewer response was unavailable or invalid after retry: ' + String(transportMessage || parsed.error || 'invalid review object'),\n        severity: 'medium',\n      }],\n    };\n  } else {\n    const candidate = parsed.payload;\n    const verdict = String(candidate.verdict ?? '').toLowerCase();\n    const score = Number(candidate.score);\n    const issues = Array.isArray(candidate.issues) ? candidate.issues : [];\n    review = {\n      verdict: verdict === 'pass' || verdict === 'revise' ? verdict : 'revise',\n      score: Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : 0,\n      issues: issues.map((issue) => ({\n        code: String(issue?.code || 'review_issue'),\n        message: String(issue?.message || 'Reviewer requested a revision.'),\n        severity: ['low', 'medium', 'high'].includes(issue?.severity) ? issue.severity : 'medium',\n      })),\n    };\n    if (!['pass', 'revise'].includes(verdict)) {\n      review.issues.push({ code: 'reviewer_verdict_invalid', message: 'Reviewer returned an invalid verdict.', severity: 'medium' });\n    }\n  }\n  return { json: {\n    generation_run_id: context.generation_run_id,\n    orchestrator_execution_id: context.orchestrator_execution_id ?? null,\n    requirement_id: context.requirement_id,\n    output_type: context.output_type,\n    scheduled_date: context.scheduled_date,\n    mission_type: context.mission_type ?? null,\n    result: context.result,\n    repair_attempt: Number(context.repair_attempt ?? 0),\n    validation: context.validation,\n    validation_errors: context.validation_errors ?? [],\n    review,\n    reviewer_json_repairs: parsed.repairs,\n  } };\n});"
+          "jsCode": "function extractJsonText(value) {\n  if (typeof value !== 'string' || !value.trim()) return '';\n  let text = value.trim().replace(/^\\uFEFF/, '');\n  if (text.startsWith('```')) {\n    const lines = text.split('\\n');\n    lines.shift();\n    if (lines.length && lines[lines.length - 1].trim().startsWith('```')) lines.pop();\n    text = lines.join('\\n').trim();\n  }\n\n  const objectStart = text.indexOf('{');\n  const arrayStart = text.indexOf('[');\n  const starts = [objectStart, arrayStart].filter((index) => index >= 0);\n  if (!starts.length) return text;\n  const start = Math.min(...starts);\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n\n  for (let index = start; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') inString = true;\n    else if (character === '{' || character === '[') stack.push(character);\n    else if (character === '}' || character === ']') {\n      const expected = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] === expected) stack.pop();\n      if (stack.length === 0) return text.slice(start, index + 1).trim();\n    }\n  }\n  return text.slice(start).trim();\n}\n\nfunction sanitizeJsonText(text) {\n  let output = '';\n  let inString = false;\n  let escaped = false;\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (!escaped && character.charCodeAt(0) < 32) {\n        if (character === '\\n') output += '\\\\n';\n        else if (character === '\\r') output += '\\\\r';\n        else if (character === '\\t') output += '\\\\t';\n        else output += '\\\\u' + character.charCodeAt(0).toString(16).padStart(4, '0');\n        continue;\n      }\n      output += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n\n    if (character === '\"') {\n      inString = true;\n      output += character;\n      continue;\n    }\n    if (character === '_' && /\\d/.test(text[index - 1] || '') && /\\d/.test(text[index + 1] || '')) {\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '/') {\n      while (index + 1 < text.length && text[index + 1] !== '\\n') index += 1;\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '*') {\n      index += 2;\n      while (index < text.length - 1 && !(text[index] === '*' && text[index + 1] === '/')) index += 1;\n      index += 1;\n      continue;\n    }\n    if (character === ',') {\n      let nextIndex = index + 1;\n      while (/\\s/.test(text[nextIndex] || '')) nextIndex += 1;\n      if (text[nextIndex] === '}' || text[nextIndex] === ']') continue;\n    }\n    output += character === '\\u00A0' ? ' ' : character;\n  }\n  return output;\n}\n\nfunction repairTerminalJsonStructure(text) {\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n  let repaired = '';\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      repaired += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') {\n      inString = true;\n      repaired += character;\n    } else if (character === '{' || character === '[') {\n      stack.push(character);\n      repaired += character;\n    } else if (character === '}' || character === ']') {\n      const expectedOpening = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] !== expectedOpening) {\n        const onlyWhitespaceRemains = !text.slice(index + 1).trim();\n        const matchingIndex = stack.lastIndexOf(expectedOpening);\n        if (!onlyWhitespaceRemains || matchingIndex < 0) return null;\n        repaired += stack.splice(matchingIndex + 1).reverse()\n          .map((opening) => opening === '{' ? '}' : ']').join('');\n      }\n      stack.pop();\n      repaired += character;\n    } else {\n      repaired += character;\n    }\n  }\n  if (inString || escaped) return null;\n  repaired += stack.reverse().map((opening) => opening === '{' ? '}' : ']').join('');\n  return repaired === text ? null : repaired;\n}\n\nfunction parseAiJson(value) {\n  const extracted = extractJsonText(value);\n  if (!extracted) return { ok: false, error: 'AI returned an empty JSON response', repairs: [] };\n  const sanitized = sanitizeJsonText(extracted);\n  const candidates = [{ text: extracted, repairs: [] }];\n  if (sanitized !== extracted) candidates.push({ text: sanitized, repairs: ['safe_json_syntax'] });\n\n  for (const candidate of [...candidates]) {\n    const terminal = repairTerminalJsonStructure(candidate.text);\n    if (terminal !== null) {\n      candidates.push({ text: terminal, repairs: [...candidate.repairs, 'terminal_structure'] });\n    }\n  }\n\n  let firstError = null;\n  const seen = new Set();\n  for (const candidate of candidates) {\n    if (seen.has(candidate.text)) continue;\n    seen.add(candidate.text);\n    try {\n      let payload = JSON.parse(candidate.text);\n      if (typeof payload === 'string') {\n        const nested = extractJsonText(payload);\n        if (nested && nested !== payload) payload = JSON.parse(sanitizeJsonText(nested));\n      }\n      return { ok: true, payload, repairs: candidate.repairs };\n    } catch (error) {\n      firstError = firstError || error;\n    }\n  }\n  return {\n    ok: false,\n    error: firstError ? firstError.message : 'AI returned invalid JSON',\n    repairs: [],\n  };\n}\n\nreturn $input.all().map((item) => {\n  const context = item.json;\n  const content = context.choices?.[0]?.message?.content;\n  const parsed = parseAiJson(content);\n  let review;\n  if (!parsed.ok || !parsed.payload || typeof parsed.payload !== 'object' || Array.isArray(parsed.payload)) {\n    const transportMessage = context.error?.message ?? context.error ?? context.message;\n    review = {\n      verdict: 'revise',\n      score: 0,\n      issues: [{\n        code: 'reviewer_response_invalid',\n        message: 'Reviewer response was unavailable or invalid after retry: ' + String(transportMessage || parsed.error || 'invalid review object'),\n        severity: 'medium',\n      }],\n    };\n  } else {\n    const candidate = parsed.payload;\n    const verdict = String(candidate.verdict ?? '').toLowerCase();\n    const score = Number(candidate.score);\n    const issues = Array.isArray(candidate.issues) ? candidate.issues : [];\n    review = {\n      verdict: verdict === 'pass' || verdict === 'revise' ? verdict : 'revise',\n      score: Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : 0,\n      issues: issues.map((issue) => ({\n        code: String(issue?.code || 'review_issue'),\n        message: String(issue?.message || 'Reviewer requested a revision.'),\n        severity: ['low', 'medium', 'high'].includes(issue?.severity) ? issue.severity : 'medium',\n        paths: Array.isArray(issue?.paths) ? issue.paths.slice(0, 6).map(String) : [],\n      })),\n    };\n    if (!['pass', 'revise'].includes(verdict)) {\n      review.issues.push({ code: 'reviewer_verdict_invalid', message: 'Reviewer returned an invalid verdict.', severity: 'medium' });\n    }\n  }\n  return { json: {\n    generation_run_id: context.generation_run_id,\n    orchestrator_execution_id: context.orchestrator_execution_id ?? null,\n    requirement_id: context.requirement_id,\n    output_type: context.output_type,\n    scheduled_date: context.scheduled_date,\n    mission_type: context.mission_type ?? null,\n    result: context.result,\n    repair_attempt: Number(context.repair_attempt ?? 0),\n    validation: context.validation,\n    validation_errors: context.validation_errors ?? [],\n    review,\n    reviewer_json_repairs: parsed.repairs,\n  } };\n});"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -475,7 +475,7 @@
           "genericAuthType": "httpHeaderAuth",
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{\n  {\n    model: $env.KICONNECT_MODEL,\n    messages: [\n      {\n        role: \"system\",\n        content: \"You are a deterministic repair engine for AI-generated finance learning missions. Apply the smallest possible correction that resolves every supplied validation error and every medium or high reviewer issue. Copy all unmentioned valid content and all bilingual fields unchanged. Never shorten datasets or remove difficulty variants. Recalculate answers and feedback when source values change. Preserve the exact transport envelope required by output_type. For quiz_mission, return a payload object containing a missions array with exactly one complete mission. For task_mission, return a variants object containing the complete easy, medium, and hard variants. For training_task or training_chat, return the complete payload object. Never return only a mission object, only difficulty keys, a patch, a result wrapper, explanations, or markdown. For bulk_categorization, plan_actual_deviation, and duplicate_payment_hunt, every task variant must retain 24 to 60 rows. For invoice_extraction, preserve the required invoice count. Preserve the intended mission type and meaningful difficulty progression. German and English must be semantically consistent. Do not reveal learner answers in learner-visible case data. Do not introduce confidential, personal, or company-internal information. Before responding, silently verify the envelope, required keys, row counts, bilingual alignment, answers, and valid JSON. Return only the complete corrected JSON object.\"\n      },\n      {\n        role: \"user\",\n        content: JSON.stringify({\n          output_type: $json.output_type,\n          mission_type: $json.mission_type ?? null,\n          scheduled_date: $json.scheduled_date,\n          required_output_shape: $json.output_type === \"quiz_mission\"\n            ? { payload: { missions: [\"ONE_COMPLETE_MISSION_OBJECT\"] } }\n            : $json.output_type === \"task_mission\"\n              ? { variants: { easy: \"COMPLETE_VARIANT\", medium: \"COMPLETE_VARIANT\", hard: \"COMPLETE_VARIANT\" } }\n              : { payload: \"COMPLETE_CORRECTED_PAYLOAD\" },\n          original_result: $json.result,\n          validation_errors: $json.validation_errors ?? [],\n          reviewer_report: $json.review ?? null,\n          repair_attempt: $json.repair_attempt\n        })\n      }\n    ],\n    temperature: 0.1,\n    max_tokens: 9000,\n    response_format: {\n      type: \"json_object\"\n    }\n  }\n}}",
+          "jsonBody": "={{\n  (() => {\n    const context = $json;\n    const sampleIndices = (length) => [...new Set([0, 1, Math.floor(length / 2), length - 2, length - 1]\n      .filter((index) => index >= 0 && index < length))];\n    const compactVariant = (variant, difficulty) => {\n      const collectionName = Array.isArray(variant?.invoices) ? 'invoices' : 'rows';\n      const collection = Array.isArray(variant?.[collectionName]) ? variant[collectionName] : [];\n      const fields = Object.fromEntries(Object.entries(variant ?? {})\n        .filter(([key, value]) => key !== 'rows' && key !== 'invoices'\n          && (value === null || ['string', 'number', 'boolean'].includes(typeof value)\n            || (Array.isArray(value) && value.length <= 12 && value.every((entry) => ['string', 'number', 'boolean'].includes(typeof entry))))));\n      return {\n        fields,\n        dataset: {\n          collection: collectionName,\n          count: collection.length,\n          sample: sampleIndices(collection.length).map((index) => ({\n            path_prefix: '/variants/' + difficulty + '/' + collectionName + '/' + index,\n            value: collection[index],\n          })),\n        },\n      };\n    };\n    const repairableProjection = context.output_type === 'task_mission' && context.result?.variants\n      ? { variants: Object.fromEntries(Object.entries(context.result.variants)\n          .map(([difficulty, variant]) => [difficulty, compactVariant(variant, difficulty)])) }\n      : context.result;\n    return {\n    model: $env.KICONNECT_MODEL,\n    messages: [\n      { role: 'system', content: \"Reasoning: low.\\nYou repair an already valid finance learning mission with the smallest possible JSON patch.\\nReturn only {\\\"operations\\\":[{\\\"op\\\":\\\"replace\\\",\\\"path\\\":\\\"/json/pointer\\\",\\\"value\\\":\\\"replacement\\\"}]}.\\nRules:\\n- 1-12 replace operations; RFC 6901 paths must target existing values in the unabridged source represented by repairable_projection.\\n- Change only fields required by validation errors or medium/high reviewer issues.\\n- Patch German and English counterparts together when meaning changes.\\n- Preserve mission type, dates, difficulty variants, row/invoice counts, amounts, plans, actuals, invoice numbers, category indices, and points.\\n- Prefer fixing task wording, descriptions, questions, options, feedback, micro-learning, category labels, or an explicitly identified ambiguous row description.\\n- Never patch normalized result_fields or top-level compatibility wrappers; they are generated by Django.\\n- Never return the complete mission, markdown, explanations, add/remove operations, or a wrapper other than operations.\\nBefore returning, verify that every path exists and every issue is resolved.\" },\n      { role: 'user', content: JSON.stringify({\n        output_type: context.output_type,\n        mission_type: context.mission_type ?? null,\n        scheduled_date: context.scheduled_date,\n        repairable_projection: repairableProjection,\n        validation_errors: context.validation_errors ?? [],\n        reviewer_issues: (context.review?.issues ?? []).filter((issue) => issue.severity !== 'low'),\n        repair_attempt: context.repair_attempt,\n      }) },\n    ],\n    temperature: 0,\n    max_tokens: 1800,\n    response_format: { type: 'json_object' },\n    };\n  })()\n}}",
           "options": {
             "timeout": 180000
           }
@@ -517,7 +517,7 @@
       {
         "parameters": {
           "mode": "runOnceForAllItems",
-          "jsCode": "function extractJsonText(value) {\n  if (typeof value !== 'string' || !value.trim()) return '';\n  let text = value.trim().replace(/^\\uFEFF/, '');\n  if (text.startsWith('```')) {\n    const lines = text.split('\\n');\n    lines.shift();\n    if (lines.length && lines[lines.length - 1].trim().startsWith('```')) lines.pop();\n    text = lines.join('\\n').trim();\n  }\n\n  const objectStart = text.indexOf('{');\n  const arrayStart = text.indexOf('[');\n  const starts = [objectStart, arrayStart].filter((index) => index >= 0);\n  if (!starts.length) return text;\n  const start = Math.min(...starts);\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n\n  for (let index = start; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') inString = true;\n    else if (character === '{' || character === '[') stack.push(character);\n    else if (character === '}' || character === ']') {\n      const expected = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] === expected) stack.pop();\n      if (stack.length === 0) return text.slice(start, index + 1).trim();\n    }\n  }\n  return text.slice(start).trim();\n}\n\nfunction sanitizeJsonText(text) {\n  let output = '';\n  let inString = false;\n  let escaped = false;\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (!escaped && character.charCodeAt(0) < 32) {\n        if (character === '\\n') output += '\\\\n';\n        else if (character === '\\r') output += '\\\\r';\n        else if (character === '\\t') output += '\\\\t';\n        else output += '\\\\u' + character.charCodeAt(0).toString(16).padStart(4, '0');\n        continue;\n      }\n      output += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n\n    if (character === '\"') {\n      inString = true;\n      output += character;\n      continue;\n    }\n    if (character === '_' && /\\d/.test(text[index - 1] || '') && /\\d/.test(text[index + 1] || '')) {\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '/') {\n      while (index + 1 < text.length && text[index + 1] !== '\\n') index += 1;\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '*') {\n      index += 2;\n      while (index < text.length - 1 && !(text[index] === '*' && text[index + 1] === '/')) index += 1;\n      index += 1;\n      continue;\n    }\n    if (character === ',') {\n      let nextIndex = index + 1;\n      while (/\\s/.test(text[nextIndex] || '')) nextIndex += 1;\n      if (text[nextIndex] === '}' || text[nextIndex] === ']') continue;\n    }\n    output += character === '\\u00A0' ? ' ' : character;\n  }\n  return output;\n}\n\nfunction repairTerminalJsonStructure(text) {\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n  let repaired = '';\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      repaired += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') {\n      inString = true;\n      repaired += character;\n    } else if (character === '{' || character === '[') {\n      stack.push(character);\n      repaired += character;\n    } else if (character === '}' || character === ']') {\n      const expectedOpening = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] !== expectedOpening) {\n        const onlyWhitespaceRemains = !text.slice(index + 1).trim();\n        const matchingIndex = stack.lastIndexOf(expectedOpening);\n        if (!onlyWhitespaceRemains || matchingIndex < 0) return null;\n        repaired += stack.splice(matchingIndex + 1).reverse()\n          .map((opening) => opening === '{' ? '}' : ']').join('');\n      }\n      stack.pop();\n      repaired += character;\n    } else {\n      repaired += character;\n    }\n  }\n  if (inString || escaped) return null;\n  repaired += stack.reverse().map((opening) => opening === '{' ? '}' : ']').join('');\n  return repaired === text ? null : repaired;\n}\n\nfunction parseAiJson(value) {\n  const extracted = extractJsonText(value);\n  if (!extracted) return { ok: false, error: 'AI returned an empty JSON response', repairs: [] };\n  const sanitized = sanitizeJsonText(extracted);\n  const candidates = [{ text: extracted, repairs: [] }];\n  if (sanitized !== extracted) candidates.push({ text: sanitized, repairs: ['safe_json_syntax'] });\n\n  for (const candidate of [...candidates]) {\n    const terminal = repairTerminalJsonStructure(candidate.text);\n    if (terminal !== null) {\n      candidates.push({ text: terminal, repairs: [...candidate.repairs, 'terminal_structure'] });\n    }\n  }\n\n  let firstError = null;\n  const seen = new Set();\n  for (const candidate of candidates) {\n    if (seen.has(candidate.text)) continue;\n    seen.add(candidate.text);\n    try {\n      let payload = JSON.parse(candidate.text);\n      if (typeof payload === 'string') {\n        const nested = extractJsonText(payload);\n        if (nested && nested !== payload) payload = JSON.parse(sanitizeJsonText(nested));\n      }\n      return { ok: true, payload, repairs: candidate.repairs };\n    } catch (error) {\n      firstError = firstError || error;\n    }\n  }\n  return {\n    ok: false,\n    error: firstError ? firstError.message : 'AI returned invalid JSON',\n    repairs: [],\n  };\n}\n\nfunction objectValue(value) {\n  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;\n}\n\nfunction unwrapRepairCandidate(value) {\n  let candidate = objectValue(value);\n  for (let depth = 0; depth < 3 && candidate; depth += 1) {\n    const nested = objectValue(candidate.corrected_result) ?? objectValue(candidate.result) ?? objectValue(candidate.original_result);\n    if (!nested) break;\n    candidate = nested;\n  }\n  return candidate;\n}\n\nfunction canonicalizeRepairResult(value, context) {\n  const candidate = unwrapRepairCandidate(value);\n  if (!candidate) return null;\n  if (context.output_type === 'quiz_mission') {\n    if (Array.isArray(candidate.payload?.missions)) return { payload: candidate.payload };\n    if (Array.isArray(candidate.missions)) return { payload: candidate };\n    const mission = objectValue(candidate.mission) ?? (objectValue(candidate.payload)?.variants ? candidate.payload : null) ?? (candidate.variants ? candidate : null);\n    if (mission?.variants) return { payload: { missions: [mission] } };\n  }\n  if (context.output_type === 'task_mission') {\n    const variants = objectValue(candidate.variants) ?? objectValue(candidate.payload)?.variants ?? (['easy', 'medium', 'hard'].every((difficulty) => objectValue(candidate[difficulty])) ? { easy: candidate.easy, medium: candidate.medium, hard: candidate.hard } : null);\n    if (variants) return { variants };\n  }\n  if (context.output_type === 'training_task' || context.output_type === 'training_chat') {\n    return candidate.payload === undefined ? { payload: candidate } : candidate;\n  }\n  return candidate;\n}\n\nreturn $input.all().map((item) => {\n  const context = item.json;\n  const content = context.choices?.[0]?.message?.content;\n  const parsed = parseAiJson(content);\n  const canonical = parsed.ok ? canonicalizeRepairResult(parsed.payload, context) : null;\n  const transportMessage = context.error?.message ?? context.error ?? context.message;\n  const fallbackReason = parsed.ok && !canonical\n    ? 'Repair AI returned an unsupported result envelope.'\n    : String(transportMessage || parsed.error || 'Repair response unavailable.');\n  return { json: {\n    generation_run_id: context.generation_run_id,\n    orchestrator_execution_id: context.orchestrator_execution_id ?? null,\n    requirement_id: context.requirement_id,\n    output_type: context.output_type,\n    scheduled_date: context.scheduled_date,\n    mission_type: context.mission_type ?? null,\n    result: canonical ?? context.result,\n    repair_attempt: Number(context.repair_attempt ?? 1),\n    review: context.review ?? null,\n    validation_errors: fallbackReason\n      ? [...(context.validation_errors ?? []), 'Repair response could not be applied: ' + fallbackReason]\n      : (context.validation_errors ?? []),\n    repair_json_repairs: parsed.repairs,\n  } };\n});"
+          "jsCode": "function extractJsonText(value) {\n  if (typeof value !== 'string' || !value.trim()) return '';\n  let text = value.trim().replace(/^\\uFEFF/, '');\n  if (text.startsWith('```')) {\n    const lines = text.split('\\n');\n    lines.shift();\n    if (lines.length && lines[lines.length - 1].trim().startsWith('```')) lines.pop();\n    text = lines.join('\\n').trim();\n  }\n\n  const objectStart = text.indexOf('{');\n  const arrayStart = text.indexOf('[');\n  const starts = [objectStart, arrayStart].filter((index) => index >= 0);\n  if (!starts.length) return text;\n  const start = Math.min(...starts);\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n\n  for (let index = start; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') inString = true;\n    else if (character === '{' || character === '[') stack.push(character);\n    else if (character === '}' || character === ']') {\n      const expected = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] === expected) stack.pop();\n      if (stack.length === 0) return text.slice(start, index + 1).trim();\n    }\n  }\n  return text.slice(start).trim();\n}\n\nfunction sanitizeJsonText(text) {\n  let output = '';\n  let inString = false;\n  let escaped = false;\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      if (!escaped && character.charCodeAt(0) < 32) {\n        if (character === '\\n') output += '\\\\n';\n        else if (character === '\\r') output += '\\\\r';\n        else if (character === '\\t') output += '\\\\t';\n        else output += '\\\\u' + character.charCodeAt(0).toString(16).padStart(4, '0');\n        continue;\n      }\n      output += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n\n    if (character === '\"') {\n      inString = true;\n      output += character;\n      continue;\n    }\n    if (character === '_' && /\\d/.test(text[index - 1] || '') && /\\d/.test(text[index + 1] || '')) {\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '/') {\n      while (index + 1 < text.length && text[index + 1] !== '\\n') index += 1;\n      continue;\n    }\n    if (character === '/' && text[index + 1] === '*') {\n      index += 2;\n      while (index < text.length - 1 && !(text[index] === '*' && text[index + 1] === '/')) index += 1;\n      index += 1;\n      continue;\n    }\n    if (character === ',') {\n      let nextIndex = index + 1;\n      while (/\\s/.test(text[nextIndex] || '')) nextIndex += 1;\n      if (text[nextIndex] === '}' || text[nextIndex] === ']') continue;\n    }\n    output += character === '\\u00A0' ? ' ' : character;\n  }\n  return output;\n}\n\nfunction repairTerminalJsonStructure(text) {\n  const stack = [];\n  let inString = false;\n  let escaped = false;\n  let repaired = '';\n\n  for (let index = 0; index < text.length; index += 1) {\n    const character = text[index];\n    if (inString) {\n      repaired += character;\n      if (escaped) escaped = false;\n      else if (character === '\\\\') escaped = true;\n      else if (character === '\"') inString = false;\n      continue;\n    }\n    if (character === '\"') {\n      inString = true;\n      repaired += character;\n    } else if (character === '{' || character === '[') {\n      stack.push(character);\n      repaired += character;\n    } else if (character === '}' || character === ']') {\n      const expectedOpening = character === '}' ? '{' : '[';\n      if (stack[stack.length - 1] !== expectedOpening) {\n        const onlyWhitespaceRemains = !text.slice(index + 1).trim();\n        const matchingIndex = stack.lastIndexOf(expectedOpening);\n        if (!onlyWhitespaceRemains || matchingIndex < 0) return null;\n        repaired += stack.splice(matchingIndex + 1).reverse()\n          .map((opening) => opening === '{' ? '}' : ']').join('');\n      }\n      stack.pop();\n      repaired += character;\n    } else {\n      repaired += character;\n    }\n  }\n  if (inString || escaped) return null;\n  repaired += stack.reverse().map((opening) => opening === '{' ? '}' : ']').join('');\n  return repaired === text ? null : repaired;\n}\n\nfunction parseAiJson(value) {\n  const extracted = extractJsonText(value);\n  if (!extracted) return { ok: false, error: 'AI returned an empty JSON response', repairs: [] };\n  const sanitized = sanitizeJsonText(extracted);\n  const candidates = [{ text: extracted, repairs: [] }];\n  if (sanitized !== extracted) candidates.push({ text: sanitized, repairs: ['safe_json_syntax'] });\n\n  for (const candidate of [...candidates]) {\n    const terminal = repairTerminalJsonStructure(candidate.text);\n    if (terminal !== null) {\n      candidates.push({ text: terminal, repairs: [...candidate.repairs, 'terminal_structure'] });\n    }\n  }\n\n  let firstError = null;\n  const seen = new Set();\n  for (const candidate of candidates) {\n    if (seen.has(candidate.text)) continue;\n    seen.add(candidate.text);\n    try {\n      let payload = JSON.parse(candidate.text);\n      if (typeof payload === 'string') {\n        const nested = extractJsonText(payload);\n        if (nested && nested !== payload) payload = JSON.parse(sanitizeJsonText(nested));\n      }\n      return { ok: true, payload, repairs: candidate.repairs };\n    } catch (error) {\n      firstError = firstError || error;\n    }\n  }\n  return {\n    ok: false,\n    error: firstError ? firstError.message : 'AI returned invalid JSON',\n    repairs: [],\n  };\n}\n\nfunction objectValue(value) {\n  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;\n}\n\nfunction unwrapRepairCandidate(value) {\n  let candidate = objectValue(value);\n  for (let depth = 0; depth < 3 && candidate; depth += 1) {\n    const nested = objectValue(candidate.corrected_result) ?? objectValue(candidate.result) ?? objectValue(candidate.original_result);\n    if (!nested) break;\n    candidate = nested;\n  }\n  return candidate;\n}\n\nfunction canonicalizeRepairResult(value, context) {\n  const candidate = unwrapRepairCandidate(value);\n  if (!candidate) return null;\n  if (context.output_type === 'quiz_mission') {\n    if (Array.isArray(candidate.payload?.missions)) return { payload: candidate.payload };\n    if (Array.isArray(candidate.missions)) return { payload: candidate };\n    const mission = objectValue(candidate.mission) ?? (objectValue(candidate.payload)?.variants ? candidate.payload : null) ?? (candidate.variants ? candidate : null);\n    if (mission?.variants) return { payload: { missions: [mission] } };\n  }\n  if (context.output_type === 'task_mission') {\n    const variants = objectValue(candidate.variants) ?? objectValue(candidate.payload)?.variants ?? (['easy', 'medium', 'hard'].every((difficulty) => objectValue(candidate[difficulty])) ? { easy: candidate.easy, medium: candidate.medium, hard: candidate.hard } : null);\n    if (variants) return { variants };\n  }\n  if (context.output_type === 'training_task' || context.output_type === 'training_chat') {\n    return candidate.payload === undefined ? { payload: candidate } : candidate;\n  }\n  return candidate;\n}\n\nfunction decodePointer(path) {\n  if (typeof path !== 'string' || !path.startsWith('/') || path.length > 300) return null;\n  const segments = path.slice(1).split('/').map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));\n  if (!segments.length || segments.some((segment) => !segment || ['__proto__', 'prototype', 'constructor'].includes(segment))) return null;\n  return segments;\n}\n\nfunction patchValueAllowed(value) {\n  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {\n    return JSON.stringify(value).length <= 4000;\n  }\n  return Array.isArray(value) && value.length <= 12\n    && value.every((entry) => entry === null || ['string', 'number', 'boolean'].includes(typeof entry))\n    && JSON.stringify(value).length <= 4000;\n}\n\nfunction applyRepairPatch(original, payload, outputType) {\n  const operations = payload && typeof payload === 'object' && !Array.isArray(payload)\n    ? payload.operations\n    : null;\n  if (!Array.isArray(operations) || operations.length < 1 || operations.length > 12) {\n    return { result: null, error: 'Repair AI must return 1-12 patch operations.' };\n  }\n  if (JSON.stringify(operations).length > 12000) {\n    return { result: null, error: 'Repair patch is too large.' };\n  }\n  const result = JSON.parse(JSON.stringify(original));\n  const requiredRoot = outputType === 'task_mission' ? 'variants' : 'payload';\n  for (const operation of operations) {\n    if (!operation || operation.op !== 'replace' || !patchValueAllowed(operation.value)) {\n      return { result: null, error: 'Repair patch contains an unsupported operation or value.' };\n    }\n    const segments = decodePointer(operation.path);\n    if (!segments || segments[0] !== requiredRoot) {\n      return { result: null, error: 'Repair patch targets an unsupported root.' };\n    }\n    const protectedFields = new Set([\n      'date', 'scheduled_date', 'type', 'mission_type', 'points', 'max_points',\n      'amount', 'plan', 'actual', 'invoice_number', 'category_index',\n    ]);\n    if (segments.some((segment) => protectedFields.has(segment))) {\n      return { result: null, error: 'Repair patch targets protected mission data.' };\n    }\n    let parent = result;\n    for (const segment of segments.slice(0, -1)) {\n      const key = Array.isArray(parent) && /^d+$/.test(segment) ? Number(segment) : segment;\n      if (parent === null || typeof parent !== 'object' || !Object.prototype.hasOwnProperty.call(parent, key)) {\n        return { result: null, error: 'Repair patch path does not exist.' };\n      }\n      parent = parent[key];\n    }\n    const finalSegment = segments[segments.length - 1];\n    const finalKey = Array.isArray(parent) && /^d+$/.test(finalSegment) ? Number(finalSegment) : finalSegment;\n    if (parent === null || typeof parent !== 'object' || !Object.prototype.hasOwnProperty.call(parent, finalKey)) {\n      return { result: null, error: 'Repair patch target does not exist.' };\n    }\n    parent[finalKey] = operation.value;\n  }\n  return { result, error: null };\n}\n\nfunction decodePointer(path) {\n  if (typeof path !== 'string' || !path.startsWith('/') || path.length > 300) return null;\n  const segments = path.slice(1).split('/').map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));\n  if (!segments.length || segments.some((segment) => !segment || ['__proto__', 'prototype', 'constructor'].includes(segment))) return null;\n  return segments;\n}\n\nfunction patchValueAllowed(value) {\n  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {\n    return JSON.stringify(value).length <= 4000;\n  }\n  return Array.isArray(value) && value.length <= 12\n    && value.every((entry) => entry === null || ['string', 'number', 'boolean'].includes(typeof entry))\n    && JSON.stringify(value).length <= 4000;\n}\n\nfunction applyRepairPatch(original, payload, outputType) {\n  const operations = payload && typeof payload === 'object' && !Array.isArray(payload)\n    ? payload.operations\n    : null;\n  if (!Array.isArray(operations) || operations.length < 1 || operations.length > 12) {\n    return { result: null, error: 'Repair AI must return 1-12 patch operations.' };\n  }\n  if (JSON.stringify(operations).length > 12000) {\n    return { result: null, error: 'Repair patch is too large.' };\n  }\n  const result = JSON.parse(JSON.stringify(original));\n  const requiredRoot = outputType === 'task_mission' ? 'variants' : 'payload';\n  for (const operation of operations) {\n    if (!operation || operation.op !== 'replace' || !patchValueAllowed(operation.value)) {\n      return { result: null, error: 'Repair patch contains an unsupported operation or value.' };\n    }\n    const segments = decodePointer(operation.path);\n    if (!segments || segments[0] !== requiredRoot) {\n      return { result: null, error: 'Repair patch targets an unsupported root.' };\n    }\n    const protectedFields = new Set([\n      'date', 'scheduled_date', 'type', 'mission_type', 'points', 'max_points',\n      'amount', 'plan', 'actual', 'invoice_number', 'category_index',\n    ]);\n    if (segments.some((segment) => protectedFields.has(segment))) {\n      return { result: null, error: 'Repair patch targets protected mission data.' };\n    }\n    let parent = result;\n    for (const segment of segments.slice(0, -1)) {\n      const key = Array.isArray(parent) && /^\\d+$/.test(segment) ? Number(segment) : segment;\n      if (parent === null || typeof parent !== 'object' || !Object.prototype.hasOwnProperty.call(parent, key)) {\n        return { result: null, error: 'Repair patch path does not exist.' };\n      }\n      parent = parent[key];\n    }\n    const finalSegment = segments[segments.length - 1];\n    const finalKey = Array.isArray(parent) && /^\\d+$/.test(finalSegment) ? Number(finalSegment) : finalSegment;\n    if (parent === null || typeof parent !== 'object' || !Object.prototype.hasOwnProperty.call(parent, finalKey)) {\n      return { result: null, error: 'Repair patch target does not exist.' };\n    }\n    parent[finalKey] = operation.value;\n  }\n  return { result, error: null };\n}\n\nfunction decodePointer(path) {\n  if (typeof path !== 'string' || !path.startsWith('/') || path.length > 300) return null;\n  const segments = path.slice(1).split('/').map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));\n  if (!segments.length || segments.some((segment) => !segment || ['__proto__', 'prototype', 'constructor'].includes(segment))) return null;\n  return segments;\n}\n\nfunction patchValueAllowed(value) {\n  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {\n    return JSON.stringify(value).length <= 4000;\n  }\n  return Array.isArray(value) && value.length <= 12\n    && value.every((entry) => entry === null || ['string', 'number', 'boolean'].includes(typeof entry))\n    && JSON.stringify(value).length <= 4000;\n}\n\nfunction applyRepairPatch(original, payload, outputType) {\n  const operations = payload && typeof payload === 'object' && !Array.isArray(payload)\n    ? payload.operations\n    : null;\n  if (!Array.isArray(operations) || operations.length < 1 || operations.length > 12) {\n    return { result: null, error: 'Repair AI must return 1-12 patch operations.' };\n  }\n  if (JSON.stringify(operations).length > 12000) {\n    return { result: null, error: 'Repair patch is too large.' };\n  }\n  const result = JSON.parse(JSON.stringify(original));\n  const requiredRoot = outputType === 'task_mission' ? 'variants' : 'payload';\n  for (const operation of operations) {\n    if (!operation || operation.op !== 'replace' || !patchValueAllowed(operation.value)) {\n      return { result: null, error: 'Repair patch contains an unsupported operation or value.' };\n    }\n    const segments = decodePointer(operation.path);\n    if (!segments || segments[0] !== requiredRoot) {\n      return { result: null, error: 'Repair patch targets an unsupported root.' };\n    }\n    const protectedFields = new Set([\n      'date', 'scheduled_date', 'type', 'mission_type', 'points', 'max_points',\n      'amount', 'plan', 'actual', 'invoice_number', 'category_index',\n    ]);\n    if (segments.some((segment) => protectedFields.has(segment))) {\n      return { result: null, error: 'Repair patch targets protected mission data.' };\n    }\n    let parent = result;\n    for (const segment of segments.slice(0, -1)) {\n      const key = Array.isArray(parent) && /^\\d+$/.test(segment) ? Number(segment) : segment;\n      if (parent === null || typeof parent !== 'object' || !Object.prototype.hasOwnProperty.call(parent, key)) {\n        return { result: null, error: 'Repair patch path does not exist.' };\n      }\n      parent = parent[key];\n    }\n    const finalSegment = segments[segments.length - 1];\n    const finalKey = Array.isArray(parent) && /^\\d+$/.test(finalSegment) ? Number(finalSegment) : finalSegment;\n    if (parent === null || typeof parent !== 'object' || !Object.prototype.hasOwnProperty.call(parent, finalKey)) {\n      return { result: null, error: 'Repair patch target does not exist.' };\n    }\n    parent[finalKey] = operation.value;\n  }\n  return { result, error: null };\n}\n\nfunction decodePointer(path) {\n  if (typeof path !== 'string' || !path.startsWith('/') || path.length > 300) return null;\n  const segments = path.slice(1).split('/').map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));\n  if (!segments.length || segments.some((segment) => !segment || ['__proto__', 'prototype', 'constructor'].includes(segment))) return null;\n  return segments;\n}\n\nfunction patchValueAllowed(value) {\n  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {\n    return JSON.stringify(value).length <= 4000;\n  }\n  return Array.isArray(value) && value.length <= 12\n    && value.every((entry) => entry === null || ['string', 'number', 'boolean'].includes(typeof entry))\n    && JSON.stringify(value).length <= 4000;\n}\n\nfunction applyRepairPatch(original, payload, outputType) {\n  const operations = payload && typeof payload === 'object' && !Array.isArray(payload)\n    ? payload.operations\n    : null;\n  if (!Array.isArray(operations) || operations.length < 1 || operations.length > 12) {\n    return { result: null, error: 'Repair AI must return 1-12 patch operations.' };\n  }\n  if (JSON.stringify(operations).length > 12000) {\n    return { result: null, error: 'Repair patch is too large.' };\n  }\n  const result = JSON.parse(JSON.stringify(original));\n  const requiredRoot = outputType === 'task_mission' ? 'variants' : 'payload';\n  for (const operation of operations) {\n    if (!operation || operation.op !== 'replace' || !patchValueAllowed(operation.value)) {\n      return { result: null, error: 'Repair patch contains an unsupported operation or value.' };\n    }\n    const segments = decodePointer(operation.path);\n    if (!segments || segments[0] !== requiredRoot) {\n      return { result: null, error: 'Repair patch targets an unsupported root.' };\n    }\n    const protectedFields = new Set([\n      'date', 'scheduled_date', 'type', 'mission_type', 'points', 'max_points',\n      'amount', 'plan', 'actual', 'invoice_number', 'category_index',\n    ]);\n    if (segments.some((segment) => protectedFields.has(segment))) {\n      return { result: null, error: 'Repair patch targets protected mission data.' };\n    }\n    let parent = result;\n    for (const segment of segments.slice(0, -1)) {\n      const key = Array.isArray(parent) && /^\\d+$/.test(segment) ? Number(segment) : segment;\n      if (parent === null || typeof parent !== 'object' || !Object.prototype.hasOwnProperty.call(parent, key)) {\n        return { result: null, error: 'Repair patch path does not exist.' };\n      }\n      parent = parent[key];\n    }\n    const finalSegment = segments[segments.length - 1];\n    const finalKey = Array.isArray(parent) && /^\\d+$/.test(finalSegment) ? Number(finalSegment) : finalSegment;\n    if (parent === null || typeof parent !== 'object' || !Object.prototype.hasOwnProperty.call(parent, finalKey)) {\n      return { result: null, error: 'Repair patch target does not exist.' };\n    }\n    parent[finalKey] = operation.value;\n  }\n  return { result, error: null };\n}\n\nreturn $input.all().map((item) => {\n  const context = item.json;\n  const content = context.choices?.[0]?.message?.content;\n  const parsed = parseAiJson(content);\n  const applied = parsed.ok\n    ? applyRepairPatch(context.result, parsed.payload, context.output_type)\n    : { result: null, error: parsed.error };\n  const transportMessage = context.error?.message ?? context.error ?? context.message;\n  const fallbackReason = applied.result\n    ? null\n    : String(transportMessage || applied.error || 'Repair response unavailable.');\n  return { json: {\n    generation_run_id: context.generation_run_id,\n    orchestrator_execution_id: context.orchestrator_execution_id ?? null,\n    requirement_id: context.requirement_id,\n    output_type: context.output_type,\n    scheduled_date: context.scheduled_date,\n    mission_type: context.mission_type ?? null,\n    result: applied.result ?? context.result,\n    repair_attempt: Number(context.repair_attempt ?? 1),\n    review: context.review ?? null,\n    validation_errors: fallbackReason\n      ? [...(context.validation_errors ?? []), 'Repair patch could not be applied: ' + fallbackReason]\n      : (context.validation_errors ?? []),\n    repair_patch_applied: Boolean(applied.result),\n    repair_operation_count: Array.isArray(parsed.payload?.operations) ? parsed.payload.operations.length : 0,\n    repair_json_repairs: parsed.repairs,\n  } };\n});"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -541,6 +541,85 @@
         ],
         "id": "a752a4c0-6048-4855-ac5d-774575331481",
         "name": "Prepare Worker Failure"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          896,
+          160
+        ],
+        "id": "2b5cc949-9743-4e2b-9ccf-af26e510f814",
+        "name": "Gate Validation Status"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          2016,
+          -176
+        ],
+        "id": "10416859-e1dd-42cb-bab9-87d026c3b3b7",
+        "name": "Gate Review Status"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          2464,
+          400
+        ],
+        "id": "3a17fd59-3234-4cd1-9835-daf2fa0fc78a",
+        "name": "Gate Repair Status"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "e887d480-e73e-41bc-9322-b6c79c442335",
+                "leftValue": "={{ $json.repair_patch_applied }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          3904,
+          384
+        ],
+        "id": "d194fc8c-3f2e-420e-a1d0-c556c8e1bec5",
+        "name": "Repair Patch Applied?"
       }
     ],
     "connections": {
@@ -582,12 +661,7 @@
               "index": 0
             },
             {
-              "node": "Django - Worker Validate Mission",
-              "type": "main",
-              "index": 0
-            },
-            {
-              "node": "Merge Validation Context",
+              "node": "Gate Validation Status",
               "type": "main",
               "index": 0
             }
@@ -647,12 +721,7 @@
               "index": 0
             },
             {
-              "node": "AI Reviewer V2",
-              "type": "main",
-              "index": 0
-            },
-            {
-              "node": "Merge Review Context",
+              "node": "Gate Review Status",
               "type": "main",
               "index": 0
             }
@@ -748,12 +817,7 @@
               "index": 0
             },
             {
-              "node": "Repair AI V2",
-              "type": "main",
-              "index": 0
-            },
-            {
-              "node": "Merge Repair Context",
+              "node": "Gate Repair Status",
               "type": "main",
               "index": 0
             }
@@ -793,12 +857,7 @@
         "main": [
           [
             {
-              "node": "Django - Worker Validate Mission",
-              "type": "main",
-              "index": 0
-            },
-            {
-              "node": "Merge Validation Context",
+              "node": "Repair Patch Applied?",
               "type": "main",
               "index": 0
             }
@@ -815,6 +874,110 @@
             }
           ]
         ]
+      },
+      "Django - Worker Status Validating": {
+        "main": [
+          [
+            {
+              "node": "Gate Validation Status",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Gate Validation Status": {
+        "main": [
+          [
+            {
+              "node": "Django - Worker Validate Mission",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge Validation Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Django - Worker Status Reviewing": {
+        "main": [
+          [
+            {
+              "node": "Gate Review Status",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Gate Review Status": {
+        "main": [
+          [
+            {
+              "node": "AI Reviewer V2",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge Review Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Django - Worker Status Repairing": {
+        "main": [
+          [
+            {
+              "node": "Gate Repair Status",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Gate Repair Status": {
+        "main": [
+          [
+            {
+              "node": "Repair AI V2",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge Repair Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Repair Patch Applied?": {
+        "main": [
+          [
+            {
+              "node": "Django - Worker Status Validating",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Gate Validation Status",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Repair Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "settings": {
@@ -826,11 +989,12 @@
       "templateCredsSetupCompleted": true
     },
     "pinData": {},
-    "versionId": "21c7c26c-ec6e-4499-94b0-33e786e4b686",
+    "versionId": "35319d71-5590-432a-a8bc-b8cbcde5a9b0",
     "activeVersionId": null,
-    "versionCounter": 1,
+    "versionCounter": 6,
     "triggerCount": 0,
-    "tags": []
+    "tags": [],
+    "updatedAt": "2026-08-25T10:35:06.567Z"
   },
   {
     "id": "MissionGeneratorV2Prod",
@@ -943,7 +1107,7 @@
           "genericAuthType": "httpHeaderAuth",
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{\n  {\n    model: $env.KICONNECT_MODEL,\n    messages: [\n      {\n        role: \"system\",\n        content: \"Return exactly one strict RFC 8259 JSON object and nothing else. Never use markdown fences, comments, trailing commas, digit separators, NaN, Infinity, or undefined. Preserve every required bilingual field, exact row count, answer, feedback, and requested output shape. Before responding, silently verify that JSON.parse can parse the full response.\"\n      },\n      ...($json.ai_request.messages ?? [])\n    ],\n    temperature: Math.min(Number($json.ai_request.temperature ?? 0.25), 0.3),\n    max_tokens: $json.ai_request.max_tokens,\n    response_format: { type: \"json_object\" }\n  }\n}}",
+          "jsonBody": "={{\n  {\n    model: $env.KICONNECT_MODEL,\n    messages: [\n      {\n        role: 'system',\n        content: 'Reasoning: low. Return one strict RFC 8259 JSON object only. Follow the requested fields exactly; never add extra learner result requirements. Keep bilingual meaning, answer logic, and named output formats consistent. No markdown fences, comments, trailing commas, digit separators, NaN, Infinity, or undefined. Before responding, verify JSON.parse, row counts, and required keys.'\n      },\n      ...($json.ai_request.messages ?? [])\n    ],\n    temperature: Math.min(Number($json.ai_request.temperature ?? 0.2), 0.25),\n    max_tokens: $json.ai_request.max_tokens,\n    response_format: { type: 'json_object' }\n  }\n}}",
           "options": {
             "timeout": 180000
           }
@@ -1203,16 +1367,6 @@
               "node": "Accept Generation V2",
               "type": "main",
               "index": 0
-            },
-            {
-              "node": "Django - V2 Status Running",
-              "type": "main",
-              "index": 0
-            },
-            {
-              "node": "Prepare Generator Calls",
-              "type": "main",
-              "index": 0
             }
           ]
         ]
@@ -1379,6 +1533,28 @@
             }
           ]
         ]
+      },
+      "Accept Generation V2": {
+        "main": [
+          [
+            {
+              "node": "Django - V2 Status Running",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Django - V2 Status Running": {
+        "main": [
+          [
+            {
+              "node": "Prepare Generator Calls",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "settings": {
@@ -1390,10 +1566,11 @@
       "templateCredsSetupCompleted": true
     },
     "pinData": {},
-    "versionId": "f0264c14-91bc-49c8-9824-5da98edf50fb",
+    "versionId": "ff31edc2-9155-4ef5-8d47-7c10449cc9bf",
     "activeVersionId": null,
-    "versionCounter": 1,
+    "versionCounter": 6,
     "triggerCount": 0,
-    "tags": []
+    "tags": [],
+    "updatedAt": "2026-08-25T10:35:06.582Z"
   }
 ]

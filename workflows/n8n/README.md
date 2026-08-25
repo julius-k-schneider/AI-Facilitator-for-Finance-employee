@@ -9,6 +9,15 @@ Die Research-Funktion ist bewusst in zwei eigenständige Workflows aufgeteilt. D
 - Interner Worker-Webhook: `POST /webhook/mission-generation-worker-v2`
 - Modellaufrufe laufen in echten Zweier-Batches, damit die Kapazitätsgrenze des Modellendpunkts nicht überschritten wird.
 - Jede Mission wird unabhängig validiert und reviewed; höchstens zwei gezielte Repair-Versuche sind möglich.
+- Der semantische Reviewer erhält bei großen Task-Missionen nur eine kompakte, repräsentative Projektion; Schema,
+  Zeilenzahlen, Berechnungen und Lösungen werden weiterhin deterministisch von Django geprüft.
+- Task-Schwierigkeiten verwenden verbindliche Daten- und Ergebnisprofile: Easy hat weniger Datensätze und Kennzahlen,
+  Medium erweitert beides, Hard verwendet den größten Datensatz und zusätzliche Prüfkennzahlen. Aufgabenformulierungen,
+  auswertbare Ergebnisfelder und Punkte werden passend dazu deterministisch von Django synchronisiert.
+- Repairs liefern kleine, whitelist-validierte `replace`-Patches statt die komplette Mission erneut zu erzeugen.
+- Ein nicht anwendbarer Patch wird direkt erneut repariert; er durchläuft nicht unnötig nochmals Validierung und Review.
+- Status-Callbacks werden vor Validierung, Review und Repair durch Merge-Gates abgeschlossen, damit die UI den
+  aktuellen Schritt zuverlässig und auch nach einem Seitenwechsel anzeigt.
 - Ein einzelner Fehlschlag beendet nicht die übrigen Missionen. Erfolgreiche Ergebnisse werden als Teilabschluss an Django übergeben.
 - Generator-, Review- und Repair-Ausgaben werden zentral als JSON normalisiert und anschließend deterministisch durch Django validiert.
 

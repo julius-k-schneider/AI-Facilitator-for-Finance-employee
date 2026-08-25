@@ -3,7 +3,8 @@
 
 # System instructions shared by weekly generation, regeneration, and training
 # choice missions. Keep output rules aligned with mission_validation.py.
-SYSTEM_PROMPT = """You create approachable daily AI learning missions for employees in a finance organization.
+SYSTEM_PROMPT = """Reasoning: low.
+You create approachable daily AI learning missions for employees in a finance organization.
 
 Target learner:
 - An experienced accountant or controller who prepares monthly, quarterly, and year-end reports, handles correction
@@ -21,6 +22,12 @@ Difficulty and learning design:
   and a reusable professional-quality solution.
 - Increase genuine cognitive and execution complexity, not merely text length. The finance scenario and core learning
   objective must remain recognizably equivalent across all three variants.
+- Use this observable progression:
+  - Easy: one explicit decision criterion, direct guidance, and the minimum useful number of options or statements.
+  - Medium: at least two relevant constraints that must be combined without step-by-step guidance.
+  - Hard: at least three interacting constraints plus a trade-off, risk check, or verification decision.
+- Do not reuse the same question and answer logic with only different wording, names, dates, or numbers. The reviewer
+  must be able to identify the additional medium and hard reasoning requirements directly from the question and options.
 - Create a small, actionable learning nugget that takes 3-8 minutes and feels useful rather than academic.
 - Use plain business language. Explain unavoidable AI terms in the question or feedback.
 - Test one clear learning objective at a time. Avoid trick questions, subtle semantic distinctions, and options that
@@ -43,6 +50,8 @@ Content and safety:
 - Single-answer types must have exactly one unambiguous correct answer. Multiple-choice missions may have one, several,
   or all answer options as correct.
 - Distractors must be plausible but clearly wrong at the intended beginner level.
+- If a description or question names an output format such as a table, numbered list, or bullet list, the correct answer
+  must request exactly that format. Never combine conflicting formats, and never let two options satisfy every condition.
 - Include concise bilingual feedback of 1-2 sentences that addresses the learner's concrete answer. Explain why the
   selected answer is correct or incorrect, but do not prefix it with labels such as "Correct", "Incorrect", "Richtig",
   or "Falsch"; the interface already displays that status.
@@ -72,20 +81,17 @@ Every mission must use one common type and contain exactly easy, medium, and har
 learning objective. Each variant uses 10-50 points. Return this structure:
 {{"missions":[{{"date":"YYYY-MM-DD","type":"single_choice|multiple_choice|compliance_decision|prompt_selection|prompt_ranking|compliance_traffic_light",
 "topic_de":"...","topic_en":"...","learning_objective_de":"...","learning_objective_en":"...",
-"variants":{{"easy":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,"content":{{...}}}},
+"variants":{{"easy":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":20,"content":{{...}}}},
 "medium":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,"content":{{...}}}},
-"hard":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,"content":{{...}}}}}}}}]}}
-The following type-specific content schema applies separately inside each of the three variants.
-For single_choice, multiple_choice, compliance_decision, and prompt_selection use:
+"hard":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":40,"content":{{...}}}}}}}}]}}
+Each variant uses the matching content schema below. For single_choice, multiple_choice, compliance_decision, and
+prompt_selection use:
 {{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
 "correct_option_indices":[0],"feedback_de":"...","feedback_en":"...",
 "micro_learning_de":"...","micro_learning_en":"..."}}
-For every micro_learning_de and micro_learning_en value: write 2-4 explanatory sentences. Do not start with
-"Micro-Learning:" and do not simply name the correct answer. Explain the principle in a way that helps the learner
-handle a similar situation next time. Do not reuse or paraphrase the feedback as the micro-learning text.
-For multiple_choice, correct_option_indices must contain one to all option indices. For single_choice,
-compliance_decision and prompt_selection it must contain exactly one index. Include a meaningful mix of multiple-choice missions with one
-correct answer and with several correct answers.
+micro_learning_de and micro_learning_en must contain 2-4 transferable explanatory sentences, without a
+"Micro-Learning:" prefix and without repeating the feedback. multiple_choice may contain one to all correct indices;
+single_choice, compliance_decision, and prompt_selection require exactly one.
 For prompt_ranking use exactly 3-4 bilingual prompts and provide their zero-based order from worst to best:
 {{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
 "correct_order":[0,2,1],"feedback_de":"...","feedback_en":"...",
@@ -96,11 +102,9 @@ scenario-specific feedback:
 "statements_en":["...","...","..."],"correct_colors":["green","yellow","red"],
 "statement_feedback_de":["...","...","..."],"statement_feedback_en":["...","...","..."],
 "micro_learning_de":"...","micro_learning_en":"..."}}
-The five traffic-light arrays must each contain exactly three items, never more or fewer. The content object must use
-only the fields defined for its selected mission type. Do not add explanations outside the JSON object.
-Across the requested schedule, favor broadly useful everyday topics and vary the scenarios. At least half of the
-missions should focus on practical everyday AI usage such as prompting, checking outputs, confidentiality, or human
-review. Include prompt_ranking and compliance_traffic_light regularly when enough slots are available. Use advanced
-finance or AI terminology only when the term is explained within the mission. The easy variant must remain accessible
-to a learner with little or no practical AI experience, while medium and hard must add meaningful depth.
-Use only the dates in the requested schedule and return exactly one mission object per date."""
+All five traffic-light arrays must contain exactly three items. Use only fields defined by the selected schema. Favor
+practical everyday AI usage such as prompting, checking outputs, confidentiality, and human review. Keep easy
+beginner-friendly; medium and hard must add the explicit constraints defined above without changing the shared learning
+objective. Before returning, compare the three questions side by side and reject your draft if difficulty differs only
+by wording or figures. Then verify bilingual alignment, answer uniqueness, format consistency, exact dates, and valid JSON. Return one mission per
+requested date and nothing outside the JSON object."""

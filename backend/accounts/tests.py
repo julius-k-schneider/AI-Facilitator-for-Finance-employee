@@ -1356,6 +1356,7 @@ class AiMissionServiceTests(TestCase):
     def test_prompt_targets_accessible_everyday_finance_ai_learning(self):
         start, _ = next_calendar_week()
         prompt = build_user_prompt({start: 1})
+        self.assertTrue(SYSTEM_PROMPT.startswith('Reasoning: low.'))
         self.assertIn('little or no practical AI experience', SYSTEM_PROMPT)
         self.assertIn('beginner-friendly', SYSTEM_PROMPT)
         self.assertIn('monthly, quarterly, and year-end reports', SYSTEM_PROMPT)
@@ -1363,6 +1364,11 @@ class AiMissionServiceTests(TestCase):
         self.assertIn('practical everyday AI usage', prompt)
         self.assertIn('micro_learning_de', prompt)
         self.assertIn('micro-learning explanation', SYSTEM_PROMPT)
+        self.assertIn('output format', SYSTEM_PROMPT)
+        self.assertIn('at least three interacting constraints', SYSTEM_PROMPT)
+        self.assertIn('compare the three questions side by side', prompt)
+        self.assertIn('"points":20', prompt)
+        self.assertIn('"points":40', prompt)
 
     def test_validator_rejects_missing_micro_learning(self):
         start, _ = next_calendar_week()
@@ -1565,6 +1571,9 @@ class AiTaskChallengeTests(TestCase):
         for index in range(30):
             expected[index % 3] += round(10 + index * 1.5, 2)
         self.assertEqual([round(field['solution'], 2) for field in fields], [round(value, 2) for value in expected])
+        self.assertIn('€10.00', candidate['content']['case_data']['en'][0])
+        self.assertIn('€', fields[0]['feedback']['en'])
+        self.assertNotIn('10,00', candidate['content']['case_data']['en'][0])
         public = public_content(candidate['content'], 'de')
         for field in public['result_fields']:
             self.assertNotIn('solution', field)
@@ -1808,6 +1817,129 @@ class AiTaskChallengeOtherTypesTests(TestCase):
         wrong_result = evaluate_task_answers(content, wrong_values, 'de')
         self.assertFalse(wrong_result['all_correct'])
         self.assertEqual(wrong_result['correct_count'], 2)
+
+
+class AiTaskChallengeDifficultyContractTests(TestCase):
+    def common(self):
+        return {
+            'title_de': 'Finanzdaten analysieren', 'title_en': 'Analyze finance data',
+            'description_de': 'Bearbeiten Sie einen fiktiven Finanzdatensatz.',
+            'description_en': 'Work with a fictional finance dataset.',
+            'task_de': 'Wird deterministisch ersetzt.', 'task_en': 'Replaced deterministically.',
+            'micro_learning_de': 'Klare Anforderungen und eine anschließende Stichprobe machen KI-Ergebnisse nachvollziehbar und sicher nutzbar.',
+            'micro_learning_en': 'Clear requirements and a subsequent spot-check make AI output traceable and safe to use.',
+        }
+
+    def bulk_payload(self, difficulty):
+        category_count = {'easy': 3, 'medium': 4, 'hard': 5}[difficulty]
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        categories_de = ['Reise', 'Büro', 'IT', 'Marketing', 'Weiterbildung'][:category_count]
+        categories_en = ['Travel', 'Office', 'IT', 'Marketing', 'Training'][:category_count]
+        return {
+            **self.common(), 'categories_de': categories_de, 'categories_en': categories_en,
+            'rows': [{
+                'date': f'2026-03-{index % 28 + 1:02d}',
+                'description_de': f'{categories_de[index % category_count]} Beleg {index}',
+                'description_en': f'{categories_en[index % category_count]} receipt {index}',
+                'amount': 100 + index, 'category_index': index % category_count,
+            } for index in range(row_count)],
+        }
+
+    def plan_payload(self, difficulty):
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        rows = []
+        for index in range(row_count):
+            actual = 1200 if index < 8 else (900 if difficulty == 'hard' and index < 14 else 1000)
+            rows.append({
+                'cost_center_de': f'Kostenstelle {index}', 'cost_center_en': f'Cost center {index}',
+                'plan': 1000, 'actual': actual,
+            })
+        return {**self.common(), 'rows': rows}
+
+    def duplicate_payload(self, difficulty):
+        pair_count = {'easy': 3, 'medium': 4, 'hard': 6}[difficulty]
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        rows = []
+        for pair_index in range(pair_count):
+            for copy_index in range(2):
+                rows.append({
+                    'date': '2026-03-01', 'invoice_number': f'DUP-{pair_index}',
+                    'vendor_de': f'Lieferant {pair_index}-{copy_index}',
+                    'vendor_en': f'Vendor {pair_index}-{copy_index}', 'amount': 500 + pair_index * 100,
+                })
+        rows.extend({
+            'date': '2026-03-02', 'invoice_number': f'UNIQUE-{index}',
+            'vendor_de': f'Einzellieferant {index}', 'vendor_en': f'Single vendor {index}',
+            'amount': 50 + index,
+        } for index in range(row_count - len(rows)))
+        return {**self.common(), 'rows': rows}
+
+    def invoice_payload(self, difficulty):
+        invoice_count = {'easy': 12, 'medium': 16, 'hard': 20}[difficulty]
+        invoices = []
+        for index in range(invoice_count):
+            vendor = index % 4
+            amount = 100 + index * 10
+            invoices.append({
+                'invoice_number': f'INV-{index}',
+                'vendor_de': f'Lieferant {vendor} GmbH', 'vendor_en': f'Vendor {vendor} Ltd',
+                'date': '2026-03-01', 'amount': amount,
+                'text_de': f'Lieferant {vendor} stellt Rechnung INV-{index} über {amount} Euro.',
+                'text_en': f'Vendor {vendor} issued invoice INV-{index} for {amount} euros.',
+            })
+        return {**self.common(), 'invoices': invoices}
+
+    def test_every_task_type_has_observable_difficulty_progression(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        expected_fields = {
+            'bulk_categorization': {'easy': 3, 'medium': 4, 'hard': 5},
+            'plan_actual_deviation': {'easy': 2, 'medium': 3, 'hard': 5},
+            'duplicate_payment_hunt': {'easy': 1, 'medium': 2, 'hard': 3},
+            'invoice_extraction': {'easy': 2, 'medium': 3, 'hard': 4},
+        }
+        builders = {
+            'bulk_categorization': self.bulk_payload,
+            'plan_actual_deviation': self.plan_payload,
+            'duplicate_payment_hunt': self.duplicate_payload,
+            'invoice_extraction': self.invoice_payload,
+        }
+        expected_items = {
+            'bulk_categorization': [24, 36, 48],
+            'plan_actual_deviation': [24, 36, 48],
+            'duplicate_payment_hunt': [24, 36, 48],
+            'invoice_extraction': [12, 16, 20],
+        }
+        for mission_type, builder in builders.items():
+            variants = [
+                validate_task_challenge(builder(difficulty), mission_type, difficulty=difficulty)
+                for difficulty in ('easy', 'medium', 'hard')
+            ]
+            self.assertEqual([len(item['content']['case_data']['de']) for item in variants], expected_items[mission_type])
+            self.assertEqual(
+                [len(item['content']['result_fields']) for item in variants],
+                [expected_fields[mission_type][difficulty] for difficulty in ('easy', 'medium', 'hard')],
+            )
+            self.assertEqual([item['max_points'] for item in variants], [30, 40, 50])
+            self.assertEqual(len({item['content']['task']['de'] for item in variants}), 3)
+
+    def test_wrong_difficulty_volume_is_rejected(self):
+        payload = self.plan_payload('easy')
+        payload['rows'].append({
+            'cost_center_de': 'Extra', 'cost_center_en': 'Extra', 'plan': 1000, 'actual': 900,
+        })
+        with self.assertRaisesRegex(AiMissionGenerationError, 'exactly 24 rows'):
+            from accounts.services.ai_task_challenge import validate_task_challenge
+            validate_task_challenge(payload, 'plan_actual_deviation', difficulty='easy')
+
+    def test_prompt_contracts_name_exact_volume_and_results(self):
+        from accounts.prompts.task_challenges import build_difficulty_instruction
+        easy = build_difficulty_instruction('plan_actual_deviation', 'easy')
+        hard = build_difficulty_instruction('plan_actual_deviation', 'hard')
+        self.assertIn('exactly 24 rows', easy)
+        self.assertIn('only:', easy)
+        self.assertIn('exactly 48 rows', hard)
+        self.assertIn('average positive overrun', hard)
+        self.assertIn('no others', hard)
 
 
 class AiTaskChallengeTrainingTests(TestCase):
