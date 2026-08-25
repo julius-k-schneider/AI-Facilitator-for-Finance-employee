@@ -1,6 +1,7 @@
 import { Avatar, Box, Group, Image, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core'
 import { IconLogout, IconSettings } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { branding } from '../branding'
 import { NAV_ITEMS } from '../nav'
 import { PERMISSIONS, hasPermission } from '../auth/permissions'
@@ -83,8 +84,10 @@ function NavLink({ item, active, onClick }) {
   )
 }
 
-export default function Sidebar({ page, onNavigate, user, onLogout }) {
+export default function Sidebar({ user, onLogout }) {
   const { t } = useTranslation()
+  const location = useLocation()
+  const navigate = useNavigate()
   const visibleItems = NAV_ITEMS.filter(
     (item) =>
       (!item.permission || hasPermission(user, item.permission)) &&
@@ -147,8 +150,8 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
           <NavLink
             key={item.value}
             item={item}
-            active={page === item.value}
-            onClick={() => onNavigate(item.value)}
+            active={location.pathname === item.path}
+            onClick={() => navigate(item.path)}
           />
         ))}
       </Stack>
@@ -194,7 +197,7 @@ export default function Sidebar({ page, onNavigate, user, onLogout }) {
           <Group gap={6} wrap="nowrap">
             <Tooltip label={t('sidebar.tooltipProfile')} position="top" withArrow>
               <UnstyledButton
-                onClick={() => onNavigate('profile')}
+                onClick={() => navigate('/profile')}
                 aria-label={t('sidebar.tooltipProfile')}
                 style={iconButtonStyle}
                 onMouseEnter={iconButtonHover}

@@ -20,6 +20,7 @@ import {
   IconTrophy,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useUserProgress } from '../hooks/useUserProgress'
 import { PROGRESS_EVENT, getUserId } from '../services/progressService'
 
@@ -39,8 +40,9 @@ function StatCard({ label, value, icon: Icon, color }) {
   )
 }
 
-export default function Home({ user, navigate }) {
+export default function Home({ user }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { progress } = useUserProgress(user)
   const [weeklyRank, setWeeklyRank] = useState(null)
   const onboardingDone = Boolean(user?.onboarding_completed)
@@ -96,7 +98,7 @@ export default function Home({ user, navigate }) {
             size="md"
             color={onboardingDone ? 'brand' : 'accent'}
             rightSection={<IconArrowRight size={18} />}
-            onClick={() => navigate(onboardingDone ? 'missions' : 'basics')}
+            onClick={() => navigate(onboardingDone ? '/missions' : '/basics')}
             w="fit-content"
           >
             {onboardingDone ? t('home.actions.openMissions') : t('home.locked.cta')}
