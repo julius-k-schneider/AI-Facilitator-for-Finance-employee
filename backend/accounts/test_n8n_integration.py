@@ -291,6 +291,26 @@ class N8NGenerationApiTests(TestCase):
             'results': [{'requirement_id': 'quiz-1', 'payload': self.raw_quiz_payload(scheduled_date)}],
             'review_report': {'verdict': 'pass', 'score': 0.94, 'issues': []},
             'research_context': [],
+            'mission_metrics': [{
+                'requirement_id': 'quiz-1',
+                'failed': False,
+                'generator': [{
+                    'duration_ms': 1234,
+                    'prompt_tokens': 800,
+                    'completion_tokens': 1200,
+                    'total_tokens': 2000,
+                    'finish_reason': 'stop',
+                    'call_index': 0,
+                }],
+                'reviewer': [{
+                    'duration_ms': 321,
+                    'prompt_tokens': 500,
+                    'completion_tokens': 100,
+                    'total_tokens': 600,
+                    'finish_reason': 'stop',
+                }],
+                'repair': [],
+            }],
         }
         with CaptureQueriesContext(connection) as captured_queries:
             first = self.callback(body)
@@ -314,6 +334,13 @@ class N8NGenerationApiTests(TestCase):
         run.refresh_from_db()
         self.assertEqual(run.status, GenerationRun.STATUS_COMPLETED)
         self.assertEqual(run.review_report['score'], 0.94)
+        metric = run.result_metadata['mission_metrics'][0]
+        self.assertEqual(metric['requirement_id'], 'quiz-1')
+        self.assertEqual(metric['scheduled_date'], scheduled_date.isoformat())
+        self.assertEqual(metric['generator'][0]['duration_ms'], 1234)
+        self.assertEqual(metric['generator'][0]['total_tokens'], 2000)
+        self.assertEqual(metric['generator'][0]['finish_reason'], 'stop')
+        self.assertEqual(first.json()['generation_run']['mission_metrics'], [metric])
 
     def test_weekly_callback_saves_successes_and_records_failed_requirements(self):
         first_date = timezone.localdate() + timedelta(days=7)
@@ -364,6 +391,10 @@ class N8NGenerationApiTests(TestCase):
         self.assertEqual(payload['failed_count'], 1)
         self.assertTrue(payload['partial_success'])
         self.assertEqual(payload['failed_requirements'][0]['requirement_id'], 'quiz-failed')
+        self.assertEqual(payload['failed_requirements'][0]['scheduled_date'], second_date.isoformat())
+        self.assertEqual(payload['failed_requirements'][0]['output_type'], 'quiz_mission')
+        self.assertIsNone(payload['failed_requirements'][0]['mission_type'])
+        self.assertEqual(payload['failed_requirements'][0]['error_message'], 'Reviewer rejected the mission after repairs')
         run.refresh_from_db()
         self.assertEqual(run.result_metadata['failed_requirements'][0]['repair_attempts'], 2)
 

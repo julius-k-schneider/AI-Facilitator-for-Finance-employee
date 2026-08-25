@@ -593,6 +593,54 @@ function GenerationStatus({ run }) {
   )
 }
 
+function GenerationResultAlert({ run }) {
+  const { i18n, t } = useTranslation()
+  const locale = i18n.resolvedLanguage || i18n.language
+  const failures = Array.isArray(run?.failed_requirements) ? run.failed_requirements : []
+  const createdCount = Number(run?.created_count || 0)
+  const completed = run?.status === 'completed'
+
+  const failureTypeLabel = (failure) => {
+    if (failure.mission_type) return missionTypeLabel(t, failure.mission_type)
+    if (failure.output_type === 'task_mission') return t('missions.review.failureTaskMission')
+    return t('missions.review.failureQuizMission')
+  }
+
+  return (
+    <Alert color={completed ? 'green' : 'red'} role="status" aria-live="polite">
+      <Stack gap={failures.length ? 'sm' : 0}>
+        <Text fz="sm">
+          {completed
+            ? t('missions.review.generated', { count: createdCount })
+            : t('missions.review.generationStatus.failed')}
+          {failures.length > 0 && ` ${t('missions.review.generatedFailed', { count: failures.length })}`}
+        </Text>
+        {failures.length > 0 && <Stack gap="xs">
+          <Text fz="sm" fw={700}>{t('missions.review.failureDetails')}</Text>
+          {failures.map((failure, index) => {
+            const rawDate = failure.scheduled_date || failure.requirement_id
+            const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate || '') ? new Date(`${rawDate}T12:00:00`) : null
+            const dateLabel = parsedDate ? parsedDate.toLocaleDateString(locale, { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }) : rawDate
+            const repairAttempts = Number(failure.repair_attempts || 0)
+            return <Paper key={`${failure.requirement_id || 'failure'}-${index}`} withBorder radius="sm" p="sm" bg="white">
+              <Group justify="space-between" align="flex-start" gap="xs">
+                <Text fz="sm" fw={700}>{dateLabel} · {failureTypeLabel(failure)}</Text>
+                <Badge color="orange" variant="light">
+                  {t('missions.review.repairAttempts', { count: repairAttempts })}
+                </Badge>
+              </Group>
+              <Text fz="xs" c="dimmed" mt={5}>
+                <Text span fw={700}>{t('missions.review.failureReason')}: </Text>
+                {failure.error_message || t('missions.review.failureUnknown')}
+              </Text>
+            </Paper>
+          })}
+        </Stack>}
+      </Stack>
+    </Alert>
+  )
+}
+
 function ReviewMissionCard({ mission, activeAction, onAction }) {
   const { i18n, t } = useTranslation()
   return <Paper withBorder radius="md" p="lg">
@@ -656,6 +704,7 @@ function MissionReview({ enabled, onPublished }) {
   const [activeAction, setActiveAction] = useState('')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [generationResult, setGenerationResult] = useState(null)
   const [weekSelectionOpen, setWeekSelectionOpen] = useState(false)
   const [generationMonth, setGenerationMonth] = useState(() => new Date(`${nextWeekStart()}T12:00:00`))
   const [generationWeek, setGenerationWeek] = useState(nextWeekStart)
@@ -706,17 +755,15 @@ function MissionReview({ enabled, onPublished }) {
     setGenerationRun(null)
     if (run.status === 'completed') {
       setError('')
-      setMessage(run.failed_count > 0
-        ? t('missions.review.generatedPartial', {
-          count: run.created_count || 0,
-          failedCount: run.failed_count,
-        })
-        : t('missions.review.generated', { count: run.created_count || 0 }))
+      setMessage('')
+      setGenerationResult(run)
       await Promise.all([loadReview(), loadGenerationSchedule()])
       return
     }
     setMessage('')
-    setError(run.error_message || t('missions.review.generationStatus.failed'))
+    const failures = Array.isArray(run.failed_requirements) ? run.failed_requirements : []
+    setGenerationResult(failures.length > 0 ? run : null)
+    setError(failures.length > 0 ? '' : (run.error_message || t('missions.review.generationStatus.failed')))
   }, [loadGenerationSchedule, loadReview, t])
   const finalizeGenerationRef = useRef(finalizeGeneration)
 
@@ -810,6 +857,7 @@ function MissionReview({ enabled, onPublished }) {
     setGenerationRun({ status: 'queued' })
     setError('')
     setMessage('')
+    setGenerationResult(null)
     try {
       const data = await startNextWeekMissionGeneration(generationWeek, false)
       const run = data.generation_run
@@ -827,6 +875,7 @@ function MissionReview({ enabled, onPublished }) {
     setGenerating(true)
     setError('')
     setMessage('')
+    setGenerationResult(null)
     try {
       await generateTaskChallenge(missionType, generationWeek)
       setMessage(t('missions.review.taskGenerated'))
@@ -843,6 +892,7 @@ function MissionReview({ enabled, onPublished }) {
     setActiveAction(`${action}-${mission.id}`)
     setError('')
     setMessage('')
+    setGenerationResult(null)
     try {
       if (action === 'approve') await approveMission(mission.id)
       if (action === 'regenerate') await regenerateMission(mission.id)
@@ -862,6 +912,7 @@ function MissionReview({ enabled, onPublished }) {
     setActiveAction(`${action}-all`)
     setError('')
     setMessage('')
+    setGenerationResult(null)
     try {
       const data = action === 'approve' ? await approveAllReviewMissions(generationWeek) : await rejectAllReviewMissions(generationWeek)
       const count = action === 'approve' ? data.approved_count : data.rejected_count
@@ -923,6 +974,7 @@ function MissionReview({ enabled, onPublished }) {
         </Modal>
         {error && <Alert color="red">{error}</Alert>}
         {message && <Alert color="green">{message}</Alert>}
+        {generationResult && <GenerationResultAlert run={generationResult} />}
         {generating && generationRun && <GenerationStatus run={generationRun} />}
         {loading ? <Text c="dimmed">{t('missions.review.loading')}</Text> : missions.length === 0 ? (
           <Paper withBorder radius="md" p="xl" bg="gray.0"><Text ta="center" c="dimmed">{t('missions.review.empty')}</Text></Paper>
