@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import {
+  Alert,
   Badge,
   Box,
   Button,
@@ -9,17 +9,19 @@ import {
   Stack,
   Text,
   ThemeIcon,
-  Title,
 } from '@mantine/core'
 import {
   IconArrowRight,
   IconCheck,
   IconCircleDashed,
+  IconLock,
   IconPlayerPlay,
   IconRefresh,
   IconRosetteDiscountCheck,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import PageShell from './PageShell'
 import { ONBOARDING, pickLang } from '../onboarding/content'
 import OnboardingFlow from '../onboarding/OnboardingFlow'
 
@@ -51,8 +53,15 @@ function ChapterRow({ chapter, done, lang }) {
 export default function Basics({ user, onUserUpdate, apiBase }) {
   const { t, i18n } = useTranslation()
   const lang = (i18n.language || 'de').split('-')[0]
-  const [running, setRunning] = useState(false)
-  const [reviewing, setReviewing] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+
+  // The running flow is a route of its own, so browser Back leaves the flow
+  // instead of the whole page, and a reload resumes where the server says.
+  const running = location.pathname.endsWith('/onboarding')
+  const reviewing = searchParams.get('review') === '1'
+  const lockedFrom = location.state?.lockedFrom
 
   const chapters = ONBOARDING.chapters
   const completed = new Set(user?.onboarding_progress || [])
@@ -74,8 +83,7 @@ export default function Basics({ user, onUserUpdate, apiBase }) {
 
   const finishOnboarding = () => {
     onUserUpdate((current) => ({ ...current, onboarding_completed: true }))
-    setRunning(false)
-    setReviewing(false)
+    navigate('/basics', { replace: true })
   }
 
   if (running) {
@@ -86,18 +94,12 @@ export default function Basics({ user, onUserUpdate, apiBase }) {
         startAtBeginning={reviewing}
         onProgress={markProgress}
         onComplete={finishOnboarding}
-        onExit={() => {
-          setRunning(false)
-          setReviewing(false)
-        }}
+        onExit={() => navigate('/basics')}
       />
     )
   }
 
-  const launch = ({ review }) => {
-    setReviewing(review)
-    setRunning(true)
-  }
+  const launch = ({ review }) => navigate(`/basics/onboarding${review ? '?review=1' : ''}`)
 
   const primaryLabel = allDone
     ? t('onboarding.review')
@@ -106,22 +108,19 @@ export default function Basics({ user, onUserUpdate, apiBase }) {
       : t('onboarding.start')
 
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
-      <Stack gap={6} mb="xl">
-        <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9">
-          {t('pages.basics.title')}
-        </Title>
-        <Text fz="lg" c="dimmed" maw={620}>
-          {t('pages.basics.description')}
-        </Text>
-      </Stack>
+    <PageShell title={t('pages.basics.title')} description={t('pages.basics.description')}>
+      {lockedFrom && (
+        <Alert color="accent" variant="light" icon={<IconLock size={18} />} mb="lg" title={t('pages.basics.lockedTitle')}>
+          <Text fz="sm">{t('pages.basics.lockedText')}</Text>
+        </Alert>
+      )}
 
       <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} bg="white">
         <Group justify="space-between" align="flex-start" mb="lg">
           <Box>
-            <Title order={3} c="secondary.9">
+            <Text fw={700} fz="xl" c="secondary.9">
               {t('onboarding.hubTitle')}
-            </Title>
+            </Text>
             <Text c="dimmed" fz="sm" mt={2}>
               {t('onboarding.hubSubtitle')}
             </Text>
@@ -196,6 +195,6 @@ export default function Basics({ user, onUserUpdate, apiBase }) {
           </Button>
         </Group>
       </Paper>
-    </Box>
+    </PageShell>
   )
 }

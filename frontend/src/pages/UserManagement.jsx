@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Alert,
   Avatar,
   Badge,
   Box,
   Button,
   Checkbox,
   Group,
-  Loader,
-  Modal,
   NumberInput,
   Paper,
   Select,
@@ -21,6 +18,9 @@ import {
 } from '@mantine/core'
 import { IconSearch, IconShield, IconTrash, IconUserCog, IconUsers } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
+import ConfirmModal from '../components/ConfirmModal'
+import { RowsSkeleton } from '../components/Skeletons'
+import { notifyError, notifySuccess } from '../services/notify'
 import { getUserId } from '../services/progressService'
 import { ROLE_LABELS, ROLES, getAvailableRoles } from '../auth/permissions'
 import {
@@ -65,8 +65,8 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
   const [users, setUsers] = useState([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
-  const [message, setMessage] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
   const [settings, setSettings] = useState(null)
   const [savingSettings, setSavingSettings] = useState(false)
   const currentUserId = getUserId(currentUser)
@@ -79,11 +79,10 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
         if (!isActive) return
         setUsers(nextUsers)
         setSettings(nextSettings)
-        setMessage(null)
       })
       .catch((error) => {
         if (!isActive) return
-        setMessage({ type: 'error', text: error.message || t('userManagement.errors.loadFailed') })
+        notifyError(error.message || t('userManagement.errors.loadFailed'))
       })
       .finally(() => {
         if (isActive) setLoading(false)
@@ -109,7 +108,7 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
   const handleRoleChange = async (target, role) => {
     if (!role || role === target.role) return
     if (isLastAdmin(users, target.id) && role !== ROLES.ADMIN) {
-      setMessage({ type: 'error', text: t('userManagement.errors.lastAdminDowngrade') })
+      notifyError(t('userManagement.errors.lastAdminDowngrade'))
       return
     }
 
@@ -119,9 +118,9 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
       if (String(updatedUser.id) === currentUserId) {
         onCurrentUserUpdate(updatedUser)
       }
-      setMessage({ type: 'success', text: t('userManagement.success.roleUpdated') })
+      notifySuccess(t('userManagement.success.roleUpdated'))
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || t('userManagement.errors.roleUpdateFailed') })
+      notifyError(error.message || t('userManagement.errors.roleUpdateFailed'))
     }
   }
 
@@ -131,9 +130,9 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
       const updatedUser = await updateUserSkillLevel(target.id, skillLevel)
       setUsers((current) => current.map((user) => (user.id === updatedUser.id ? updatedUser : user)))
       if (String(updatedUser.id) === currentUserId) onCurrentUserUpdate(updatedUser)
-      setMessage({ type: 'success', text: t('userManagement.success.skillUpdated') })
+      notifySuccess(t('userManagement.success.skillUpdated'))
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || t('userManagement.errors.skillUpdateFailed') })
+      notifyError(error.message || t('userManagement.errors.skillUpdateFailed'))
     }
   }
 
@@ -143,9 +142,9 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
     try {
       const updated = await updateSkillProgressionSettings(settings)
       setSettings(updated)
-      setMessage({ type: 'success', text: t('userManagement.success.settingsUpdated') })
+      notifySuccess(t('userManagement.success.settingsUpdated'))
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || t('userManagement.errors.settingsUpdateFailed') })
+      notifyError(error.message || t('userManagement.errors.settingsUpdateFailed'))
     } finally {
       setSavingSettings(false)
     }
@@ -154,23 +153,26 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
   const handleDelete = async () => {
     if (!deleteTarget) return
     if (String(deleteTarget.id) === currentUserId) {
-      setMessage({ type: 'error', text: t('userManagement.errors.selfDelete') })
+      notifyError(t('userManagement.errors.selfDelete'))
       setDeleteTarget(null)
       return
     }
     if (isLastAdmin(users, deleteTarget.id)) {
-      setMessage({ type: 'error', text: t('userManagement.errors.lastAdminDelete') })
+      notifyError(t('userManagement.errors.lastAdminDelete'))
       setDeleteTarget(null)
       return
     }
 
+    setDeleting(true)
     try {
       await deleteUser(deleteTarget.id)
       setUsers((current) => current.filter((user) => user.id !== deleteTarget.id))
       setDeleteTarget(null)
-      setMessage({ type: 'success', text: t('userManagement.success.deleted') })
+      notifySuccess(t('userManagement.success.deleted'))
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || t('userManagement.errors.deleteFailed') })
+      notifyError(error.message || t('userManagement.errors.deleteFailed'))
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -262,18 +264,13 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
           />
         </Group>
 
-        {message && (
-          <Alert color={message.type === 'error' ? 'red' : 'green'} variant="light" radius={0}>
-            {message.text}
-          </Alert>
-        )}
-
         {loading ? (
-          <Group justify="center" py={48}>
-            <Loader size="sm" color="brand" />
-            <Text c="dimmed">{t('userManagement.loading')}</Text>
-          </Group>
+          <Box p="lg"><RowsSkeleton count={4} /></Box>
         ) : (
+          /* The table is ~940px wide because of the two selects. Without a
+             scroll container the surrounding Paper simply cut the last columns
+             off on narrow viewports, with no way to reach them. */
+          <Table.ScrollContainer minWidth={940} type="native">
           <Table verticalSpacing="md" horizontalSpacing="lg" highlightOnHover>
             <Table.Thead>
               <Table.Tr>
@@ -382,32 +379,20 @@ export default function UserManagement({ currentUser, onCurrentUserUpdate }) {
               })}
             </Table.Tbody>
           </Table>
+          </Table.ScrollContainer>
         )}
       </Paper>
 
-      <Modal
+      <ConfirmModal
         opened={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        loading={deleting}
         title={t('userManagement.deleteModalTitle')}
-        centered
-      >
-        <Stack gap="md">
-          <Text c="secondary.9">
-            {t('userManagement.deleteConfirm', { name: deleteTarget ? displayName(deleteTarget) : '' })}
-          </Text>
-          <Text fz="sm" c="dimmed">
-            {t('userManagement.deleteHint')}
-          </Text>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setDeleteTarget(null)}>
-              {t('userManagement.cancel')}
-            </Button>
-            <Button color="red" leftSection={<IconTrash size={16} />} onClick={handleDelete}>
-              {t('userManagement.delete')}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        text={t('userManagement.deleteConfirm', { name: deleteTarget ? displayName(deleteTarget) : '' })}
+        hint={t('userManagement.deleteHint')}
+        confirmLabel={t('userManagement.delete')}
+      />
     </Box>
   )
 }

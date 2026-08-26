@@ -1,0 +1,36 @@
+/* The chat fills what is left below the app header. The height comes from the
+   AppShell variable instead of a hard-coded pixel value, so a taller header
+   cannot push the page into a second scrollbar. */
+.agent-page {
+  height: calc(100vh - var(--app-shell-header-height, 64px));
+  box-sizing: border-box;
+  display: flex;
+  overflow: hidden;
+}
+
+.agent-panel {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.agent-chat-list {
+  display: none;
+}
+
+/* The 260px list column only appears once there is room for it. Below that the
+   conversation gets the full width and the list moves into a drawer. */
+@media (min-width: 48em) {
+  .agent-panel {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .agent-chat-list {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--line);
+  }
+}

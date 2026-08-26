@@ -6,14 +6,24 @@
     "accessDenied": {
       "title": "No access",
       "text": "You do not have permission to view this page."
-    }
+    },
+    "networkError": "Cannot reach the server. Check your connection and try again."
   },
   "language": {
     "current": "English",
-    "switchAria": "Switch language to German"
+    "switchAria": "Switch language to German",
+    "label": "Language"
   },
-  "skillLevels": { "beginner": "Beginner", "advanced": "Advanced", "pro": "Pro" },
-  "difficulties": { "easy": "Easy", "medium": "Medium", "hard": "Hard" },
+  "skillLevels": {
+    "beginner": "Beginner",
+    "advanced": "Advanced",
+    "pro": "Pro"
+  },
+  "difficulties": {
+    "easy": "Easy",
+    "medium": "Medium",
+    "hard": "Hard"
+  },
   "nav": {
     "home": "Home",
     "basics": "Basics",
@@ -100,7 +110,11 @@
     "rankingInstruction": "Sort the prompts from worst to best.",
     "moveUp": "Move up",
     "moveDown": "Move down",
-    "trafficLight": { "green": "Green - allowed", "yellow": "Yellow - restricted", "red": "Red - not allowed" },
+    "trafficLight": {
+      "green": "Green - allowed",
+      "yellow": "Yellow - restricted",
+      "red": "Red - not allowed"
+    },
     "streak": {
       "current": "Current streak",
       "best": "Best: {{count}}"
@@ -110,7 +124,10 @@
       "available": "Available",
       "archive": "Archive"
     },
-    "status": { "open": "Open", "completed": "Completed" },
+    "status": {
+      "open": "Open",
+      "completed": "Completed"
+    },
     "archive": {
       "back": "Back to archive",
       "viewButton": "View",
@@ -132,20 +149,22 @@
       "monthResult": "Archive for {{month}}",
       "rangeResult": "Archive for {{range}}",
       "completedTitle": "Completed at the time",
-      "score": "{{score}} of {{max}} points"
+      "score": "{{score}} of {{max}} points",
+      "previousPeriod": "Previous period",
+      "nextPeriod": "Next period"
     },
     "types": {
       "singleChoice": "Single choice",
       "multipleChoice": "Multiple choice",
       "complianceDecision": "Compliance decision",
-      "promptSelection": "Prompt selection"
-      ,"promptRanking": "Prompt ranking",
-      "complianceTrafficLight": "Compliance traffic light"
-      ,"aiChatChallenge": "AI chat challenge"
-      ,"bulkCategorization": "Bulk categorization"
-      ,"planActualDeviation": "Plan vs. actual deviation"
-      ,"duplicatePaymentHunt": "Duplicate payment hunt"
-      ,"invoiceExtraction": "Invoice extraction"
+      "promptSelection": "Prompt selection",
+      "promptRanking": "Prompt ranking",
+      "complianceTrafficLight": "Compliance traffic light",
+      "aiChatChallenge": "AI chat challenge",
+      "bulkCategorization": "Bulk categorization",
+      "planActualDeviation": "Plan vs. actual deviation",
+      "duplicatePaymentHunt": "Duplicate payment hunt",
+      "invoiceExtraction": "Invoice extraction"
     },
     "result": {
       "correctPrefix": "Correct.",
@@ -210,7 +229,16 @@
       "deleteConfirm": "Are you sure you want to delete the mission “{{title}}”?",
       "deleteBlocked": "This mission has already been completed and can no longer be deleted.",
       "previewTitle": "Mission preview in German and English",
-      "weekDays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+      "weekDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+      ],
+      "deleteSuccess": "Mission deleted."
     },
     "review": {
       "title": "AI-generated missions for review",
@@ -247,7 +275,10 @@
       "title": "Mission debug area",
       "description": "Test every mission type with sample data without changing points or database records.",
       "button": "Test missions"
-    }
+    },
+    "viewResultButton": "View result",
+    "notFoundTitle": "Mission not found",
+    "notFoundText": "This mission no longer exists, or it belongs to a different account."
   },
   "training": {
     "badge": "TRAINING AREA",
@@ -261,17 +292,50 @@
       "partial": "{{correct}} of {{total}} statements were correct."
     },
     "types": {
-      "singleChoice": { "title": "Single choice", "description": "Practice a question with exactly one correct answer." },
-      "multipleChoice": { "title": "Multiple choice", "description": "Identify all applicable answers in a practical task." },
-      "complianceDecision": { "title": "Compliance decision", "description": "Practice safe decisions about AI usage in finance." },
-      "promptSelection": { "title": "Prompt selection", "description": "Choose the clearest and most useful prompt for a situation." },
-      "promptRanking": { "title": "Prompt ranking", "description": "Sort prompts from the weakest to the strongest instruction." },
-      "complianceTrafficLight": { "title": "Compliance traffic light", "description": "Assess three scenarios as allowed, restricted, or prohibited." }
-      ,"aiChatChallenge": { "title": "AI chat challenge", "description": "Solve a finance case with no more than three focused questions to an embedded AI chat." }
-      ,"bulkCategorization": { "title": "Bulk categorization", "description": "Use your AI assistant to assign many booking lines to categories and enter the totals per category." }
-      ,"planActualDeviation": { "title": "Plan vs. actual deviation", "description": "Use your AI assistant to find cost centers that overran their budget and enter the key figures." }
-      ,"duplicatePaymentHunt": { "title": "Duplicate payment hunt", "description": "Use your AI assistant to find accidental duplicate payments in a payment run." }
-      ,"invoiceExtraction": { "title": "Invoice extraction", "description": "Use your AI assistant to extract key figures from many invoice texts." }
+      "singleChoice": {
+        "title": "Single choice",
+        "description": "Practice a question with exactly one correct answer."
+      },
+      "multipleChoice": {
+        "title": "Multiple choice",
+        "description": "Identify all applicable answers in a practical task."
+      },
+      "complianceDecision": {
+        "title": "Compliance decision",
+        "description": "Practice safe decisions about AI usage in finance."
+      },
+      "promptSelection": {
+        "title": "Prompt selection",
+        "description": "Choose the clearest and most useful prompt for a situation."
+      },
+      "promptRanking": {
+        "title": "Prompt ranking",
+        "description": "Sort prompts from the weakest to the strongest instruction."
+      },
+      "complianceTrafficLight": {
+        "title": "Compliance traffic light",
+        "description": "Assess three scenarios as allowed, restricted, or prohibited."
+      },
+      "aiChatChallenge": {
+        "title": "AI chat challenge",
+        "description": "Solve a finance case with no more than three focused questions to an embedded AI chat."
+      },
+      "bulkCategorization": {
+        "title": "Bulk categorization",
+        "description": "Use your AI assistant to assign many booking lines to categories and enter the totals per category."
+      },
+      "planActualDeviation": {
+        "title": "Plan vs. actual deviation",
+        "description": "Use your AI assistant to find cost centers that overran their budget and enter the key figures."
+      },
+      "duplicatePaymentHunt": {
+        "title": "Duplicate payment hunt",
+        "description": "Use your AI assistant to find accidental duplicate payments in a payment run."
+      },
+      "invoiceExtraction": {
+        "title": "Invoice extraction",
+        "description": "Use your AI assistant to extract key figures from many invoice texts."
+      }
     },
     "chat": {
       "caseData": "Case data",
@@ -316,7 +380,11 @@
       "Help me write a prompt for a management summary.",
       "How can I check an AI answer for hallucinations?",
       "Make this statement more cautious for finance reporting."
-    ]
+    ],
+    "chats": "Chats",
+    "deleteConfirm": "Permanently delete the chat “{{title}}”?",
+    "deleteHint": "The conversation cannot be restored afterwards.",
+    "deleteSuccess": "Chat deleted."
   },
   "profile": {
     "title": "Profile",
@@ -328,7 +396,8 @@
     "currentPassword": "Current password",
     "newPassword": "New password",
     "errorChange": "Password could not be changed",
-    "successChange": "Password updated successfully"
+    "successChange": "Password updated successfully",
+    "passwordRules": "At least 8 characters."
   },
   "userManagement": {
     "title": "User management",
@@ -408,14 +477,19 @@
     "finalTitle": "Final quiz",
     "finalHeading": "Last step: final quiz",
     "finalSubtitle": "Answer the following questions to complete your onboarding and unlock the daily challenges.",
-    "finish": "Complete onboarding"
+    "finish": "Complete onboarding",
+    "saveErrorTitle": "Progress not saved",
+    "saveError": "Your progress could not be saved. Press Continue again to retry.",
+    "saveNetworkError": "Cannot reach the server. Your progress was not saved – press Continue again."
   },
   "pages": {
     "comingSoon": "Coming soon",
     "comingSoonText": "This area is currently being built. Check back soon – new content for your AI enablement is on the way.",
     "basics": {
       "title": "Basics",
-      "description": "The most important AI basics for your day-to-day work in finance"
+      "description": "The most important AI basics for your day-to-day work in finance",
+      "lockedTitle": "Finish the onboarding first",
+      "lockedText": "Missions, training and your agent unlock once you have completed the basics and the final quiz."
     },
     "leaderboard": {
       "title": "Leaderboard",
@@ -459,5 +533,10 @@
       "emptyTitle": "No leaderboard data yet",
       "emptyText": "Results will appear here once data for the employee challenge is available."
     }
+  },
+  "common": {
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete"
   }
 }

@@ -6,14 +6,24 @@
     "accessDenied": {
       "title": "Kein Zugriff",
       "text": "Du hast keine Berechtigung für diese Seite."
-    }
+    },
+    "networkError": "Keine Verbindung zum Server. Prüfe deine Internetverbindung und versuche es erneut."
   },
   "language": {
     "current": "Deutsch",
-    "switchAria": "Sprache auf Englisch umschalten"
+    "switchAria": "Sprache auf Englisch umschalten",
+    "label": "Sprache"
   },
-  "skillLevels": { "beginner": "Einsteiger", "advanced": "Fortgeschritten", "pro": "Pro" },
-  "difficulties": { "easy": "Leicht", "medium": "Mittel", "hard": "Schwer" },
+  "skillLevels": {
+    "beginner": "Einsteiger",
+    "advanced": "Fortgeschritten",
+    "pro": "Pro"
+  },
+  "difficulties": {
+    "easy": "Leicht",
+    "medium": "Mittel",
+    "hard": "Schwer"
+  },
   "nav": {
     "home": "Home",
     "basics": "Grundlagen",
@@ -100,7 +110,11 @@
     "rankingInstruction": "Sortiere die Prompts vom schlechtesten zum besten.",
     "moveUp": "Nach oben verschieben",
     "moveDown": "Nach unten verschieben",
-    "trafficLight": { "green": "Grün - erlaubt", "yellow": "Gelb - eingeschränkt", "red": "Rot - nicht erlaubt" },
+    "trafficLight": {
+      "green": "Grün - erlaubt",
+      "yellow": "Gelb - eingeschränkt",
+      "red": "Rot - nicht erlaubt"
+    },
     "streak": {
       "current": "Aktuelle Serie",
       "best": "Bestwert: {{count}}"
@@ -110,7 +124,10 @@
       "available": "Verfügbar",
       "archive": "Archiv"
     },
-    "status": { "open": "Offen", "completed": "Abgeschlossen" },
+    "status": {
+      "open": "Offen",
+      "completed": "Abgeschlossen"
+    },
     "archive": {
       "back": "Zurück zum Archiv",
       "viewButton": "Ansehen",
@@ -132,20 +149,22 @@
       "monthResult": "Archiv für {{month}}",
       "rangeResult": "Archiv für {{range}}",
       "completedTitle": "Damals abgeschlossen",
-      "score": "{{score}} von {{max}} Punkten"
+      "score": "{{score}} von {{max}} Punkten",
+      "previousPeriod": "Vorheriger Zeitraum",
+      "nextPeriod": "Nächster Zeitraum"
     },
     "types": {
       "singleChoice": "Single Choice",
       "multipleChoice": "Multiple Choice",
       "complianceDecision": "Compliance-Entscheidung",
-      "promptSelection": "Prompt-Auswahl"
-      ,"promptRanking": "Prompt Ranking",
-      "complianceTrafficLight": "Compliance-Ampel"
-      ,"aiChatChallenge": "AI Chat Challenge"
-      ,"bulkCategorization": "Bulk-Kategorisierung"
-      ,"planActualDeviation": "Abweichungsanalyse Plan/Ist"
-      ,"duplicatePaymentHunt": "Doppelzahlungs-Jagd"
-      ,"invoiceExtraction": "Rechnungsdaten-Extraktion"
+      "promptSelection": "Prompt-Auswahl",
+      "promptRanking": "Prompt Ranking",
+      "complianceTrafficLight": "Compliance-Ampel",
+      "aiChatChallenge": "AI Chat Challenge",
+      "bulkCategorization": "Bulk-Kategorisierung",
+      "planActualDeviation": "Abweichungsanalyse Plan/Ist",
+      "duplicatePaymentHunt": "Doppelzahlungs-Jagd",
+      "invoiceExtraction": "Rechnungsdaten-Extraktion"
     },
     "result": {
       "correctPrefix": "Richtig.",
@@ -210,7 +229,16 @@
       "deleteConfirm": "Soll die Mission „{{title}}“ wirklich gelöscht werden?",
       "deleteBlocked": "Diese Mission wurde bereits bearbeitet und kann nicht mehr gelöscht werden.",
       "previewTitle": "Missionsvorschau auf Deutsch und Englisch",
-      "weekDays": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+      "weekDays": [
+        "Mo",
+        "Di",
+        "Mi",
+        "Do",
+        "Fr",
+        "Sa",
+        "So"
+      ],
+      "deleteSuccess": "Mission gelöscht."
     },
     "review": {
       "title": "KI-generierte Missionen zur Prüfung",
@@ -247,7 +275,10 @@
       "title": "Missions-Debugbereich",
       "description": "Teste alle Missionsarten mit Beispieldaten, ohne Punkte oder Datenbankeinträge zu verändern.",
       "button": "Missionen testen"
-    }
+    },
+    "viewResultButton": "Ergebnis ansehen",
+    "notFoundTitle": "Mission nicht gefunden",
+    "notFoundText": "Diese Mission gibt es nicht mehr oder sie gehört zu einem anderen Konto."
   },
   "training": {
     "badge": "TRAININGSBEREICH",
@@ -261,17 +292,50 @@
       "partial": "{{correct}} von {{total}} Aussagen waren richtig."
     },
     "types": {
-      "singleChoice": { "title": "Single Choice", "description": "Trainiere eine Frage mit genau einer richtigen Antwort." },
-      "multipleChoice": { "title": "Multiple Choice", "description": "Erkenne alle zutreffenden Antworten in einer praktischen Aufgabe." },
-      "complianceDecision": { "title": "Compliance-Entscheidung", "description": "Übe sichere Entscheidungen zur AI-Nutzung im Finance-Kontext." },
-      "promptSelection": { "title": "Prompt-Auswahl", "description": "Wähle den klarsten und hilfreichsten Prompt für eine Situation." },
-      "promptRanking": { "title": "Prompt Ranking", "description": "Sortiere Prompts vom schlechtesten bis zum besten Arbeitsauftrag." },
-      "complianceTrafficLight": { "title": "Compliance-Ampel", "description": "Bewerte drei Szenarien einzeln als erlaubt, eingeschränkt oder verboten." }
-      ,"aiChatChallenge": { "title": "AI Chat Challenge", "description": "Löse einen Finance-Fall mit höchstens drei gezielten Fragen an einen eingebauten KI-Chat." }
-      ,"bulkCategorization": { "title": "Bulk-Kategorisierung", "description": "Ordne viele Buchungszeilen mit deinem KI-Assistenten Kategorien zu und trage die Summen je Kategorie ein." }
-      ,"planActualDeviation": { "title": "Abweichungsanalyse Plan/Ist", "description": "Finde mit deinem KI-Assistenten Kostenstellen, die ihr Budget überschritten haben, und trage die Kennzahlen ein." }
-      ,"duplicatePaymentHunt": { "title": "Doppelzahlungs-Jagd", "description": "Finde mit deinem KI-Assistenten versehentliche Doppelzahlungen in einem Zahlungslauf." }
-      ,"invoiceExtraction": { "title": "Rechnungsdaten-Extraktion", "description": "Lass dir mit deinem KI-Assistenten Kennzahlen aus vielen Rechnungstexten extrahieren." }
+      "singleChoice": {
+        "title": "Single Choice",
+        "description": "Trainiere eine Frage mit genau einer richtigen Antwort."
+      },
+      "multipleChoice": {
+        "title": "Multiple Choice",
+        "description": "Erkenne alle zutreffenden Antworten in einer praktischen Aufgabe."
+      },
+      "complianceDecision": {
+        "title": "Compliance-Entscheidung",
+        "description": "Übe sichere Entscheidungen zur AI-Nutzung im Finance-Kontext."
+      },
+      "promptSelection": {
+        "title": "Prompt-Auswahl",
+        "description": "Wähle den klarsten und hilfreichsten Prompt für eine Situation."
+      },
+      "promptRanking": {
+        "title": "Prompt Ranking",
+        "description": "Sortiere Prompts vom schlechtesten bis zum besten Arbeitsauftrag."
+      },
+      "complianceTrafficLight": {
+        "title": "Compliance-Ampel",
+        "description": "Bewerte drei Szenarien einzeln als erlaubt, eingeschränkt oder verboten."
+      },
+      "aiChatChallenge": {
+        "title": "AI Chat Challenge",
+        "description": "Löse einen Finance-Fall mit höchstens drei gezielten Fragen an einen eingebauten KI-Chat."
+      },
+      "bulkCategorization": {
+        "title": "Bulk-Kategorisierung",
+        "description": "Ordne viele Buchungszeilen mit deinem KI-Assistenten Kategorien zu und trage die Summen je Kategorie ein."
+      },
+      "planActualDeviation": {
+        "title": "Abweichungsanalyse Plan/Ist",
+        "description": "Finde mit deinem KI-Assistenten Kostenstellen, die ihr Budget überschritten haben, und trage die Kennzahlen ein."
+      },
+      "duplicatePaymentHunt": {
+        "title": "Doppelzahlungs-Jagd",
+        "description": "Finde mit deinem KI-Assistenten versehentliche Doppelzahlungen in einem Zahlungslauf."
+      },
+      "invoiceExtraction": {
+        "title": "Rechnungsdaten-Extraktion",
+        "description": "Lass dir mit deinem KI-Assistenten Kennzahlen aus vielen Rechnungstexten extrahieren."
+      }
     },
     "chat": {
       "caseData": "Falldaten",
@@ -316,7 +380,11 @@
       "Hilf mir, einen Prompt für eine Management Summary zu formulieren.",
       "Wie kann ich eine KI-Antwort auf Halluzinationen prüfen?",
       "Formuliere diese Aussage vorsichtiger für ein Finance-Reporting."
-    ]
+    ],
+    "chats": "Chats",
+    "deleteConfirm": "Chat „{{title}}“ endgültig löschen?",
+    "deleteHint": "Der Gesprächsverlauf lässt sich danach nicht wiederherstellen.",
+    "deleteSuccess": "Chat gelöscht."
   },
   "profile": {
     "title": "Profil",
@@ -328,7 +396,8 @@
     "currentPassword": "Aktuelles Passwort",
     "newPassword": "Neues Passwort",
     "errorChange": "Passwort konnte nicht geändert werden",
-    "successChange": "Passwort erfolgreich aktualisiert"
+    "successChange": "Passwort erfolgreich aktualisiert",
+    "passwordRules": "Mindestens 8 Zeichen."
   },
   "userManagement": {
     "title": "Nutzerverwaltung",
@@ -341,7 +410,7 @@
     "columnRole": "Rolle",
     "columnSkill": "Skill-Level und Fortschritt",
     "columnPoints": "Punkte",
-    "columnMissions": "Missions",
+    "columnMissions": "Missionen",
     "columnActions": "Aktionen",
     "youBadge": "Du",
     "roleSelectAria": "Rolle für {{name}}",
@@ -408,14 +477,19 @@
     "finalTitle": "Abschluss-Quiz",
     "finalHeading": "Letzter Schritt: Abschluss-Quiz",
     "finalSubtitle": "Beantworte die folgenden Fragen, um dein Onboarding abzuschließen und die Daily Challenges freizuschalten.",
-    "finish": "Onboarding abschließen"
+    "finish": "Onboarding abschließen",
+    "saveErrorTitle": "Fortschritt nicht gespeichert",
+    "saveError": "Dein Fortschritt konnte nicht gespeichert werden. Klicke erneut auf Weiter, um es noch einmal zu versuchen.",
+    "saveNetworkError": "Keine Verbindung zum Server. Dein Fortschritt wurde nicht gespeichert – klicke erneut auf Weiter."
   },
   "pages": {
     "comingSoon": "Demnächst verfügbar",
     "comingSoonText": "Dieser Bereich wird gerade aufgebaut. Schau bald wieder vorbei – hier entstehen neue Inhalte für dein AI-Enablement.",
     "basics": {
       "title": "Grundlagen",
-      "description": "Die wichtigsten AI-Basics für deinen Finance-Alltag"
+      "description": "Die wichtigsten AI-Basics für deinen Finance-Alltag",
+      "lockedTitle": "Erst das Onboarding abschließen",
+      "lockedText": "Missionen, Training und dein Agent werden freigeschaltet, sobald du die Grundlagen und das Abschluss-Quiz durchlaufen hast."
     },
     "leaderboard": {
       "title": "Rangliste",
@@ -459,5 +533,10 @@
       "emptyTitle": "Noch keine Ranglistendaten",
       "emptyText": "Sobald Ergebnisse für die Mitarbeiter-Challenge vorliegen, werden sie hier angezeigt."
     }
+  },
+  "common": {
+    "cancel": "Abbrechen",
+    "confirm": "Bestätigen",
+    "delete": "Löschen"
   }
 }

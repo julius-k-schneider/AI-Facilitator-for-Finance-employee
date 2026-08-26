@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { ActionIcon, Alert, Badge, Box, Button, Group, Loader, Paper, ScrollArea, Stack, Text, Textarea, Title, Tooltip } from '@mantine/core'
-import { IconMessageCircle, IconPlus, IconSend, IconSparkles, IconTrash } from '@tabler/icons-react'
+import {
+  ActionIcon, Alert, Badge, Box, Button, Drawer, Group, Loader, Paper, ScrollArea,
+  Stack, Text, Textarea, Title, Tooltip,
+} from '@mantine/core'
+import { IconList, IconMessageCircle, IconPlus, IconSend, IconSparkles, IconTrash } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
+import ConfirmModal from '../components/ConfirmModal'
+import { notifyError, notifySuccess } from '../services/notify'
 import { createAgentChat, deleteAgentChat, getAgentChat, getAgentChats, sendAgentChatMessage } from '../services/agentService'
+import './YourAgent.css'
 
 function cleanText(text) {
   return String(text || '')
@@ -15,6 +21,39 @@ function cleanText(text) {
     .trim()
 }
 
+function ChatList({ chats, activeChatId, loading, onOpen, onRequestDelete }) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <Text fz="xs" fw={700} c="dimmed" px="xs" mb="xs">{t('agent.previousChats')}</Text>
+      <ScrollArea style={{ flex: 1 }}>
+        <Stack gap={4}>
+          {chats.map((chat) => (
+            <Group key={chat.id} gap={4} wrap="nowrap">
+              <Button
+                variant={chat.id === activeChatId ? 'light' : 'subtle'}
+                color={chat.id === activeChatId ? 'brand' : 'gray'}
+                justify="flex-start"
+                fullWidth
+                onClick={() => onOpen(chat.id)}
+                styles={{ label: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }}
+              >
+                {chat.title || t('agent.untitled')}
+              </Button>
+              <Tooltip label={t('agent.deleteChat')}>
+                <ActionIcon variant="subtle" color="red" onClick={() => onRequestDelete(chat)} aria-label={t('agent.deleteChat')}>
+                  <IconTrash size={16} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
+          ))}
+          {!chats.length && !loading && <Text c="dimmed" fz="sm" px="xs">{t('agent.noChats')}</Text>}
+        </Stack>
+      </ScrollArea>
+    </>
+  )
+}
+
 export default function YourAgent() {
   const { t, i18n } = useTranslation()
   const language = (i18n.resolvedLanguage || i18n.language || 'de').split('-')[0] === 'en' ? 'en' : 'de'
@@ -23,8 +62,12 @@ export default function YourAgent() {
   const [messages, setMessages] = useState([])
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+  const [listOpen, setListOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
   const endRef = useRef(null)
 
   useEffect(() => {
@@ -59,18 +102,20 @@ export default function YourAgent() {
 
   const startChat = async () => {
     setError('')
-    setLoading(true)
+    setCreating(true)
     try {
       const chat = await createAgentChat()
       refreshChat(chat)
+      setListOpen(false)
     } catch (nextError) {
       setError(nextError.message)
     } finally {
-      setLoading(false)
+      setCreating(false)
     }
   }
 
   const openChat = async (chatId) => {
+    setListOpen(false)
     if (chatId === activeChatId) return
     setError('')
     setLoading(true)
@@ -85,7 +130,10 @@ export default function YourAgent() {
     }
   }
 
-  const removeChat = async (chatId) => {
+  const removeChat = async () => {
+    if (!deleteTarget) return
+    const chatId = deleteTarget.id
+    setDeleting(true)
     setError('')
     try {
       await deleteAgentChat(chatId)
@@ -100,8 +148,12 @@ export default function YourAgent() {
           setMessages([])
         }
       }
+      notifySuccess(t('agent.deleteSuccess'))
+      setDeleteTarget(null)
     } catch (nextError) {
-      setError(nextError.message)
+      notifyError(nextError.message)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -137,35 +189,26 @@ export default function YourAgent() {
   }
 
   const starters = t('agent.starters', { returnObjects: true })
+  const listProps = { chats, activeChatId, loading, onOpen: openChat, onRequestDelete: setDeleteTarget }
 
-  return <Box px={{ base: 'md', md: 32 }} py={{ base: 10, md: 12 }} w="100%" style={{ height: 'calc(100vh - 65px)', boxSizing: 'border-box', display: 'flex', overflow: 'hidden' }}>
+  return <Box px={{ base: 'md', md: 32 }} py={{ base: 10, md: 12 }} w="100%" className="agent-page">
     <Stack gap="sm" maw={1120} mx="auto" w="100%" style={{ flex: 1, minHeight: 0 }}>
-      <Group justify="space-between" align="center">
-        <Box>
+      <Group justify="space-between" align="center" wrap="wrap">
+        <Box style={{ minWidth: 0 }}>
           <Badge variant="light" color="brand" mb={4}>{t('agent.badge')}</Badge>
-          <Title order={1} fz={{ base: 22, md: 28 }}>{t('agent.title')}</Title>
+          <Title order={2} fz={{ base: 22, md: 28 }}>{t('agent.title')}</Title>
         </Box>
-        <Button leftSection={<IconPlus size={16} />} variant="light" onClick={startChat} loading={loading}>{t('agent.newChat')}</Button>
+        <Group gap="xs" wrap="nowrap">
+          <Button hiddenFrom="sm" variant="default" leftSection={<IconList size={16} />} onClick={() => setListOpen(true)}>
+            {t('agent.chats')}
+          </Button>
+          <Button leftSection={<IconPlus size={16} />} variant="light" onClick={startChat} loading={creating}>{t('agent.newChat')}</Button>
+        </Group>
       </Group>
 
-      <Paper withBorder radius="lg" bg="white" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '260px minmax(0, 1fr)', overflow: 'hidden' }}>
-        <Box p="sm" style={{ borderRight: '1px solid var(--line)', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <Text fz="xs" fw={700} c="dimmed" px="xs" mb="xs">{t('agent.previousChats')}</Text>
-          <ScrollArea style={{ flex: 1 }}>
-            <Stack gap={4}>
-              {chats.map((chat) => <Group key={chat.id} gap={4} wrap="nowrap">
-                <Button variant={chat.id === activeChatId ? 'light' : 'subtle'} color={chat.id === activeChatId ? 'brand' : 'gray'} justify="flex-start" fullWidth onClick={() => openChat(chat.id)} styles={{ label: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }}>
-                  {chat.title || t('agent.untitled')}
-                </Button>
-                <Tooltip label={t('agent.deleteChat')}>
-                  <ActionIcon variant="subtle" color="red" onClick={() => removeChat(chat.id)} aria-label={t('agent.deleteChat')}>
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>)}
-              {!chats.length && !loading && <Text c="dimmed" fz="sm" px="xs">{t('agent.noChats')}</Text>}
-            </Stack>
-          </ScrollArea>
+      <Paper withBorder radius="lg" bg="white" className="agent-panel">
+        <Box p="sm" className="agent-chat-list">
+          <ChatList {...listProps} />
         </Box>
 
         <Box style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -177,8 +220,25 @@ export default function YourAgent() {
               <Text fw={700} fz="lg">{t('agent.emptyTitle')}</Text>
               <Text c="dimmed" fz="sm" mt={4}>{t('agent.emptyText')}</Text>
             </Box>
-            <Group gap="xs" justify="center">
-              {Array.isArray(starters) && starters.map((starter) => <Button key={starter} variant="light" color="gray" size="xs" onClick={() => send(starter)} disabled={sending}>{starter}</Button>)}
+            {/* Long starters have to wrap; as single-line buttons they were wider
+                than a phone screen and spilled out of the card on both sides. */}
+            <Group gap="xs" justify="center" w="100%">
+              {Array.isArray(starters) && starters.map((starter) => (
+                <Button
+                  key={starter}
+                  variant="light"
+                  color="gray"
+                  size="xs"
+                  maw="100%"
+                  h="auto"
+                  py={8}
+                  styles={{ label: { whiteSpace: 'normal', textAlign: 'center', lineHeight: 1.4 } }}
+                  onClick={() => send(starter)}
+                  disabled={sending}
+                >
+                  {starter}
+                </Button>
+              ))}
             </Group>
           </Stack>}
 
@@ -194,9 +254,9 @@ export default function YourAgent() {
 
         {error && <Alert color="red" radius={0}>{error}</Alert>}
         <Box p={{ base: 'md', md: 'lg' }} style={{ borderTop: '1px solid var(--line)' }}>
-          <Group align="flex-end">
+          <Group align="flex-end" wrap="nowrap">
             <Textarea
-              style={{ flex: 1 }}
+              style={{ flex: 1, minWidth: 0 }}
               minRows={2}
               maxRows={6}
               autosize
@@ -208,12 +268,29 @@ export default function YourAgent() {
                 if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) send()
               }}
             />
-            <Button leftSection={<IconSend size={16} />} loading={sending} disabled={!draft.trim()} onClick={() => send()}>{t('agent.send')}</Button>
+            <Button leftSection={<IconSend size={16} />} loading={sending} disabled={!draft.trim()} onClick={() => send()} style={{ flexShrink: 0 }}>{t('agent.send')}</Button>
           </Group>
-          <Group gap={6} mt="xs"><IconMessageCircle size={14} /><Text c="dimmed" fz="xs">{t('agent.note')}</Text></Group>
+          <Group gap={6} mt="xs" wrap="nowrap"><IconMessageCircle size={14} style={{ flexShrink: 0 }} /><Text c="dimmed" fz="xs">{t('agent.note')}</Text></Group>
         </Box>
         </Box>
       </Paper>
     </Stack>
+
+    <Drawer opened={listOpen} onClose={() => setListOpen(false)} title={t('agent.previousChats')} size="80%" hiddenFrom="sm">
+      <Stack gap="xs" style={{ minHeight: 0 }}>
+        <ChatList {...listProps} />
+      </Stack>
+    </Drawer>
+
+    <ConfirmModal
+      opened={Boolean(deleteTarget)}
+      onClose={() => setDeleteTarget(null)}
+      onConfirm={removeChat}
+      loading={deleting}
+      title={t('agent.deleteChat')}
+      text={t('agent.deleteConfirm', { title: deleteTarget?.title || t('agent.untitled') })}
+      hint={t('agent.deleteHint')}
+      confirmLabel={t('common.delete')}
+    />
   </Box>
 }

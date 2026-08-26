@@ -1,17 +1,28 @@
-import { Box, Paper, Stack, Text, ThemeIcon, Title } from '@mantine/core'
+import { Badge, Box, Group, Paper, Stack, Text, ThemeIcon, Title } from '@mantine/core'
 import { useTranslation } from 'react-i18next'
 
-export default function PageShell({ title, description, icon: Icon, children }) {
+/**
+ * The frame every page sits in: outer padding, badge, title, description and an
+ * optional action area on the right.
+ *
+ * Before this, the same px/py pair was copy-pasted into eight pages and the
+ * title sizes had started to drift apart. Pages should only bring their content.
+ */
+export default function PageShell({ title, description, badge, actions, icon: Icon, children }) {
   const { t } = useTranslation()
 
   return (
     <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
-      <Stack gap={6} mb="xl">
-        <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9">
-          {title}
-        </Title>
-        {description && <Text fz="lg" c="dimmed" maw={620}>{description}</Text>}
-      </Stack>
+      <Group justify="space-between" align="flex-start" gap="lg" mb="xl" wrap="wrap">
+        <Stack gap={6} style={{ flex: '1 1 320px', minWidth: 0 }}>
+          {badge && <Badge variant="light" color="brand" w="fit-content">{badge}</Badge>}
+          <Title order={2} fz={{ base: 28, md: 34 }} c="secondary.9">
+            {title}
+          </Title>
+          {description && <Text fz="lg" c="dimmed" maw={700}>{description}</Text>}
+        </Stack>
+        {actions && <Group gap="sm" wrap="wrap">{actions}</Group>}
+      </Group>
 
       {children || (
         <Paper withBorder radius="lg" p={{ base: 'xl', md: 56 }} bg="white">

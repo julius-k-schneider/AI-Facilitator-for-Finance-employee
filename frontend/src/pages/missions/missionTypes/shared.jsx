@@ -52,7 +52,10 @@ export function evaluateChoiceTest(mission, answer, multiple = false) {
   const selected = multiple ? [...answer].sort() : [answer]
   const expected = [...mission.test_solution.correct_indices].sort()
   const correct = selected.length === expected.length && selected.every((value, index) => value === expected[index])
-  const feedback = mission.test_solution.feedback || `${mission.content.options.filter((_, index) => expected.includes(index)).join(', ')}`
+  // No fabricated explanation: without a feedback text the result shows none.
+  // The old fallback printed the correct option under a "Why?" heading, which
+  // read as an answer key rather than a reason.
+  const feedback = mission.test_solution.feedback || ''
   return { correct, score: correct ? mission.max_points : 0, max_points: mission.max_points, correct_indices: expected, feedback }
 }
 

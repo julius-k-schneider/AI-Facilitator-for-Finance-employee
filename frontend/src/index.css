@@ -111,3 +111,71 @@ body {
     opacity: 1;
   }
 }
+
+/* App header -- opaque enough that content scrolling underneath cannot be read
+   through it. The blur is a progressive enhancement on top of a solid base. */
+.app-header {
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid var(--line);
+}
+
+@supports (backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px)) {
+  .app-header {
+    background: rgba(255, 255, 255, 0.78);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    backdrop-filter: saturate(180%) blur(12px);
+  }
+}
+
+/* Sidebar navigation. Previously these states lived as inline onMouseEnter /
+   onMouseLeave handlers in Sidebar.jsx. */
+.sidebar-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 12px;
+  position: relative;
+  color: rgba(255, 255, 255, 0.62);
+  background: transparent;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.sidebar-nav-link:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-nav-link.is-active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-icon-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.sidebar-icon-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* Login. One column until the brand panel actually shows up at md -- with a
+   fixed two-column track the hidden panel left half the viewport empty. */
+.login-grid {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 62em) {
+  .login-grid {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  }
+}

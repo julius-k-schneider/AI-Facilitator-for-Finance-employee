@@ -14,7 +14,7 @@ import QuizCard from './QuizCard'
  *
  * Props: { questions: [], passThreshold = 0.8, onPassed, continueLabel }
  */
-export default function Quiz({ questions = [], passThreshold = 0.8, onPassed, continueLabel }) {
+export default function Quiz({ questions = [], passThreshold = 0.8, onPassed, continueLabel, continueLoading = false }) {
   const { t } = useTranslation()
   const [index, setIndex] = useState(0)
   const [correctCount, setCorrectCount] = useState(0)
@@ -65,6 +65,7 @@ export default function Quiz({ questions = [], passThreshold = 0.8, onPassed, co
           <Button
             color="brand"
             size="md"
+            loading={continueLoading}
             rightSection={<IconArrowRight size={18} />}
             onClick={onPassed}
           >

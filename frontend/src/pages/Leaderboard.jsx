@@ -241,11 +241,20 @@ export default function Leaderboard({ user }) {
         }))}
       />
       <Group justify="space-between" mb="xl">
+        {/* Three modes, three states. `mode !== 'all'` used to leave "weekly"
+            filled while an archived week was on screen. */}
         <Group gap="xs">
           <Button variant={mode === 'all' ? 'filled' : 'light'} onClick={() => setMode('all')}>{t('pages.leaderboard.allTime')}</Button>
-          <Button variant={mode !== 'all' ? 'filled' : 'light'} onClick={() => setMode('weekly')}>{t('pages.leaderboard.weekly')}</Button>
+          <Button variant={mode === 'weekly' ? 'filled' : 'light'} onClick={() => setMode('weekly')}>{t('pages.leaderboard.weekly')}</Button>
         </Group>
-        <Button variant="subtle" color="secondary" leftSection={<IconArchive size={17} />} onClick={() => setHistoryOpened(true)}>{t('pages.leaderboard.history')}</Button>
+        <Button
+          variant={mode === 'history' ? 'filled' : 'subtle'}
+          color="secondary"
+          leftSection={<IconArchive size={17} />}
+          onClick={() => setHistoryOpened(true)}
+        >
+          {t('pages.leaderboard.history')}
+        </Button>
       </Group>
       {mode !== 'all' && <Text c="dimmed" fz="sm" mb="md">{mode === 'history' ? t('pages.leaderboard.archivedWeek') : t('pages.leaderboard.currentWeek')}: {formatRange(activeRange)}</Text>}
       {loading ? (

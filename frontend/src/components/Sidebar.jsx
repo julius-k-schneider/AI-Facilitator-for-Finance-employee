@@ -3,7 +3,7 @@ import { IconLogout, IconSettings } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { branding } from '../branding'
-import { NAV_ITEMS } from '../nav'
+import { NAV_ITEMS, isNavItemActive } from '../nav'
 import { PERMISSIONS, hasPermission } from '../auth/permissions'
 
 function initials(user) {
@@ -17,52 +17,11 @@ function roleLabel(user, t) {
   return user?.role ? t(`roles.${user.role}`, { defaultValue: '' }) : ''
 }
 
-// Shared styling for the small icon buttons in the user box.
-const iconButtonStyle = {
-  display: 'grid',
-  placeItems: 'center',
-  width: 34,
-  height: 34,
-  borderRadius: 10,
-  color: 'rgba(255,255,255,0.7)',
-  transition: 'background 160ms ease, color 160ms ease',
-}
-
-const iconButtonHover = (e) => {
-  e.currentTarget.style.background = 'rgba(255,255,255,0.12)'
-  e.currentTarget.style.color = '#fff'
-}
-
-const iconButtonReset = (e) => {
-  e.currentTarget.style.background = 'transparent'
-  e.currentTarget.style.color = 'rgba(255,255,255,0.7)'
-}
-
 function NavLink({ item, active, onClick }) {
   const { t } = useTranslation()
   const Icon = item.icon
   return (
-    <UnstyledButton
-      onClick={onClick}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 14,
-        width: '100%',
-        padding: '11px 14px',
-        borderRadius: 12,
-        position: 'relative',
-        color: active ? '#fff' : 'rgba(255,255,255,0.62)',
-        background: active ? 'rgba(255,255,255,0.10)' : 'transparent',
-        transition: 'background 160ms ease, color 160ms ease',
-      }}
-      onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-      }}
-      onMouseLeave={(e) => {
-        if (!active) e.currentTarget.style.background = 'transparent'
-      }}
-    >
+    <UnstyledButton onClick={onClick} className={`sidebar-nav-link${active ? ' is-active' : ''}`}>
       <Box
         style={{
           position: 'absolute',
@@ -150,7 +109,7 @@ export default function Sidebar({ user, onLogout }) {
           <NavLink
             key={item.value}
             item={item}
-            active={location.pathname === item.path}
+            active={isNavItemActive(item, location.pathname)}
             onClick={() => navigate(item.path)}
           />
         ))}
@@ -199,9 +158,7 @@ export default function Sidebar({ user, onLogout }) {
               <UnstyledButton
                 onClick={() => navigate('/profile')}
                 aria-label={t('sidebar.tooltipProfile')}
-                style={iconButtonStyle}
-                onMouseEnter={iconButtonHover}
-                onMouseLeave={iconButtonReset}
+                className="sidebar-icon-button"
               >
                 <IconSettings size={19} stroke={1.8} />
               </UnstyledButton>
@@ -210,9 +167,7 @@ export default function Sidebar({ user, onLogout }) {
               <UnstyledButton
                 onClick={onLogout}
                 aria-label={t('sidebar.tooltipLogout')}
-                style={iconButtonStyle}
-                onMouseEnter={iconButtonHover}
-                onMouseLeave={iconButtonReset}
+                className="sidebar-icon-button"
               >
                 <IconLogout size={19} stroke={1.8} />
               </UnstyledButton>

@@ -16,7 +16,16 @@ import { IconArrowRight, IconSparkles } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { branding } from '../branding'
 
-export default function LoginScreen({ mode, onModeChange, form, onFieldChange, onSubmit, message }) {
+export default function LoginScreen({
+  mode,
+  onModeChange,
+  form,
+  onFieldChange,
+  onSubmit,
+  submitting = false,
+  message,
+  languageSwitch,
+}) {
   const { t } = useTranslation()
   const isLogin = mode === 'login'
   const highlights = t('login.highlights', { returnObjects: true })
@@ -26,13 +35,7 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
   ]
 
   return (
-    <Box
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1fr)',
-      }}
-    >
+    <div className="login-grid">
       {/* Left brand panel */}
       <Box
         visibleFrom="md"
@@ -137,15 +140,19 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
         }}
       >
         <Box w="100%" maw={400} className="fade-up">
-          <Image
-            src={branding.logo}
-            alt={branding.logoAlt}
-            h={26}
-            w="auto"
-            fit="contain"
-            mb={36}
-            hiddenFrom="md"
-          />
+          <Group justify="space-between" align="center" mb={36} wrap="nowrap">
+            <Image
+              src={branding.logo}
+              alt={branding.logoAlt}
+              h={26}
+              w="auto"
+              fit="contain"
+              hiddenFrom="md"
+            />
+            <Box hiddenFrom="md" style={{ flex: 1 }} />
+            {/* The language has to be switchable before sign-in, not only after. */}
+            {languageSwitch}
+          </Group>
 
           <Title order={2} fz={30} c="secondary.9" mb={6}>
             {isLogin ? t('login.welcomeBack') : t('login.createAccount')}
@@ -174,12 +181,14 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
                   <TextInput
                     label={t('login.firstName')}
                     placeholder={t('login.placeholderFirstName')}
+                    autoComplete="given-name"
                     value={form.first_name}
                     onChange={onFieldChange('first_name')}
                   />
                   <TextInput
                     label={t('login.lastName')}
                     placeholder={t('login.placeholderLastName')}
+                    autoComplete="family-name"
                     value={form.last_name}
                     onChange={onFieldChange('last_name')}
                   />
@@ -198,12 +207,14 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
               <TextInput
                 label={t('login.email')}
                 type="email"
+                autoComplete="email"
                 placeholder={t('login.placeholderEmail')}
                 value={form.email}
                 onChange={onFieldChange('email')}
               />
               <PasswordInput
                 label={t('login.password')}
+                autoComplete={isLogin ? 'current-password' : 'new-password'}
                 placeholder="••••••••"
                 value={form.password}
                 onChange={onFieldChange('password')}
@@ -214,6 +225,7 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
                 fullWidth
                 size="md"
                 mt="xs"
+                loading={submitting}
                 rightSection={<IconArrowRight size={18} />}
               >
                 {isLogin ? t('login.submitLogin') : t('login.submitRegister')}
@@ -228,6 +240,6 @@ export default function LoginScreen({ mode, onModeChange, form, onFieldChange, o
           )}
         </Box>
       </Box>
-    </Box>
+    </div>
   )
 }

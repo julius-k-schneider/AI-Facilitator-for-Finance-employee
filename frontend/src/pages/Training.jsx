@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react'
-import { Alert, Badge, Box, Button, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core'
+import { useEffect, useMemo, useState } from 'react'
+import { Badge, Box, Button, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon } from '@mantine/core'
 import { IconBrain, IconPlayerPlay, IconSparkles } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
+import PageShell from './PageShell'
 import MissionRunner from './missions/MissionRunner'
 import { taskChallengeTypes, trainingMissionTypes } from './missions/missionTypes'
+import { notifyError } from '../services/notify'
 import { generateChatChallenge, generateTaskChallenge, generateTrainingMission } from '../services/trainingService'
 
 const taskChallengeTypeIds = new Set(taskChallengeTypes.map((definition) => definition.id))
@@ -71,42 +74,76 @@ function localizeMission(raw, language) {
 export default function Training() {
   const { t, i18n } = useTranslation()
   const language = (i18n.resolvedLanguage || i18n.language || 'de').split('-')[0] === 'en' ? 'en' : 'de'
+  const [searchParams, setSearchParams] = useSearchParams()
   const [rawMission, setRawMission] = useState(null)
   const [generatingType, setGeneratingType] = useState('')
-  const [error, setError] = useState('')
   const mission = useMemo(() => rawMission ? localizeMission(rawMission, language) : null, [rawMission, language])
+
+  // A training mission is generated on the fly, so it cannot be restored from a
+  // URL. The flag still earns its keep: browser Back now leaves the exercise
+  // instead of the whole page.
+  const running = searchParams.get('running') === '1'
+  useEffect(() => {
+    if (searchParams.get('running') === '1') setSearchParams({}, { replace: true })
+    // Mount only: clears a stale flag left behind by a reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const generate = async (type) => {
     setGeneratingType(type)
-    setError('')
     try {
-      setRawMission(
-        type === 'ai_chat_challenge' ? await generateChatChallenge()
-          : taskChallengeTypeIds.has(type) ? await generateTaskChallenge(type)
-            : await generateTrainingMission(type),
-      )
+      const generated = type === 'ai_chat_challenge' ? await generateChatChallenge()
+        : taskChallengeTypeIds.has(type) ? await generateTaskChallenge(type)
+          : await generateTrainingMission(type)
+      setRawMission(generated)
+      setSearchParams({ running: '1' })
     } catch (nextError) {
-      setError(nextError.message)
+      notifyError(nextError.message)
     } finally {
       setGeneratingType('')
     }
   }
 
-  if (mission) return <MissionRunner mission={mission} language={language} testMode showPoints={false} backLabel={t('training.back')} onBack={() => setRawMission(null)} />
+  if (mission && running) {
+    return (
+      <MissionRunner
+        mission={mission}
+        language={language}
+        testMode
+        showPoints={false}
+        backLabel={t('training.back')}
+        onBack={() => setSearchParams({})}
+      />
+    )
+  }
 
-  return <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
-    <Badge variant="light" color="brand" mb="sm">{t('training.badge')}</Badge>
-    <Title order={1} fz={{ base: 28, md: 34 }}>{t('training.title')}</Title>
-    <Text c="dimmed" fz="lg" mt={4} mb="xl">{t('training.description')}</Text>
-    {error && <Alert color="red" mb="lg">{error}</Alert>}
-    <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="lg">
-      {trainingMissionTypes.map((definition) => <Paper key={definition.id} withBorder radius="lg" p="xl" bg="white">
-        <Stack gap="lg" h="100%">
-          <Group justify="space-between"><ThemeIcon size={48} radius="md" variant="light" color="brand"><IconBrain size={25} /></ThemeIcon><Badge variant="light" color="secondary">{t(`missions.types.${definition.labelKey}`)}</Badge></Group>
-          <Box style={{ flex: 1 }}><Text fw={700} fz="lg">{t(`training.types.${definition.labelKey}.title`)}</Text><Text c="dimmed" fz="sm" mt={5}>{t(`training.types.${definition.labelKey}.description`)}</Text></Box>
-          <Button color="brand" leftSection={generatingType === definition.id ? <IconSparkles size={17} /> : <IconPlayerPlay size={17} />} loading={generatingType === definition.id} disabled={Boolean(generatingType) && generatingType !== definition.id} onClick={() => generate(definition.id)}>{t('training.generate')}</Button>
-        </Stack>
-      </Paper>)}
-    </SimpleGrid>
-  </Box>
+  return (
+    <PageShell badge={t('training.badge')} title={t('training.title')} description={t('training.description')}>
+      <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="lg">
+        {trainingMissionTypes.map((definition) => (
+          <Paper key={definition.id} withBorder radius="lg" p="xl" bg="white">
+            <Stack gap="lg" h="100%">
+              <Group justify="space-between">
+                <ThemeIcon size={48} radius="md" variant="light" color="brand"><IconBrain size={25} /></ThemeIcon>
+                <Badge variant="light" color="secondary">{t(`missions.types.${definition.labelKey}`)}</Badge>
+              </Group>
+              <Box style={{ flex: 1 }}>
+                <Text fw={700} fz="lg">{t(`training.types.${definition.labelKey}.title`)}</Text>
+                <Text c="dimmed" fz="sm" mt={5}>{t(`training.types.${definition.labelKey}.description`)}</Text>
+              </Box>
+              <Button
+                color="brand"
+                leftSection={generatingType === definition.id ? <IconSparkles size={17} /> : <IconPlayerPlay size={17} />}
+                loading={generatingType === definition.id}
+                disabled={Boolean(generatingType) && generatingType !== definition.id}
+                onClick={() => generate(definition.id)}
+              >
+                {t('training.generate')}
+              </Button>
+            </Stack>
+          </Paper>
+        ))}
+      </SimpleGrid>
+    </PageShell>
+  )
 }

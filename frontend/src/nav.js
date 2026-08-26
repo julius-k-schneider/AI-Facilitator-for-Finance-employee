@@ -35,6 +35,23 @@ export const PROFILE_ITEM = {
   icon: IconUserCircle,
 }
 
+const ALL_ITEMS = [...NAV_ITEMS, PROFILE_ITEM]
+
+// A section owns its sub-routes: /missions/42 still belongs to "Missions", and
+// /basics/onboarding still belongs to "Basics". Only "/" has to match exactly,
+// otherwise it would swallow every other path.
+export function isNavItemActive(item, pathname) {
+  if (item.path === '/') return pathname === '/'
+  return pathname === item.path || pathname.startsWith(`${item.path}/`)
+}
+
+export function navLabelKeyForPath(pathname) {
+  const match = ALL_ITEMS
+    .filter((item) => isNavItemActive(item, pathname))
+    .sort((a, b) => b.path.length - a.path.length)[0]
+  return match?.labelKey || ''
+}
+
 export const NAV_LABEL_KEYS = Object.fromEntries(
-  [...NAV_ITEMS, PROFILE_ITEM].map((item) => [item.path, item.labelKey]),
+  ALL_ITEMS.map((item) => [item.path, item.labelKey]),
 )

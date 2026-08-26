@@ -15,6 +15,8 @@ import {
 } from '@mantine/core'
 import { IconLock } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
+import PageShell from './PageShell'
+import { notifySuccess } from '../services/notify'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
@@ -33,37 +35,41 @@ function Field({ label, value }) {
 
 function Profile({ user }) {
   const { t } = useTranslation()
-  const [passwordMessage, setPasswordMessage] = useState(null)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
   const [passwordForm, setPasswordForm] = useState({ old_password: '', new_password: '' })
 
   const handlePasswordChange = async (event) => {
     event.preventDefault()
-    setPasswordMessage(null)
-    const response = await fetch(`${API_BASE}/api/auth/change-password/`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(passwordForm),
-    })
-
-    const data = await response.json()
-    if (!response.ok) {
-      setPasswordMessage({ type: 'error', text: data.error || t('profile.errorChange') })
-      return
+    setError('')
+    setSaving(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/change-password/`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(passwordForm),
+      })
+      // A 500 answers with HTML, not JSON. Parsing that unguarded used to throw
+      // and leave the user without any feedback at all.
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        setError(data.error || t('profile.errorChange'))
+        return
+      }
+      notifySuccess(t('profile.successChange'))
+      setPasswordForm({ old_password: '', new_password: '' })
+    } catch {
+      setError(t('app.networkError'))
+    } finally {
+      setSaving(false)
     }
-
-    setPasswordMessage({ type: 'success', text: t('profile.successChange') })
-    setPasswordForm({ old_password: '', new_password: '' })
   }
 
   const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim()
 
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
-      <Title order={1} fz={{ base: 28, md: 34 }} c="secondary.9" mb="xl">
-        {t('profile.title')}
-      </Title>
-
+    <PageShell title={t('profile.title')}>
       <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} mb="lg" bg="white">
         <Group mb="xl" gap="lg">
           <Avatar
@@ -103,6 +109,7 @@ function Profile({ user }) {
           <Stack gap="md" maw={420}>
             <PasswordInput
               label={t('profile.currentPassword')}
+              autoComplete="current-password"
               value={passwordForm.old_password}
               onChange={(event) =>
                 setPasswordForm((current) => ({ ...current, old_password: event.target.value }))
@@ -110,27 +117,32 @@ function Profile({ user }) {
             />
             <PasswordInput
               label={t('profile.newPassword')}
+              description={t('profile.passwordRules')}
+              autoComplete="new-password"
               value={passwordForm.new_password}
               onChange={(event) =>
                 setPasswordForm((current) => ({ ...current, new_password: event.target.value }))
               }
             />
-            <Button type="submit" color="brand" mt="xs" w="fit-content">
+            <Button
+              type="submit"
+              color="brand"
+              mt="xs"
+              w="fit-content"
+              loading={saving}
+              disabled={!passwordForm.old_password || !passwordForm.new_password}
+            >
               {t('profile.changePassword')}
             </Button>
-            {passwordMessage && (
-              <Alert
-                color={passwordMessage.type === 'error' ? 'red' : 'green'}
-                variant="light"
-                radius="md"
-              >
-                {passwordMessage.text}
+            {error && (
+              <Alert color="red" variant="light" radius="md">
+                {error}
               </Alert>
             )}
           </Stack>
         </form>
       </Paper>
-    </Box>
+    </PageShell>
   )
 }
 

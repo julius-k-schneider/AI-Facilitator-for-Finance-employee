@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActionIcon, Alert, Badge, Box, Button, Group, Menu, Modal, NumberInput, Paper, Select,
   SegmentedControl, SimpleGrid, Stack, Switch, Tabs, Text, Textarea, TextInput, ThemeIcon, Title,
 } from '@mantine/core'
+import { DatePickerInput, MonthPickerInput } from '@mantine/dates'
 import {
-  IconArrowRight, IconCalendar, IconCheck, IconChevronLeft,
+  IconArchive, IconArrowRight, IconCalendar, IconCalendarPlus, IconCheck, IconChevronLeft,
   IconChevronRight, IconCircleCheck, IconEdit, IconEye, IconPlus, IconRefresh, IconSparkles,
   IconFlame, IconTargetArrow, IconTrash, IconX,
   IconBug,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import ConfirmModal from '../components/ConfirmModal'
+import { CardGridSkeleton } from '../components/Skeletons'
+import { notifyError, notifySuccess } from '../services/notify'
+import PageShell from './PageShell'
 import { useUserProgress } from '../hooks/useUserProgress'
 import {
   approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, generateTaskChallenge,
@@ -190,13 +196,17 @@ function MissionSolutionContent({ mission, language, showSolution = true }) {
 
 function MissionCard({ mission, onOpen, archiveMode = false }) {
   const { i18n, t } = useTranslation()
-  const missionDate = new Date(`${mission.scheduled_date}T12:00:00`)
-  const formattedMissionDate = missionDate.toLocaleDateString(i18n.resolvedLanguage, {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
+  // Sample missions carry no scheduled_date, which used to render the literal
+  // string "Invalid Date" on the card.
+  const missionDate = mission.scheduled_date ? new Date(`${mission.scheduled_date}T12:00:00`) : null
+  const formattedMissionDate = missionDate && !Number.isNaN(missionDate.getTime())
+    ? missionDate.toLocaleDateString(i18n.resolvedLanguage, {
+      weekday: 'long',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+    : ''
   return (
     <Paper withBorder radius="lg" p="xl" bg="white">
       <Stack gap="lg" h="100%">
@@ -211,10 +221,10 @@ function MissionCard({ mission, onOpen, archiveMode = false }) {
         <Box style={{ flex: 1 }}>
           <Text fw={700} fz="lg">{mission.title}</Text>
           <Text c="dimmed" fz="sm" mt={5}>{mission.description}</Text>
-          <Group gap={6} mt="sm" align="center">
+          {formattedMissionDate && <Group gap={6} mt="sm" align="center">
             <IconCalendar size={15} style={{ display: 'block', flexShrink: 0 }} />
             <Text c="dimmed" fz="sm" lh={1}>{formattedMissionDate}</Text>
-          </Group>
+          </Group>}
         </Box>
         <Group justify="space-between">
           <Badge variant="light" color="secondary">{missionTypeLabel(t, mission.type)}</Badge>
@@ -222,10 +232,12 @@ function MissionCard({ mission, onOpen, archiveMode = false }) {
             {mission.completed ? `${mission.score}/${mission.max_points}` : mission.max_points} {t('missions.points')}
           </Text>
         </Group>
-        <Button color="brand" variant={mission.completed || archiveMode ? 'light' : 'filled'} disabled={!archiveMode && mission.completed}
-          rightSection={archiveMode ? <IconEye size={17} /> : mission.completed ? <IconCheck size={17} /> : <IconArrowRight size={17} />}
+        {/* A finished mission opens read-only instead of going dead -- the result
+            and the micro-learning were otherwise only reachable via the archive. */}
+        <Button color="brand" variant={mission.completed || archiveMode ? 'light' : 'filled'}
+          rightSection={archiveMode || mission.completed ? <IconEye size={17} /> : <IconArrowRight size={17} />}
           onClick={() => onOpen(mission)}>
-          {archiveMode ? t('missions.archive.viewButton') : mission.completed ? t('missions.completedButton') : t('missions.startButton')}
+          {archiveMode ? t('missions.archive.viewButton') : mission.completed ? t('missions.viewResultButton') : t('missions.startButton')}
         </Button>
       </Stack>
     </Paper>
@@ -233,8 +245,7 @@ function MissionCard({ mission, onOpen, archiveMode = false }) {
 }
 
 function MissionList({ missions, loading, error, emptyTitle, emptyText, onSelect }) {
-  const { t } = useTranslation()
-  if (loading) return <Text c="dimmed">{t('missions.loading')}</Text>
+  if (loading) return <CardGridSkeleton count={2} />
   if (error) return <Alert color="red">{error}</Alert>
   if (missions.length === 0) {
     return (
@@ -297,6 +308,7 @@ function Creator({ opened, onClose, onCreated }) {
   const [showPreviewSolution, setShowPreviewSolution] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -354,17 +366,19 @@ function Creator({ opened, onClose, onCreated }) {
     setError('')
   }
 
-  const removeMission = async (mission) => {
-    if (!window.confirm(t('missions.creator.deleteConfirm', { title: mission.title_de || mission.title_en }))) return
+  const removeMission = async () => {
+    const mission = deleteTarget
+    if (!mission) return
     setDeletingId(mission.id)
-    setError('')
     try {
       await deleteMission(mission.id)
       if (preview?.id === mission.id) setPreview(null)
+      setDeleteTarget(null)
+      notifySuccess(t('missions.creator.deleteSuccess'))
       loadSchedule()
       onCreated()
     } catch (nextError) {
-      setError(nextError.message)
+      notifyError(nextError.message)
     } finally {
       setDeletingId(null)
     }
@@ -457,7 +471,7 @@ function Creator({ opened, onClose, onCreated }) {
                 <Group gap={4} wrap="nowrap">
                   <Button variant="subtle" size="compact-sm" aria-label={t('missions.creator.view')} onClick={() => { setShowPreviewSolution(false); setPreviewDifficulty('easy'); setPreview(mission) }}><IconEye size={17} /></Button>
                   {mission.can_edit && !mission.has_attempts && <Button variant="subtle" size="compact-sm" aria-label={t('missions.creator.edit')} onClick={() => editMission(mission)}><IconEdit size={17} /></Button>}
-                  {mission.can_delete && <Button color="red" variant="subtle" size="compact-sm" loading={deletingId === mission.id} disabled={mission.has_attempts} aria-label={t('missions.creator.delete')} onClick={() => removeMission(mission)}><IconTrash size={17} /></Button>}
+                  {mission.can_delete && <Button color="red" variant="subtle" size="compact-sm" loading={deletingId === mission.id} disabled={mission.has_attempts} aria-label={t('missions.creator.delete')} onClick={() => setDeleteTarget(mission)}><IconTrash size={17} /></Button>}
                 </Group>
               </Group>
               {mission.has_attempts && <Text fz="xs" c="orange" mt={6}>{t('missions.creator.deleteBlocked')}</Text>}
@@ -490,6 +504,15 @@ function Creator({ opened, onClose, onCreated }) {
           {preview.can_edit && !preview.has_attempts && getMissionType(preview.type).Editor && <Button variant="light" leftSection={<IconEdit size={16} />} onClick={() => editMission(preview)}>{t('missions.creator.edit')}</Button>}
         </Stack>}
       </Modal>
+      <ConfirmModal
+        opened={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={removeMission}
+        loading={deletingId === deleteTarget?.id}
+        title={t('missions.creator.delete')}
+        text={t('missions.creator.deleteConfirm', { title: deleteTarget?.title_de || deleteTarget?.title_en || '' })}
+        confirmLabel={t('common.delete')}
+      />
     </Modal>
   )
 }
@@ -501,7 +524,8 @@ function MissionReview({ enabled, onPublished }) {
   const [generating, setGenerating] = useState(false)
   const [activeAction, setActiveAction] = useState('')
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [rejectAllOpen, setRejectAllOpen] = useState(false)
   const [weekSelectionOpen, setWeekSelectionOpen] = useState(false)
   const [generationMonth, setGenerationMonth] = useState(() => new Date(`${nextWeekStart()}T12:00:00`))
   const [generationWeek, setGenerationWeek] = useState(nextWeekStart)
@@ -545,14 +569,12 @@ function MissionReview({ enabled, onPublished }) {
 
   const generate = async () => {
     setGenerating(true)
-    setError('')
-    setMessage('')
     try {
       const data = await generateNextWeekMissions(generationWeek)
-      setMessage(t('missions.review.generated', { count: data.created_count }))
+      notifySuccess(t('missions.review.generated', { count: data.created_count }))
       await Promise.all([loadReview(), loadGenerationSchedule()])
     } catch (nextError) {
-      setError(nextError.message)
+      notifyError(nextError.message)
     } finally {
       setGenerating(false)
     }
@@ -560,51 +582,46 @@ function MissionReview({ enabled, onPublished }) {
 
   const generateTask = async (missionType) => {
     setGenerating(true)
-    setError('')
-    setMessage('')
     try {
       await generateTaskChallenge(missionType, generationWeek)
-      setMessage(t('missions.review.taskGenerated'))
+      notifySuccess(t('missions.review.taskGenerated'))
       await Promise.all([loadReview(), loadGenerationSchedule()])
     } catch (nextError) {
-      setError(nextError.message)
+      notifyError(nextError.message)
     } finally {
       setGenerating(false)
     }
   }
 
   const runAction = async (mission, action) => {
-    if (action === 'reject' && !window.confirm(t('missions.review.rejectConfirm', { title: mission.title_de }))) return
+    if (!mission) return
     setActiveAction(`${action}-${mission.id}`)
-    setError('')
-    setMessage('')
     try {
       if (action === 'approve') await approveMission(mission.id)
       if (action === 'regenerate') await regenerateMission(mission.id)
       if (action === 'reject') await rejectMission(mission.id)
-      setMessage(t(`missions.review.${action}Success`))
+      setRejectTarget(null)
+      notifySuccess(t(`missions.review.${action}Success`))
       await Promise.all([loadReview(), loadGenerationSchedule()])
       if (action === 'approve') onPublished()
     } catch (nextError) {
-      setError(nextError.message)
+      notifyError(nextError.message)
     } finally {
       setActiveAction('')
     }
   }
 
   const runBulkAction = async (action) => {
-    if (action === 'reject' && !window.confirm(t('missions.review.rejectAllConfirm', { count: missions.length }))) return
     setActiveAction(`${action}-all`)
-    setError('')
-    setMessage('')
     try {
       const data = action === 'approve' ? await approveAllReviewMissions(generationWeek) : await rejectAllReviewMissions(generationWeek)
       const count = action === 'approve' ? data.approved_count : data.rejected_count
-      setMessage(t(`missions.review.${action}AllSuccess`, { count }))
+      setRejectAllOpen(false)
+      notifySuccess(t(`missions.review.${action}AllSuccess`, { count }))
       await Promise.all([loadReview(), loadGenerationSchedule()])
       if (action === 'approve') onPublished()
     } catch (nextError) {
-      setError(nextError.message)
+      notifyError(nextError.message)
     } finally {
       setActiveAction('')
     }
@@ -640,9 +657,11 @@ function MissionReview({ enabled, onPublished }) {
                 ))}
               </Menu.Dropdown>
             </Menu>
-            <Group gap="xs" grow>
+            {/* No `grow`: it forced both buttons to the same width and cut the
+                last character off "Alle verwerfen". */}
+            <Group gap="xs" wrap="nowrap">
               <Button color="green" variant="light" leftSection={<IconCheck size={16} />} disabled={missions.length === 0} loading={activeAction === 'approve-all'} onClick={() => runBulkAction('approve')}>{t('missions.review.approveAll')}</Button>
-              <Button color="red" variant="light" leftSection={<IconX size={16} />} disabled={missions.length === 0} loading={activeAction === 'reject-all'} onClick={() => runBulkAction('reject')}>{t('missions.review.rejectAll')}</Button>
+              <Button color="red" variant="light" leftSection={<IconX size={16} />} disabled={missions.length === 0} loading={activeAction === 'reject-all'} onClick={() => setRejectAllOpen(true)}>{t('missions.review.rejectAll')}</Button>
             </Group>
           </Stack>
         </Group>
@@ -657,7 +676,6 @@ function MissionReview({ enabled, onPublished }) {
           <Stack gap="md"><Text c="dimmed" fz="sm">{t('missions.review.selectWeekDescription')}</Text><Calendar month={generationMonth} setMonth={setGenerationMonth} schedule={generationSchedule} selectedWeekStart={generationWeek} onSelect={(value) => { setGenerationWeek(value); setWeekSelectionOpen(false) }} weekMode /></Stack>
         </Modal>
         {error && <Alert color="red">{error}</Alert>}
-        {message && <Alert color="green">{message}</Alert>}
         {loading ? <Text c="dimmed">{t('missions.review.loading')}</Text> : missions.length === 0 ? (
           <Paper withBorder radius="md" p="xl" bg="gray.0"><Text ta="center" c="dimmed">{t('missions.review.empty')}</Text></Paper>
         ) : <Stack gap="md">
@@ -705,7 +723,7 @@ function MissionReview({ enabled, onPublished }) {
                 </Box>)}
               </SimpleGrid>}
               <Group justify="flex-end">
-                <Button color="red" variant="subtle" leftSection={<IconX size={16} />} loading={activeAction === `reject-${mission.id}`} onClick={() => runAction(mission, 'reject')}>{t('missions.review.reject')}</Button>
+                <Button color="red" variant="subtle" leftSection={<IconX size={16} />} loading={activeAction === `reject-${mission.id}`} onClick={() => setRejectTarget(mission)}>{t('missions.review.reject')}</Button>
                 <Button color="secondary" variant="light" leftSection={<IconRefresh size={16} />} loading={activeAction === `regenerate-${mission.id}`} onClick={() => runAction(mission, 'regenerate')}>{t('missions.review.regenerate')}</Button>
                 <Button color="green" leftSection={<IconCheck size={16} />} loading={activeAction === `approve-${mission.id}`} onClick={() => runAction(mission, 'approve')}>{t('missions.review.approve')}</Button>
               </Group>
@@ -713,6 +731,25 @@ function MissionReview({ enabled, onPublished }) {
           </Paper>)}
         </Stack>}
       </Stack>
+
+      <ConfirmModal
+        opened={Boolean(rejectTarget)}
+        onClose={() => setRejectTarget(null)}
+        onConfirm={() => runAction(rejectTarget, 'reject')}
+        loading={activeAction === `reject-${rejectTarget?.id}`}
+        title={t('missions.review.reject')}
+        text={t('missions.review.rejectConfirm', { title: rejectTarget?.title_de || '' })}
+        confirmLabel={t('missions.review.reject')}
+      />
+      <ConfirmModal
+        opened={rejectAllOpen}
+        onClose={() => setRejectAllOpen(false)}
+        onConfirm={() => runBulkAction('reject')}
+        loading={activeAction === 'reject-all'}
+        title={t('missions.review.rejectAll')}
+        text={t('missions.review.rejectAllConfirm', { count: missions.length })}
+        confirmLabel={t('missions.review.rejectAll')}
+      />
     </Paper>
   )
 }
@@ -735,45 +772,37 @@ function defaultArchiveMonth() {
   return new Date()
 }
 
-function ArchivePeriodPicker({ mode, month, setMonth, date, setDate, label, valueLabel, onMove }) {
-  const inputRef = useRef(null)
-  const inputValue = mode === 'month'
-    ? `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`
-    : isoDate(date)
-  const openPicker = () => {
-    if (inputRef.current?.showPicker) inputRef.current.showPicker()
-    else inputRef.current?.click()
+function ArchivePeriodPicker({ mode, month, setMonth, date, setDate, label, onMove }) {
+  const { t } = useTranslation()
+  // Mantine's pickers speak the same YYYY-MM-DD strings the archive filter already
+  // uses, and they work in every browser -- the previous 1px native input behind
+  // a button relied on showPicker() and on input[type=month] existing at all.
+  const shared = {
+    label,
+    valueFormat: mode === 'month' ? 'MMMM YYYY' : mode === 'day' ? 'dddd, DD.MM.YYYY' : 'DD.MM.YYYY',
+    leftSection: <IconCalendar size={16} />,
+    popoverProps: { withinPortal: true },
+    style: { flex: 1, minWidth: 0 },
   }
 
   return (
     <Stack gap={5} className="archive-period-picker">
-      <Text fz="sm" fw={600}>{label}</Text>
-      <Group gap={0} wrap="nowrap" className="archive-period-control">
-        <ActionIcon variant="subtle" size={40} className="archive-period-step" aria-label="Previous period" onClick={() => onMove(-1)}>
+      <Group gap={6} wrap="nowrap" align="flex-end">
+        <ActionIcon variant="default" size={40} aria-label={t('missions.archive.previousPeriod')} onClick={() => onMove(-1)}>
           <IconChevronLeft size={18} />
         </ActionIcon>
-        <Box className="archive-period-value">
-          <Button variant="subtle" h={40} fullWidth className="archive-period-button" leftSection={<IconCalendar size={16} />} onClick={openPicker}>
-            {valueLabel}
-          </Button>
-          <input
-            ref={inputRef}
-            className="archive-period-native-input"
-            type={mode === 'month' ? 'month' : 'date'}
-            value={inputValue}
-            onChange={(event) => {
-              if (!event.target.value) return
-              if (mode === 'month') {
-                const [year, monthIndex] = event.target.value.split('-').map(Number)
-                if (year && monthIndex) setMonth(new Date(year, monthIndex - 1, 1))
-              } else {
-                setDate(new Date(`${event.target.value}T12:00:00`))
-              }
-            }}
-            tabIndex={-1}
-          />
-        </Box>
-        <ActionIcon variant="subtle" size={40} className="archive-period-step" aria-label="Next period" onClick={() => onMove(1)}>
+        {mode === 'month'
+          ? <MonthPickerInput
+              {...shared}
+              value={isoDate(month)}
+              onChange={(value) => value && setMonth(new Date(`${value}T12:00:00`))}
+            />
+          : <DatePickerInput
+              {...shared}
+              value={isoDate(date)}
+              onChange={(value) => value && setDate(new Date(`${value}T12:00:00`))}
+            />}
+        <ActionIcon variant="default" size={40} aria-label={t('missions.archive.nextPeriod')} onClick={() => onMove(1)}>
           <IconChevronRight size={18} />
         </ActionIcon>
       </Group>
@@ -846,7 +875,6 @@ function ArchiveTab({ language, month, setMonth, type, setType, onSelect }) {
             date={date}
             setDate={setDate}
             label={mode === 'month' ? t('missions.archive.month') : mode === 'week' ? t('missions.archive.week') : t('missions.archive.day')}
-            valueLabel={rangeLabel}
             onMove={moveRange}
           />
           <Select
@@ -861,7 +889,7 @@ function ArchiveTab({ language, month, setMonth, type, setType, onSelect }) {
         </div>
       </Group>
     </Paper>
-    {loading ? <Text c="dimmed">{t('missions.archive.loading')}</Text> : error ? <Alert color="red">{error}</Alert> : missions.length === 0 ? (
+    {loading ? <CardGridSkeleton count={2} /> : error ? <Alert color="red">{error}</Alert> : missions.length === 0 ? (
       <Paper withBorder radius="lg" p={48} bg="white"><Stack align="center"><ThemeIcon size={58} radius="xl" variant="light"><IconCalendar size={28} /></ThemeIcon><Text fw={700}>{t('missions.archive.emptyTitle')}</Text><Text c="dimmed" ta="center">{t('missions.archive.emptyText')}</Text></Stack></Paper>
     ) : <>
       <Text fz="sm" c="dimmed">{t('missions.archive.rangeResult', { range: rangeLabel })}</Text>
@@ -874,151 +902,174 @@ function ArchiveTab({ language, month, setMonth, type, setType, onSelect }) {
 
 export default function Missions({ user }) {
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
+  const { missionId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { progress } = useUserProgress(user)
+
+  const language = (i18n.resolvedLanguage || i18n.language || 'de').split('-')[0] === 'en' ? 'en' : 'de'
+  const tabParam = searchParams.get('tab')
+  const activeTab = ['today', 'available', 'archive'].includes(tabParam) ? tabParam : 'today'
+  const dateParam = searchParams.get('date') || ''
+
   const [missions, setMissions] = useState([])
   const [availableMissions, setAvailableMissions] = useState([])
   const [canCreate, setCanCreate] = useState(false)
-  const [activeMission, setActiveMission] = useState(null)
-  const [activeArchiveMission, setActiveArchiveMission] = useState(null)
-  const [activeTab, setActiveTab] = useState('today')
   const [archiveMonth, setArchiveMonth] = useState(defaultArchiveMonth)
   const [archiveType, setArchiveType] = useState('all')
-  const [testMissionId, setTestMissionId] = useState(null)
   const [creatorOpen, setCreatorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [availableLoading, setAvailableLoading] = useState(true)
   const [error, setError] = useState('')
   const [availableError, setAvailableError] = useState('')
-  const language = (i18n.resolvedLanguage || i18n.language || 'de').split('-')[0] === 'en' ? 'en' : 'de'
-  const activeArchiveMissionId = activeArchiveMission?.id
-  const activeArchiveMissionDate = activeArchiveMission?.scheduled_date
-  const activeArchiveMissionType = activeArchiveMission?.type
-  const activeMissionId = activeMission?.id
-  const activeMissionDate = activeMission?.scheduled_date
-  const activeMissionType = activeMission?.type
-  const testMission = createTestMissions(language).find((mission) => mission.id === testMissionId)
 
-  const load = useCallback((showLoading = true) => {
-    if (showLoading) setLoading(true)
-    getDailyMissions(language).then((data) => { setMissions(data.missions || []); setCanCreate(Boolean(data.can_create)); setError('') }).catch((nextError) => setError(nextError.message)).finally(() => setLoading(false))
-  }, [language])
-  const loadAvailable = useCallback((showLoading = true) => {
-    if (showLoading) setAvailableLoading(true)
-    getAvailableMissions(language).then((data) => { setAvailableMissions(data.missions || []); setAvailableError('') }).catch((nextError) => setAvailableError(nextError.message)).finally(() => setAvailableLoading(false))
-  }, [language])
+  // The open mission lives in the URL (/missions/:missionId), so browser Back
+  // leaves the mission instead of the whole page, a reload keeps you where you
+  // were, and a mission can be linked to. `date` lets an archived mission be
+  // fetched again after a reload without a new backend endpoint.
+  // Resolving the mission behind the URL, in three steps:
+  //   1. sample missions and the already loaded lists  -> synchronous
+  //   2. an archived mission, refetched via ?date=     -> asynchronous
+  //   3. the freshly submitted one, so the result stays on screen
+  // Everything derived rather than mirrored into state, which keeps the effects
+  // free of synchronous setState calls.
+  const [archiveLookup, setArchiveLookup] = useState({ id: null, mission: null })
+  const [completedMission, setCompletedMission] = useState(null)
+
+  const load = useCallback(() => getDailyMissions(language)
+    .then((data) => { setMissions(data.missions || []); setCanCreate(Boolean(data.can_create)); setError('') })
+    .catch((nextError) => setError(nextError.message))
+    .finally(() => setLoading(false)), [language])
+
+  const loadAvailable = useCallback(() => getAvailableMissions(language)
+    .then((data) => { setAvailableMissions(data.missions || []); setAvailableError('') })
+    .catch((nextError) => setAvailableError(nextError.message))
+    .finally(() => setAvailableLoading(false)), [language])
+
+  useEffect(() => { load() }, [load])
+  useEffect(() => { loadAvailable() }, [loadAvailable])
+
+  const localMission = useMemo(() => {
+    if (!missionId) return null
+    return createTestMissions(language).find((mission) => mission.id === missionId)
+      || [...missions, ...availableMissions].find((mission) => String(mission.id) === missionId)
+      || null
+  }, [missionId, language, missions, availableMissions])
+
+  useEffect(() => {
+    if (!missionId || localMission || !dateParam) return undefined
+    let active = true
+    getArchivedMissions({ from: dateParam, to: dateParam, lang: language })
+      .then((data) => {
+        if (!active) return
+        setArchiveLookup({ id: missionId, mission: (data.missions || []).find((mission) => String(mission.id) === missionId) || null })
+      })
+      .catch(() => active && setArchiveLookup({ id: missionId, mission: null }))
+    return () => { active = false }
+  }, [missionId, localMission, dateParam, language])
+
+  const submitted = completedMission && String(completedMission.id) === missionId ? completedMission : null
+  const fetched = archiveLookup.id === missionId ? archiveLookup.mission : null
+  const detail = submitted || localMission || fetched
+  const listsReady = !loading && !availableLoading
+  const detailMissing = Boolean(missionId) && !detail && listsReady && (!dateParam || archiveLookup.id === missionId)
+  const detailLoading = Boolean(missionId) && !detail && !detailMissing
+
+  const openMission = (mission) => {
+    const params = new URLSearchParams(searchParams)
+    if (mission.scheduled_date) params.set('date', mission.scheduled_date)
+    else params.delete('date')
+    const query = params.toString()
+    navigate(`/missions/${mission.id}${query ? `?${query}` : ''}`)
+  }
+
+  const closeMission = () => {
+    const params = new URLSearchParams(searchParams)
+    params.delete('date')
+    const query = params.toString()
+    navigate(`/missions${query ? `?${query}` : ''}`)
+    load()
+    loadAvailable()
+  }
+
   const setTab = (value) => {
     const nextTab = value || 'today'
     if (nextTab === 'archive' && activeTab !== 'archive') {
       setArchiveMonth(defaultArchiveMonth())
       setArchiveType('all')
     }
-    setActiveTab(nextTab)
+    const params = new URLSearchParams(searchParams)
+    if (nextTab === 'today') params.delete('tab')
+    else params.set('tab', nextTab)
+    setSearchParams(params, { replace: true })
   }
-  useEffect(() => {
-    let active = true
-    getDailyMissions(language)
-      .then((data) => {
-        if (!active) return
-        setMissions(data.missions || [])
-        setCanCreate(Boolean(data.can_create))
-        setError('')
-      })
-      .catch((nextError) => active && setError(nextError.message))
-      .finally(() => active && setLoading(false))
-    return () => { active = false }
-  }, [language])
-  useEffect(() => {
-    let active = true
-    getAvailableMissions(language)
-      .then((data) => {
-        if (!active) return
-        setAvailableMissions(data.missions || [])
-        setAvailableError('')
-      })
-      .catch((nextError) => active && setAvailableError(nextError.message))
-      .finally(() => active && setAvailableLoading(false))
-    return () => { active = false }
-  }, [language])
-  useEffect(() => {
-    if (!activeArchiveMissionId || !activeArchiveMissionDate) return undefined
-    let active = true
-    const params = {
-      from: activeArchiveMissionDate,
-      to: activeArchiveMissionDate,
-      lang: language,
-    }
-    if (activeArchiveMissionType) params.type = activeArchiveMissionType
-    getArchivedMissions(params)
-      .then((data) => {
-        if (!active) return
-        const translatedMission = (data.missions || []).find((mission) => mission.id === activeArchiveMissionId)
-        if (translatedMission) setActiveArchiveMission(translatedMission)
-      })
-      .catch(() => {})
-    return () => { active = false }
-  }, [activeArchiveMissionId, activeArchiveMissionDate, activeArchiveMissionType, language])
-  useEffect(() => {
-    if (!activeMissionId || !activeMissionDate) return undefined
-    if (!activeMission?.completed) {
-      const translatedMission = [...missions, ...availableMissions].find((mission) => mission.id === activeMissionId)
-      let active = true
-      Promise.resolve().then(() => {
-        if (active && translatedMission) setActiveMission(translatedMission)
-      })
-      return () => { active = false }
-    }
-    let active = true
-    const params = {
-      from: activeMissionDate,
-      to: activeMissionDate,
-      lang: language,
-    }
-    if (activeMissionType) params.type = activeMissionType
-    getArchivedMissions(params)
-      .then((data) => {
-        if (!active) return
-        const translatedMission = (data.missions || []).find((mission) => mission.id === activeMissionId)
-        if (translatedMission) setActiveMission(translatedMission)
-      })
-      .catch(() => {})
-    return () => { active = false }
-  }, [activeMissionId, activeMissionDate, activeMissionType, activeMission?.completed, missions, availableMissions, language])
 
-  if (testMission) return <MissionRunner mission={testMission} language={language} testMode onBack={() => setTestMissionId(null)} onCompleted={() => {}} />
-  if (activeArchiveMission) return <MissionRunner mission={activeArchiveMission} language={language} readOnly showSubmit={false} onBack={() => { setActiveArchiveMission(null); setActiveTab('archive') }} backLabel={t('missions.archive.back')} />
-  if (activeMission) return <MissionRunner mission={activeMission} language={language} onBack={() => { setActiveMission(null); load(); loadAvailable(false) }} onCompleted={(completed) => {
-    setActiveMission(completed)
-    setMissions((current) => current.map((mission) => mission.id === completed.id ? completed : mission))
-    setAvailableMissions((current) => current.filter((mission) => mission.id !== completed.id))
-  }} />
+  const isTest = Boolean(detail && String(detail.id).startsWith('test-'))
+  const readOnly = !isTest && (activeTab === 'archive' || (Boolean(detail?.completed) && !submitted))
+
+  if (missionId) {
+    if (detail) {
+      return (
+        <MissionRunner
+          mission={detail}
+          language={language}
+          testMode={isTest}
+          readOnly={readOnly}
+          showSubmit={!readOnly}
+          onBack={closeMission}
+          backLabel={activeTab === 'archive' ? t('missions.archive.back') : t('missions.back')}
+          onCompleted={(completed) => {
+            setCompletedMission(completed)
+            setMissions((current) => current.map((mission) => mission.id === completed.id ? completed : mission))
+            setAvailableMissions((current) => current.filter((mission) => mission.id !== completed.id))
+          }}
+        />
+      )
+    }
+    return (
+      <PageShell title={t('missions.title')}>
+        {detailMissing && !detailLoading
+          ? <Paper withBorder radius="lg" p={48} bg="white">
+              <Stack align="center" gap="md">
+                <ThemeIcon size={58} radius="xl" variant="light"><IconTargetArrow size={28} /></ThemeIcon>
+                <Text fw={700}>{t('missions.notFoundTitle')}</Text>
+                <Text c="dimmed" ta="center" maw={420}>{t('missions.notFoundText')}</Text>
+                <Button variant="light" onClick={closeMission}>{t('missions.back')}</Button>
+              </Stack>
+            </Paper>
+          : <CardGridSkeleton count={1} cols={{ base: 1 }} />}
+      </PageShell>
+    )
+  }
 
   return (
-    <Box px={{ base: 'lg', md: 40 }} py={{ base: 28, md: 40 }} w="100%">
-      <Group justify="space-between" align="flex-start" mb="xl">
-        <Box><Badge variant="light" color="brand" mb="sm">{t('missions.badge')}</Badge><Title order={1} fz={{ base: 28, md: 34 }}>{t('missions.title')}</Title><Text c="dimmed" fz="lg" mt={4}>{t('missions.description')}</Text></Box>
-        <Group gap="sm">
-          <Paper withBorder radius="md" px="md" py="xs" bg="white">
-            <Group gap="xs" wrap="nowrap">
-              <ThemeIcon color="orange" variant="light" size="sm"><IconFlame size={15} /></ThemeIcon>
-              <Box><Text fz="xs" c="dimmed">{t('missions.streak.current')}</Text><Text fw={700}>{progress.currentStreak} · {t('missions.streak.best', { count: progress.maxStreak })}</Text></Box>
-            </Group>
-          </Paper>
-          {canCreate && <Button color="brand" leftSection={<IconPlus size={18} />} onClick={() => setCreatorOpen(true)}>{t('missions.creator.button')}</Button>}
-        </Group>
-      </Group>
+    <PageShell
+      badge={t('missions.badge')}
+      title={t('missions.title')}
+      description={t('missions.description')}
+      actions={<>
+        <Paper withBorder radius="md" px="md" py="xs" bg="white">
+          <Group gap="xs" wrap="nowrap">
+            <ThemeIcon color="orange" variant="light" size="sm"><IconFlame size={15} /></ThemeIcon>
+            <Box><Text fz="xs" c="dimmed">{t('missions.streak.current')}</Text><Text fw={700}>{progress.currentStreak} · {t('missions.streak.best', { count: progress.maxStreak })}</Text></Box>
+          </Group>
+        </Paper>
+        {canCreate && <Button color="brand" leftSection={<IconPlus size={18} />} onClick={() => setCreatorOpen(true)}>{t('missions.creator.button')}</Button>}
+      </>}
+    >
       <Tabs value={activeTab} onChange={setTab}>
         <Tabs.List mb="lg">
           <Tabs.Tab value="today" leftSection={<IconTargetArrow size={16} />}>{t('missions.tabs.today')}</Tabs.Tab>
-          <Tabs.Tab value="available" leftSection={<IconCalendar size={16} />}>{t('missions.tabs.available')}</Tabs.Tab>
-          <Tabs.Tab value="archive" leftSection={<IconCalendar size={16} />}>{t('missions.tabs.archive')}</Tabs.Tab>
+          <Tabs.Tab value="available" leftSection={<IconCalendarPlus size={16} />}>{t('missions.tabs.available')}</Tabs.Tab>
+          <Tabs.Tab value="archive" leftSection={<IconArchive size={16} />}>{t('missions.tabs.archive')}</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="today">
-          <MissionList missions={missions} loading={loading} error={error} emptyTitle={t('missions.todayEmptyTitle')} emptyText={t('missions.todayEmptyText')} onSelect={setActiveMission} />
-          <MissionReview enabled={canCreate} onPublished={() => load(false)} />
-          {user?.role === 'admin' && <MissionTestArea language={language} onSelect={(selected) => setTestMissionId(selected.id)} />}
+          <MissionList missions={missions} loading={loading} error={error} emptyTitle={t('missions.todayEmptyTitle')} emptyText={t('missions.todayEmptyText')} onSelect={openMission} />
+          <MissionReview enabled={canCreate} onPublished={load} />
+          {user?.role === 'admin' && <MissionTestArea language={language} onSelect={openMission} />}
         </Tabs.Panel>
         <Tabs.Panel value="available">
-          <MissionList missions={availableMissions} loading={availableLoading} error={availableError} emptyTitle={t('missions.availableEmptyTitle')} emptyText={t('missions.availableEmptyText')} onSelect={setActiveMission} />
+          <MissionList missions={availableMissions} loading={availableLoading} error={availableError} emptyTitle={t('missions.availableEmptyTitle')} emptyText={t('missions.availableEmptyText')} onSelect={openMission} />
         </Tabs.Panel>
         <Tabs.Panel value="archive">
           <ArchiveTab
@@ -1027,11 +1078,11 @@ export default function Missions({ user }) {
             setMonth={setArchiveMonth}
             type={archiveType}
             setType={setArchiveType}
-            onSelect={(mission) => { setActiveArchiveMission(mission); setActiveTab('archive') }}
+            onSelect={openMission}
           />
         </Tabs.Panel>
       </Tabs>
       <Creator opened={creatorOpen} onClose={() => setCreatorOpen(false)} onCreated={load} />
-    </Box>
+    </PageShell>
   )
 }
