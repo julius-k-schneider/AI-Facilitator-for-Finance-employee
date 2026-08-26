@@ -8,6 +8,7 @@ import {
   IconChevronRight, IconCircleCheck, IconEdit, IconEye, IconRefresh, IconSettings, IconSparkles,
   IconFlame, IconTargetArrow, IconTrash, IconX,
   IconBug,
+  IconAlertTriangle,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
@@ -712,6 +713,9 @@ function MissionReview({ enabled, onPublished }) {
   const [activeMissionId, setActiveMissionId] = useState(null)
   const language = (i18n.resolvedLanguage || i18n.language || 'de').split('-')[0] === 'en' ? 'en' : 'de'
   const activeReviewMission = missions.find((mission) => mission.id === activeMissionId) || missions[0] || null
+  const selectedGenerationDate = new Date(`${generationWeek}T12:00:00`)
+  const weeksAhead = Math.round((mondayOf(selectedGenerationDate) - mondayOf(new Date())) / (7 * 86400000))
+  const showResearchFreshnessWarning = weeksAhead >= 2
 
   const loadGenerationSchedule = useCallback(() => {
     const range = monthRange(generationMonth)
@@ -972,6 +976,9 @@ function MissionReview({ enabled, onPublished }) {
         <Modal opened={weekSelectionOpen} onClose={() => setWeekSelectionOpen(false)} title={t('missions.review.selectWeek')} size="lg" centered>
           <Stack gap="md"><Text c="dimmed" fz="sm">{t('missions.review.selectWeekDescription')}</Text><Calendar month={generationMonth} setMonth={setGenerationMonth} schedule={generationSchedule} selectedWeekStart={generationWeek} onSelect={(value) => { setGenerationWeek(value); setWeekSelectionOpen(false) }} weekMode /></Stack>
         </Modal>
+        {showResearchFreshnessWarning && <Alert color="orange" icon={<IconAlertTriangle size={18} />} title={t('missions.review.researchFreshnessWarningTitle')}>
+          {t('missions.review.researchFreshnessWarning', { count: weeksAhead })}
+        </Alert>}
         {error && <Alert color="red">{error}</Alert>}
         {message && <Alert color="green">{message}</Alert>}
         {generationResult && <GenerationResultAlert run={generationResult} />}

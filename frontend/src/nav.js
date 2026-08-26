@@ -7,6 +7,7 @@ import {
   IconTrophy,
   IconUserCircle,
   IconUserCog,
+  IconWorldSearch,
 } from '@tabler/icons-react'
 import { PERMISSIONS } from './auth/permissions'
 
@@ -14,6 +15,7 @@ export const NAV_ITEMS = [
   { value: 'home', path: '/', label: 'Home', labelKey: 'nav.home', icon: IconLayoutDashboard },
   { value: 'basics', path: '/basics', label: 'Basics', labelKey: 'nav.basics', icon: IconSchool },
   { value: 'missions', path: '/missions', label: 'Missions', labelKey: 'nav.missions', icon: IconTargetArrow, requiresOnboarding: true },
+  { value: 'research', path: '/research', label: 'Research', labelKey: 'nav.research', icon: IconWorldSearch, permission: PERMISSIONS.CREATE_CONTENT },
   { value: 'training', path: '/training', label: 'Training', labelKey: 'nav.training', icon: IconDeviceGamepad2, requiresOnboarding: true },
   { value: 'agent', path: '/agent', label: 'Your Agent', labelKey: 'nav.agent', icon: IconMessageChatbot, requiresOnboarding: true },
   { value: 'leaderboard', path: '/leaderboard', label: 'Leaderboard', labelKey: 'nav.leaderboard', icon: IconTrophy },

@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from .models import (
@@ -13,6 +13,9 @@ from .models import (
     MissionAssignment,
     MissionAttempt,
     Profile,
+    ResearchItem,
+    ResearchRun,
+    ResearchSchedule,
     SkillProgressionSettings,
     WeeklyLeaderboardSnapshot,
 )
@@ -2150,3 +2153,139 @@ class AiTaskChallengeTrainingTests(TestCase):
         response = self.client.post('/api/auth/training/task-challenge/generate/', {},
                                     content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 401)
+
+
+@override_settings(DEBUG=False, N8N_CALLBACK_SECRET='callback-secret')
+class ResearchManagementTests(TestCase):
+    def setUp(self):
+        self.creator = get_user_model().objects.create_user(
+            username='research@example.com', email='research@example.com', password='Test1234!',
+        )
+        Profile.objects.create(
+            user=self.creator, role=Profile.ROLE_CONTENT_CREATOR, onboarding_completed=True,
+        )
+        self.client.force_login(self.creator)
+
+    def research_row(self):
+        now = timezone.now()
+        return {
+            'item_key': 'research-1',
+            'title': 'AI governance in banking',
+            'source_name': 'European Central Bank',
+            'source_url': 'https://example.com/research-1',
+            'source_feed': 'https://example.com/feed',
+            'source_tier': 1,
+            'published_at': now.isoformat(),
+            'retrieved_at': now.isoformat(),
+            'last_seen_at': now.isoformat(),
+            'language': 'en',
+            'tags_json': '["ai_governance", "banking"]',
+            'summary_de': 'Deutsche Zusammenfassung',
+            'summary_en': 'English summary',
+            'safe_facts_json': '[{"fact":"Fact","evidence_excerpt":"Evidence"}]',
+            'mission_hooks_json': '["Check AI output"]',
+            'relevance_score': 91,
+            'confidence': 'high',
+            'valid_until': (now + timedelta(days=30)).isoformat(),
+            'risk_flags_json': '[]',
+            'eligible': True,
+            'content_hash': 'abc123',
+            'analysis_method': 'llm',
+        }
+
+    def callback_headers(self):
+        return {'HTTP_X_N8N_CALLBACK_SECRET': 'callback-secret'}
+
+    def sync_item(self):
+        response = self.client.post(
+            '/internal/n8n/research/sync/',
+            {'items': [self.research_row()]},
+            content_type='application/json',
+            **self.callback_headers(),
+        )
+        self.assertEqual(response.status_code, 200)
+        return ResearchItem.objects.get()
+
+    def test_default_schedule_is_monday_at_seven_and_can_be_updated(self):
+        response = self.client.get('/api/auth/research/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['schedule']['weekday'], 0)
+        self.assertEqual(response.json()['schedule']['run_time'], '07:00')
+
+        updated = self.client.patch(
+            '/api/auth/research/schedule/',
+            {'enabled': True, 'weekday': 3, 'run_time': '08:30'},
+            content_type='application/json',
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()['schedule']['weekday'], 3)
+        self.assertEqual(updated.json()['schedule']['run_time'], '08:30')
+
+    def test_synced_item_can_be_edited_deleted_and_is_used_by_selector(self):
+        item = self.sync_item()
+        listed = self.client.get('/api/auth/research/').json()
+        self.assertEqual(listed['stats']['current'], 1)
+        self.assertEqual(listed['items'][0]['summary_en'], 'English summary')
+
+        updated = self.client.patch(
+            f'/api/auth/research/items/{item.id}/',
+            {
+                'summary_de': 'Bearbeitet',
+                'summary_en': 'Edited',
+                'tags': ['ai_governance', 'human_review'],
+                'safe_facts': [{'fact': 'Updated fact', 'evidence_excerpt': 'Updated evidence'}],
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()['item']['summary_en'], 'Edited')
+
+        selector = self.client.get(
+            '/internal/n8n/research/current/',
+            **self.callback_headers(),
+        )
+        self.assertEqual(selector.status_code, 200)
+        self.assertEqual(selector.json()['items'][0]['summary_en'], 'Edited')
+
+        deleted = self.client.delete(f'/api/auth/research/items/{item.id}/')
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(ResearchItem.objects.count(), 0)
+        selector = self.client.get('/internal/n8n/research/current/', **self.callback_headers())
+        self.assertEqual(selector.json()['items'], [])
+
+    @patch('accounts.views.start_research_collection', return_value={'message': 'Workflow was started'})
+    def test_manual_research_run_is_dispatched_asynchronously(self, start_mock):
+        response = self.client.post(
+            '/api/auth/research/run/', {'force_refresh': True}, content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 202)
+        run = ResearchRun.objects.get()
+        self.assertEqual(run.status, ResearchRun.STATUS_RUNNING)
+        self.assertTrue(run.force_refresh)
+        start_mock.assert_called_once()
+
+    @patch('accounts.services.research.start_research_collection', return_value={'message': 'started'})
+    def test_schedule_dispatches_n8n_only_once_when_due(self, start_mock):
+        from accounts.services.research import dispatch_due_research
+
+        local_now = timezone.localtime()
+        schedule = ResearchSchedule.load()
+        schedule.weekday = local_now.weekday()
+        schedule.run_time = local_now.time().replace(second=0, microsecond=0)
+        schedule.save()
+
+        first = dispatch_due_research()
+        second = dispatch_due_research()
+        self.assertIsNotNone(first)
+        self.assertIsNone(second)
+        self.assertEqual(first.status, ResearchRun.STATUS_RUNNING)
+        self.assertEqual(ResearchRun.objects.count(), 1)
+        start_mock.assert_called_once()
+
+    def test_regular_user_cannot_manage_research(self):
+        user = get_user_model().objects.create_user(
+            username='reader@example.com', email='reader@example.com', password='Test1234!',
+        )
+        Profile.objects.create(user=user, role=Profile.ROLE_ACCOUNTANT)
+        self.client.force_login(user)
+        self.assertEqual(self.client.get('/api/auth/research/').status_code, 403)

@@ -39,4 +39,4 @@ EXPOSE 8000
 # collectstatic + migrate run at startup (not build time) because settings.py
 # requires DATABASE_URL, which Railway only injects into the running container.
 # Railway provides $PORT; falls back to 8000 when run standalone.
-CMD sh -c "python manage.py collectstatic --noinput && python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3"
+CMD sh -c "python manage.py collectstatic --noinput && python manage.py migrate --noinput && (python manage.py run_research_scheduler &) && exec gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3"

@@ -215,11 +215,13 @@ DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no
 # n8n owns mission-generation LLM orchestration. Interactive chat replies keep
 # using the separately configured KICOnnect connection.
 N8N_MISSION_GENERATION_URL = os.environ.get("N8N_MISSION_GENERATION_URL", "").strip()
+N8N_RESEARCH_COLLECTOR_URL = os.environ.get("N8N_RESEARCH_COLLECTOR_URL", "").strip()
 N8N_SERVICE_SECRET = os.environ.get("N8N_SERVICE_SECRET", "").strip()
 N8N_CALLBACK_SECRET = os.environ.get("N8N_CALLBACK_SECRET", "").strip()
 N8N_REQUEST_TIMEOUT = env_positive_float("N8N_REQUEST_TIMEOUT", 10.0)
 N8N_WORKFLOW_VERSION = os.environ.get("N8N_WORKFLOW_VERSION", "v1").strip() or "v1"
 MISSION_TASK_DAYS_PER_WEEK = env_nonnegative_int("MISSION_TASK_DAYS_PER_WEEK", 2)
+RESEARCH_SCHEDULER_POLL_SECONDS = env_nonnegative_int("RESEARCH_SCHEDULER_POLL_SECONDS", 30)
 
 
 CORS_ALLOWED_ORIGINS = [

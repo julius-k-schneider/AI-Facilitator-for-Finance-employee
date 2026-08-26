@@ -7,6 +7,9 @@ from .models import (
     MissionAssignment,
     MissionAttempt,
     Profile,
+    ResearchItem,
+    ResearchRun,
+    ResearchSchedule,
     SkillProgressionSettings,
     WeeklyLeaderboardSnapshot,
 )
@@ -80,6 +83,31 @@ class SkillProgressionSettingsAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not SkillProgressionSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ResearchItem)
+class ResearchItemAdmin(admin.ModelAdmin):
+    list_display = ('title', 'source_name', 'confidence', 'relevance_score', 'eligible', 'valid_until')
+    list_filter = ('eligible', 'confidence', 'language')
+    search_fields = ('title', 'source_name', 'summary_de', 'summary_en', 'item_key')
+
+
+@admin.register(ResearchRun)
+class ResearchRunAdmin(admin.ModelAdmin):
+    list_display = ('id', 'trigger', 'status', 'requested_by', 'created_at', 'completed_at')
+    list_filter = ('trigger', 'status')
+    readonly_fields = ('id', 'result', 'created_at', 'updated_at', 'started_at', 'completed_at')
+
+
+@admin.register(ResearchSchedule)
+class ResearchScheduleAdmin(admin.ModelAdmin):
+    list_display = ('enabled', 'weekday', 'run_time', 'timezone_name', 'last_triggered_at', 'updated_at')
+
+    def has_add_permission(self, request):
+        return not ResearchSchedule.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False

@@ -20,4 +20,4 @@ EXPOSE 8000
 # Production default: collect static, apply migrations, then serve with gunicorn.
 # Railway provides $PORT; falls back to 8000 when run standalone.
 # docker-compose overrides this command with runserver for local development.
-CMD ["sh", "-c", "python manage.py collectstatic --noinput && python manage.py migrate --noinput && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 3"]
+CMD ["sh", "-c", "python manage.py collectstatic --noinput && python manage.py migrate --noinput && (python manage.py run_research_scheduler &) && exec gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 3"]

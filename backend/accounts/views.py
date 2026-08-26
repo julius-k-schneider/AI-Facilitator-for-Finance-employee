@@ -4,10 +4,12 @@ import os
 from datetime import date, datetime, time, timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.http import JsonResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
@@ -18,6 +20,9 @@ from .models import (
     MissionAssignment,
     MissionAttempt,
     Profile,
+    ResearchItem,
+    ResearchRun,
+    ResearchSchedule,
     SkillProgressionSettings,
     WeeklyLeaderboardSnapshot,
 )
@@ -28,7 +33,7 @@ from .services.ai_task_challenge import (
     evaluate_task_answers,
     public_content as task_public_content,
 )
-from .services.n8n_client import N8NClientError, N8NConfigurationError
+from .services.n8n_client import N8NClientError, N8NConfigurationError, start_research_collection
 from .services.n8n_mission_generation import (
     GenerationContractError,
     create_regeneration_run,
@@ -41,6 +46,11 @@ from .services.n8n_mission_generation import (
     generation_run_payload,
 )
 from .services.personal_agent import personal_agent_reply
+from .services.research import (
+    research_item_payload,
+    research_run_payload,
+    research_schedule_payload,
+)
 from .services.skill_progression import (
     difficulty_for_skill,
     evaluate_skill_progression,
@@ -286,6 +296,186 @@ def can_create_missions(user):
     if not user.is_authenticated:
         return False
     return ensure_profile(user).role in {Profile.ROLE_CONTENT_CREATOR, Profile.ROLE_ADMIN}
+
+
+def _research_access_denied(request):
+    if can_create_missions(request.user):
+        return None
+    return JsonResponse({'error': 'permission denied'}, status=403)
+
+
+def _research_stats():
+    now = timezone.now()
+    items = ResearchItem.objects.all()
+    return {
+        'total': items.count(),
+        'current': items.filter(eligible=True, valid_until__gte=now).count(),
+        'expired': items.filter(valid_until__lt=now).count(),
+        'inactive': items.filter(eligible=False).count(),
+    }
+
+
+@require_http_methods(['GET'])
+def research_items_view(request):
+    denied = _research_access_denied(request)
+    if denied:
+        return denied
+    items = ResearchItem.objects.all()
+    status_filter = request.GET.get('status', '').strip()
+    now = timezone.now()
+    if status_filter == 'current':
+        items = items.filter(eligible=True, valid_until__gte=now)
+    elif status_filter == 'expired':
+        items = items.filter(valid_until__lt=now)
+    elif status_filter == 'inactive':
+        items = items.filter(eligible=False)
+    query = request.GET.get('q', '').strip()
+    if query:
+        from django.db.models import Q
+        items = items.filter(
+            Q(title__icontains=query)
+            | Q(source_name__icontains=query)
+            | Q(summary_de__icontains=query)
+            | Q(summary_en__icontains=query)
+        )
+    latest_run = ResearchRun.objects.first()
+    return JsonResponse({
+        'items': [research_item_payload(item) for item in items[:250]],
+        'stats': _research_stats(),
+        'schedule': research_schedule_payload(ResearchSchedule.load()),
+        'latest_run': research_run_payload(latest_run) if latest_run else None,
+    })
+
+
+@require_http_methods(['PATCH', 'DELETE'])
+def research_item_detail_view(request, item_id):
+    denied = _research_access_denied(request)
+    if denied:
+        return denied
+    try:
+        item = ResearchItem.objects.get(id=item_id)
+    except ResearchItem.DoesNotExist:
+        return JsonResponse({'error': 'research item not found'}, status=404)
+    if request.method == 'DELETE':
+        item.delete()
+        return JsonResponse({'deleted': True})
+
+    data = parse_json(request)
+    text_fields = {
+        'title': 500,
+        'source_name': 240,
+        'source_url': 1200,
+        'source_feed': 1200,
+        'summary_de': None,
+        'summary_en': None,
+    }
+    for field, maximum in text_fields.items():
+        if field not in data:
+            continue
+        value = str(data[field] or '').strip()
+        if field in {'title', 'source_name', 'source_url'} and not value:
+            return JsonResponse({'error': f'{field} is required'}, status=400)
+        setattr(item, field, value[:maximum] if maximum else value)
+    for field in ('tags', 'safe_facts', 'mission_hooks', 'risk_flags'):
+        if field in data:
+            if not isinstance(data[field], list):
+                return JsonResponse({'error': f'{field} must be a list'}, status=400)
+            setattr(item, field, data[field])
+    if 'relevance_score' in data:
+        try:
+            item.relevance_score = max(0, min(100, int(data['relevance_score'])))
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'relevance_score must be a number'}, status=400)
+    if 'confidence' in data:
+        if data['confidence'] not in dict(ResearchItem.CONFIDENCE_CHOICES):
+            return JsonResponse({'error': 'invalid confidence'}, status=400)
+        item.confidence = data['confidence']
+    if 'eligible' in data:
+        item.eligible = data['eligible'] is True
+    if 'valid_until' in data:
+        valid_until = parse_datetime(str(data['valid_until']))
+        if valid_until is None:
+            return JsonResponse({'error': 'valid_until must be an ISO datetime'}, status=400)
+        item.valid_until = timezone.make_aware(valid_until) if timezone.is_naive(valid_until) else valid_until
+    item.updated_by = request.user
+    try:
+        item.full_clean()
+    except ValidationError:
+        return JsonResponse({'error': 'invalid research item'}, status=400)
+    item.save()
+    return JsonResponse({'item': research_item_payload(item)})
+
+
+@require_http_methods(['GET', 'PATCH'])
+def research_schedule_view(request):
+    denied = _research_access_denied(request)
+    if denied:
+        return denied
+    schedule = ResearchSchedule.load()
+    if request.method == 'GET':
+        return JsonResponse({'schedule': research_schedule_payload(schedule)})
+    data = parse_json(request)
+    if 'enabled' in data:
+        schedule.enabled = data['enabled'] is True
+    if 'weekday' in data:
+        try:
+            schedule.weekday = int(data['weekday'])
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'weekday must be between 0 and 6'}, status=400)
+    if 'run_time' in data:
+        try:
+            schedule.run_time = datetime.strptime(str(data['run_time']), '%H:%M').time()
+        except ValueError:
+            return JsonResponse({'error': 'run_time must use HH:MM'}, status=400)
+    schedule.updated_by = request.user
+    try:
+        schedule.save()
+    except ValidationError:
+        return JsonResponse({'error': 'invalid research schedule'}, status=400)
+    return JsonResponse({'schedule': research_schedule_payload(schedule)})
+
+
+@require_http_methods(['GET', 'POST'])
+def research_run_view(request):
+    denied = _research_access_denied(request)
+    if denied:
+        return denied
+    if request.method == 'GET':
+        run = ResearchRun.objects.first()
+        return JsonResponse({'research_run': research_run_payload(run) if run else None})
+    active = ResearchRun.objects.filter(status__in=ResearchRun.ACTIVE_STATUSES).first()
+    if active:
+        return JsonResponse({'research_run': research_run_payload(active)}, status=202)
+    data = parse_json(request)
+    run = ResearchRun.objects.create(
+        trigger=ResearchRun.TRIGGER_MANUAL,
+        requested_by=request.user,
+        force_refresh=data.get('force_refresh') is True,
+    )
+    try:
+        start_research_collection({
+            'research_run_id': str(run.id),
+            'trigger': ResearchRun.TRIGGER_MANUAL,
+            'force_refresh': run.force_refresh,
+        }, idempotency_key=run.id)
+    except N8NConfigurationError:
+        run.status = ResearchRun.STATUS_FAILED
+        run.error_message = 'n8n research collection is not configured'
+        run.completed_at = timezone.now()
+        run.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+        return JsonResponse({'error': run.error_message, 'research_run': research_run_payload(run)}, status=503)
+    except N8NClientError:
+        run.status = ResearchRun.STATUS_FAILED
+        run.error_message = 'n8n research collection is currently unavailable'
+        run.completed_at = timezone.now()
+        run.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+        return JsonResponse({'error': run.error_message, 'research_run': research_run_payload(run)}, status=502)
+    ResearchRun.objects.filter(id=run.id, status=ResearchRun.STATUS_QUEUED).update(
+        status=ResearchRun.STATUS_RUNNING,
+        started_at=timezone.now(),
+    )
+    run.refresh_from_db()
+    return JsonResponse({'research_run': research_run_payload(run)}, status=202)
 
 
 def translated(value, language):

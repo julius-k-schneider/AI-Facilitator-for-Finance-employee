@@ -15,6 +15,7 @@ import Leaderboard from './pages/Leaderboard'
 import Missions from './pages/Missions'
 import Training from './pages/Training'
 import Profile from './pages/Profile'
+import Research from './pages/Research'
 import UserManagement from './pages/UserManagement'
 import { PROGRESS_EVENT } from './services/progressService'
 
@@ -132,6 +133,10 @@ function App() {
             <Route path="/" element={<Home user={user} />} />
             <Route path="/basics" element={<Basics user={user} onUserUpdate={setUser} apiBase={API_BASE} />} />
             <Route path="/missions" element={<Missions key={location.key} user={user} />} />
+            <Route
+              path="/research"
+              element={hasPermission(user, PERMISSIONS.CREATE_CONTENT) ? <Research /> : <AccessDenied />}
+            />
             <Route path="/training" element={<Training />} />
             <Route path="/agent" element={<YourAgent />} />
             <Route path="/leaderboard" element={<Leaderboard user={user} />} />

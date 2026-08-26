@@ -110,6 +110,7 @@ N8N_ENCRYPTION_KEY=separate-n8n-encryption-key
 
 # backend/.env
 N8N_MISSION_GENERATION_URL=http://n8n:5678/webhook/mission-generation
+N8N_RESEARCH_COLLECTOR_URL=http://n8n:5678/webhook/ai-finance-research-collector-run
 N8N_REQUEST_TIMEOUT=10
 N8N_WORKFLOW_VERSION=v1
 ```
@@ -125,8 +126,9 @@ The first start of the `n8n_data` volume bootstraps the n8n instance itself:
 `docker/n8n-init.sh` imports the two Header-Auth credentials (their values come
 from the root `.env`, so no secret is committed), imports the exports from
 `workflows/n8n/` and publishes all four workflows — the three the mission
-generation calls by webhook, plus the research collector, whose schedule trigger
-then fetches the configured feeds daily at 06:15 Europe/Berlin. No
+generation calls by webhook, plus the research collector. A lightweight Django
+scheduler waits for the configurable weekly time and invokes the collector only
+when research is actually due; the default is Monday at 07:00 Europe/Berlin. No
 manual import or credential setup in the n8n editor is needed. To bootstrap
 again after editing the exports, remove the marker and restart:
 

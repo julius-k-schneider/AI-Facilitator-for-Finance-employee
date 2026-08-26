@@ -46,6 +46,7 @@ services:
       ALLOWED_HOSTS: localhost,127.0.0.1,web
       # Compose services resolve each other by service name on app-network.
       N8N_MISSION_GENERATION_URL: http://n8n:5678/webhook/mission-generation
+      N8N_RESEARCH_COLLECTOR_URL: http://n8n:5678/webhook/ai-finance-research-collector-run
       N8N_SERVICE_SECRET: "${N8N_SERVICE_SECRET:?Set N8N_SERVICE_SECRET in the root .env}"
       N8N_CALLBACK_SECRET: "${N8N_CALLBACK_SECRET:?Set N8N_CALLBACK_SECRET in the root .env}"
     volumes:
@@ -57,6 +58,30 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - app-network
+
+  research-scheduler:
+    build:
+      context: ./backend
+    command: sh -c "python manage.py migrate && python manage.py run_research_scheduler"
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgres://app:app@db:5432/app
+      ALLOWED_HOSTS: localhost,127.0.0.1,web
+      N8N_RESEARCH_COLLECTOR_URL: http://n8n:5678/webhook/ai-finance-research-collector-run
+      N8N_SERVICE_SECRET: "${N8N_SERVICE_SECRET:?Set N8N_SERVICE_SECRET in the root .env}"
+      RESEARCH_SCHEDULER_POLL_SECONDS: 30
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    depends_on:
+      db:
+        condition: service_healthy
+      n8n:
+        condition: service_started
     networks:
       - app-network
 
@@ -88,7 +113,9 @@ services:
 
     # Imports credentials and workflows on the first start of the n8n_data
     # volume, then hands over to the image's own entrypoint.
-    entrypoint: ["tini", "--", "/bin/sh", "/n8n-init.sh"]
+    # Normalize CRLF when the repository is checked out on Windows before the
+    # POSIX shell reads the bootstrap script.
+    entrypoint: ["tini", "--", "/bin/sh", "-c", "sed 's/\\r$//' /n8n-init.sh > /tmp/n8n-init-lf.sh && exec /bin/sh /tmp/n8n-init-lf.sh"]
     volumes:
       - n8n_data:/home/node/.n8n
       - ./docker/n8n-init.sh:/n8n-init.sh:ro

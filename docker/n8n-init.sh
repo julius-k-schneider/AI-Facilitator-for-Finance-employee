@@ -3,13 +3,14 @@
 # imports the two Header-Auth credentials (values come from the root .env, so no
 # secret is ever committed), imports the workflow exports from workflows/n8n and
 # publishes all four workflows: the three that Django and the orchestrator call
-# by webhook, plus the research collector with its daily schedule trigger.
+# by webhook, plus the research collector with its configurable schedule check.
 #
 # Runs once per volume. To bootstrap again, delete the marker
 # (docker compose exec n8n rm /home/node/.n8n/.bootstrapped) or wipe the volume
 # with `docker compose down -v`. Re-importing overwrites edits made in the editor.
 
-MARKER=/home/node/.n8n/.bootstrapped
+BOOTSTRAP_VERSION=research-management-v2
+MARKER=/home/node/.n8n/.bootstrapped-$BOOTSTRAP_VERSION
 WORKFLOW_DIR=/workflows
 PUBLISHED="MissionGeneratorV2Prod MissionWorkerV2Prod RsrchSelect2026A RsrchCollect2026"
 

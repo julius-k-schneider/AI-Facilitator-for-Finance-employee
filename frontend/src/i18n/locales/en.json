@@ -19,6 +19,7 @@
     "basics": "Basics",
     "leaderboard": "Leaderboard",
     "missions": "Missions",
+    "research": "Research",
     "training": "Training",
     "agent": "Your Agent",
     "userManagement": "User management",
@@ -249,6 +250,8 @@
       "selectWeekButton": "Select week",
       "selectWeekDescription": "Select a week through Monday to Friday in the calendar. Existing missions remain visible for each day.",
       "selectedWeek": "Selected: {{start}} to {{end}}",
+      "researchFreshnessWarningTitle": "Research may be older than the mission week",
+      "researchFreshnessWarning": "This week is {{count}} weeks in the future. Mission generation uses the research pool available now, so developments published before that future week cannot yet be included.",
       "approveAll": "Approve all",
       "rejectAll": "Reject all",
       "rejectAllConfirm": "Are you sure you want to reject all {{count}} review missions?",
@@ -307,6 +310,114 @@
       "title": "Mission debug area",
       "description": "Test every mission type with sample data without changing points or database records.",
       "button": "Test missions"
+    }
+  },
+  "research": {
+    "title": "AI Finance Research",
+    "description": "Manage the current research pool used to enrich selected weekly missions with recent AI developments.",
+    "run": {
+      "title": "Research agent",
+      "description": "Scan the configured official sources and assess new AI developments for finance learning missions.",
+      "button": "Start new research",
+      "running": "Research in progress",
+      "status": {
+        "queued": "Queued",
+        "running": "Researching",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    },
+    "stats": {
+      "total": "All entries",
+      "current": "Current and active",
+      "expired": "Expired",
+      "inactive": "Inactive"
+    },
+    "schedule": {
+      "title": "Automatic weekly research",
+      "description": "The scheduler waits for this weekly time and calls n8n only when a research run is actually due.",
+      "enabled": "Enable automation",
+      "weekday": "Weekday",
+      "time": "Time",
+      "save": "Save schedule",
+      "timezone": "Timezone: {{timezone}}",
+      "weekdays": {
+        "0": "Monday",
+        "1": "Tuesday",
+        "2": "Wednesday",
+        "3": "Thursday",
+        "4": "Friday",
+        "5": "Saturday",
+        "6": "Sunday"
+      }
+    },
+    "library": {
+      "title": "Research library",
+      "description": "Entries selected here are available to the mission generator until they expire or are deactivated.",
+      "search": "Search research",
+      "loading": "Loading research entries...",
+      "empty": "No research entries found",
+      "emptyText": "Start the research agent to fill the library with current, verified items.",
+      "filters": {
+        "all": "All entries",
+        "current": "Current",
+        "expired": "Expired",
+        "inactive": "Inactive"
+      },
+      "current": "Current",
+      "expired": "Expired",
+      "inactive": "Inactive",
+      "score": "Relevance {{score}}/100",
+      "published": "Published {{date}}",
+      "validUntil": "Valid until {{date}}"
+    },
+    "confidence": {
+      "low": "Low confidence",
+      "medium": "Medium confidence",
+      "high": "High confidence"
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "save": "Save changes"
+    },
+    "edit": {
+      "title": "Edit research entry",
+      "itemTitle": "Title",
+      "sourceName": "Source institution",
+      "sourceUrl": "Source URL",
+      "summaryDe": "German summary",
+      "summaryEn": "English summary",
+      "tags": "Tags",
+      "tagsHint": "Comma-separated tags used by the context selector.",
+      "facts": "Verified facts",
+      "factsHint": "One fact per line: fact | supporting evidence",
+      "hooks": "Mission hooks",
+      "hooksHint": "One transferable learning idea per line.",
+      "score": "Relevance score",
+      "confidence": "Confidence",
+      "validUntil": "Valid until",
+      "eligible": "Available to mission generation"
+    },
+    "delete": {
+      "title": "Delete research entry",
+      "text": "Delete “{{title}}”?",
+      "warning": "The entry will immediately stop being available to future mission generations."
+    },
+    "messages": {
+      "started": "The research agent has started. You can leave this page; its status will remain available.",
+      "completed": "Research completed. {{count}} new or updated entries were stored.",
+      "scheduleSaved": "The automatic research schedule was saved.",
+      "updated": "The research entry was updated.",
+      "deleted": "The research entry was deleted."
+    },
+    "errors": {
+      "load": "The research library could not be loaded.",
+      "run": "The research agent could not be started or did not complete successfully.",
+      "schedule": "The research schedule could not be saved.",
+      "update": "The research entry could not be updated.",
+      "delete": "The research entry could not be deleted."
     }
   },
   "training": {

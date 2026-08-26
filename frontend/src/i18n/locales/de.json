@@ -19,6 +19,7 @@
     "basics": "Grundlagen",
     "leaderboard": "Rangliste",
     "missions": "Missionen",
+    "research": "Research",
     "training": "Training",
     "agent": "Dein Agent",
     "userManagement": "Nutzerverwaltung",
@@ -249,6 +250,8 @@
       "selectWeekButton": "Wochenauswahl",
       "selectWeekDescription": "Wähle im Kalender eine Woche über Montag bis Freitag. Bestehende Missionen werden weiterhin pro Tag angezeigt.",
       "selectedWeek": "Ausgewählt: {{start}} bis {{end}}",
+      "researchFreshnessWarningTitle": "Research kann älter als die Missionswoche sein",
+      "researchFreshnessWarning": "Diese Woche liegt {{count}} Wochen in der Zukunft. Die Missionsgenerierung verwendet den heute verfügbaren Research-Pool; Entwicklungen bis zu dieser zukünftigen Woche können daher noch nicht enthalten sein.",
       "approveAll": "Alle freigeben",
       "rejectAll": "Alle verwerfen",
       "rejectAllConfirm": "Sollen wirklich alle {{count}} Review-Missionen verworfen werden?",
@@ -307,6 +310,114 @@
       "title": "Missions-Debugbereich",
       "description": "Teste alle Missionsarten mit Beispieldaten, ohne Punkte oder Datenbankeinträge zu verändern.",
       "button": "Missionen testen"
+    }
+  },
+  "research": {
+    "title": "AI Finance Research",
+    "description": "Verwalte den aktuellen Research-Pool, mit dem ausgewählte Wochenmissionen um aktuelle AI-Entwicklungen ergänzt werden.",
+    "run": {
+      "title": "Research Agent",
+      "description": "Durchsuche die hinterlegten offiziellen Quellen und bewerte neue AI-Entwicklungen für Finance-Lernmissionen.",
+      "button": "Neue Research starten",
+      "running": "Research läuft",
+      "status": {
+        "queued": "Wartet",
+        "running": "Recherchiert",
+        "completed": "Abgeschlossen",
+        "failed": "Fehlgeschlagen"
+      }
+    },
+    "stats": {
+      "total": "Alle Einträge",
+      "current": "Aktuell und aktiv",
+      "expired": "Abgelaufen",
+      "inactive": "Inaktiv"
+    },
+    "schedule": {
+      "title": "Automatische wöchentliche Research",
+      "description": "Der Scheduler wartet auf diesen Wochenzeitpunkt und ruft n8n nur auf, wenn tatsächlich ein Research-Lauf fällig ist.",
+      "enabled": "Automatik aktivieren",
+      "weekday": "Wochentag",
+      "time": "Uhrzeit",
+      "save": "Zeitplan speichern",
+      "timezone": "Zeitzone: {{timezone}}",
+      "weekdays": {
+        "0": "Montag",
+        "1": "Dienstag",
+        "2": "Mittwoch",
+        "3": "Donnerstag",
+        "4": "Freitag",
+        "5": "Samstag",
+        "6": "Sonntag"
+      }
+    },
+    "library": {
+      "title": "Research-Bibliothek",
+      "description": "Diese Einträge stehen dem Missionsgenerator bis zum Ablauf oder zur Deaktivierung zur Verfügung.",
+      "search": "Research durchsuchen",
+      "loading": "Research-Einträge werden geladen...",
+      "empty": "Keine Research-Einträge gefunden",
+      "emptyText": "Starte den Research Agent, um die Bibliothek mit aktuellen, geprüften Einträgen zu füllen.",
+      "filters": {
+        "all": "Alle Einträge",
+        "current": "Aktuell",
+        "expired": "Abgelaufen",
+        "inactive": "Inaktiv"
+      },
+      "current": "Aktuell",
+      "expired": "Abgelaufen",
+      "inactive": "Inaktiv",
+      "score": "Relevanz {{score}}/100",
+      "published": "Veröffentlicht am {{date}}",
+      "validUntil": "Gültig bis {{date}}"
+    },
+    "confidence": {
+      "low": "Niedrige Sicherheit",
+      "medium": "Mittlere Sicherheit",
+      "high": "Hohe Sicherheit"
+    },
+    "actions": {
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "cancel": "Abbrechen",
+      "save": "Änderungen speichern"
+    },
+    "edit": {
+      "title": "Research-Eintrag bearbeiten",
+      "itemTitle": "Titel",
+      "sourceName": "Quelleninstitution",
+      "sourceUrl": "Quellen-URL",
+      "summaryDe": "Deutsche Zusammenfassung",
+      "summaryEn": "Englische Zusammenfassung",
+      "tags": "Tags",
+      "tagsHint": "Kommagetrennte Tags für die Auswahl des Research-Kontexts.",
+      "facts": "Geprüfte Fakten",
+      "factsHint": "Ein Fakt pro Zeile: Fakt | stützender Beleg",
+      "hooks": "Missionsideen",
+      "hooksHint": "Eine übertragbare Lernidee pro Zeile.",
+      "score": "Relevanzwert",
+      "confidence": "Sicherheit",
+      "validUntil": "Gültig bis",
+      "eligible": "Für die Missionsgenerierung verfügbar"
+    },
+    "delete": {
+      "title": "Research-Eintrag löschen",
+      "text": "„{{title}}“ löschen?",
+      "warning": "Der Eintrag steht zukünftigen Missionsgenerierungen anschließend sofort nicht mehr zur Verfügung."
+    },
+    "messages": {
+      "started": "Der Research Agent wurde gestartet. Du kannst diese Seite verlassen; der Status bleibt erhalten.",
+      "completed": "Research abgeschlossen. {{count}} neue oder aktualisierte Einträge wurden gespeichert.",
+      "scheduleSaved": "Der automatische Research-Zeitplan wurde gespeichert.",
+      "updated": "Der Research-Eintrag wurde aktualisiert.",
+      "deleted": "Der Research-Eintrag wurde gelöscht."
+    },
+    "errors": {
+      "load": "Die Research-Bibliothek konnte nicht geladen werden.",
+      "run": "Der Research Agent konnte nicht gestartet oder nicht erfolgreich abgeschlossen werden.",
+      "schedule": "Der Research-Zeitplan konnte nicht gespeichert werden.",
+      "update": "Der Research-Eintrag konnte nicht aktualisiert werden.",
+      "delete": "Der Research-Eintrag konnte nicht gelöscht werden."
     }
   },
   "training": {

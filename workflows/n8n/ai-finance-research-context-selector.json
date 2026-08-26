@@ -93,109 +93,24 @@
       },
       {
         "parameters": {
-          "resource": "table",
-          "operation": "create",
-          "tableName": "ai_finance_research_pool",
-          "columns": {
-            "column": [
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/research/current/?as_of=' + encodeURIComponent($json.as_of) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
               {
-                "name": "item_key",
-                "type": "string"
-              },
-              {
-                "name": "title",
-                "type": "string"
-              },
-              {
-                "name": "source_name",
-                "type": "string"
-              },
-              {
-                "name": "source_url",
-                "type": "string"
-              },
-              {
-                "name": "source_feed",
-                "type": "string"
-              },
-              {
-                "name": "source_tier",
-                "type": "number"
-              },
-              {
-                "name": "published_at",
-                "type": "date"
-              },
-              {
-                "name": "retrieved_at",
-                "type": "date"
-              },
-              {
-                "name": "last_seen_at",
-                "type": "date"
-              },
-              {
-                "name": "language",
-                "type": "string"
-              },
-              {
-                "name": "tags_json",
-                "type": "string"
-              },
-              {
-                "name": "summary_de",
-                "type": "string"
-              },
-              {
-                "name": "summary_en",
-                "type": "string"
-              },
-              {
-                "name": "safe_facts_json",
-                "type": "string"
-              },
-              {
-                "name": "mission_hooks_json",
-                "type": "string"
-              },
-              {
-                "name": "relevance_score",
-                "type": "number"
-              },
-              {
-                "name": "confidence",
-                "type": "string"
-              },
-              {
-                "name": "valid_until",
-                "type": "date"
-              },
-              {
-                "name": "risk_flags_json",
-                "type": "string"
-              },
-              {
-                "name": "eligible",
-                "type": "boolean"
-              },
-              {
-                "name": "content_hash",
-                "type": "string"
-              },
-              {
-                "name": "analysis_method",
-                "type": "string"
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
               }
             ]
           },
           "options": {
-            "createIfNotExists": true
+            "timeout": 60000
           }
         },
         "id": "405ecf93-8c00-48e4-90c4-5b50333c4865",
-        "name": "Create or Reuse Research Pool",
-        "type": "n8n-nodes-base.dataTable",
-        "typeVersion": 1.1,
+        "name": "Load Current Research from Django",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
         "position": [
           720,
           0
@@ -203,37 +118,12 @@
       },
       {
         "parameters": {
-          "resource": "row",
-          "operation": "get",
-          "dataTableId": {
-            "mode": "name",
-            "value": "ai_finance_research_pool"
-          },
-          "matchType": "allConditions",
-          "filters": {
-            "conditions": [
-              {
-                "keyName": "eligible",
-                "condition": "isTrue",
-                "keyValue": ""
-              },
-              {
-                "keyName": "valid_until",
-                "condition": "gte",
-                "keyValue": "={{ $('Normalize Selector Input').first().json.as_of }}"
-              }
-            ]
-          },
-          "returnAll": false,
-          "limit": 100,
-          "orderBy": true,
-          "orderByColumn": "relevance_score",
-          "orderByDirection": "DESC"
+          "jsCode": "const items = Array.isArray($json.items) ? $json.items : [];\nreturn items.length ? items.map((item) => ({ json: item })) : [{ json: {} }];"
         },
         "id": "bd298a28-ccef-47da-8d37-882d2df5474c",
-        "name": "Load Current Research",
-        "type": "n8n-nodes-base.dataTable",
-        "typeVersion": 1.1,
+        "name": "Unwrap Current Research",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
         "position": [
           960,
           0
@@ -314,25 +204,25 @@
         "main": [
           [
             {
-              "node": "Create or Reuse Research Pool",
+              "node": "Load Current Research from Django",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Create or Reuse Research Pool": {
+      "Load Current Research from Django": {
         "main": [
           [
             {
-              "node": "Load Current Research",
+              "node": "Unwrap Current Research",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Load Current Research": {
+      "Unwrap Current Research": {
         "main": [
           [
             {

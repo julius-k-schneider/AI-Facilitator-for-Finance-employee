@@ -8,13 +8,21 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import GenerationRun
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+
+from .models import GenerationRun, ResearchItem, ResearchRun
 from .services.n8n_mission_generation import (
     GenerationContractError,
     complete_generation_run,
     generation_run_payload,
     update_generation_run,
     validate_requirement_result,
+)
+from .services.research import (
+    research_item_payload,
+    research_run_payload,
+    sync_research_items,
 )
 
 
@@ -105,3 +113,80 @@ def generation_callback_view(request):
     except GenerationContractError as exception:
         return JsonResponse({'error': str(exception)}, status=422)
     return JsonResponse({'generation_run': generation_run_payload(run)})
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def research_sync_view(request):
+    auth_error = _authenticate_callback(request)
+    if auth_error:
+        return auth_error
+    data = _json_body(request)
+    if data is None or not isinstance(data.get('items'), list):
+        return JsonResponse({'error': 'items must be a list'}, status=400)
+    items = sync_research_items(data['items'])
+    run_id = data.get('research_run_id')
+    if run_id:
+        ResearchRun.objects.filter(id=run_id, status=ResearchRun.STATUS_QUEUED).update(
+            status=ResearchRun.STATUS_RUNNING,
+            started_at=timezone.now(),
+        )
+    return JsonResponse({
+        'synced_count': len(items),
+        # The collector restores these original rows before updating its own
+        # deduplication table.
+        'items': data['items'],
+    })
+
+
+@require_http_methods(['GET'])
+@csrf_exempt
+def current_research_view(request):
+    auth_error = _authenticate_callback(request)
+    if auth_error:
+        return auth_error
+    as_of = parse_datetime(request.GET.get('as_of', '')) or timezone.now()
+    if timezone.is_naive(as_of):
+        as_of = timezone.make_aware(as_of, timezone.get_current_timezone())
+    items = ResearchItem.objects.filter(eligible=True, valid_until__gte=as_of)
+    return JsonResponse({
+        'items': [research_item_payload(item, n8n_shape=True) for item in items[:250]],
+        'as_of': as_of.isoformat(),
+    })
+
+
+@require_http_methods(['POST'])
+@csrf_exempt
+def research_callback_view(request):
+    auth_error = _authenticate_callback(request)
+    if auth_error:
+        return auth_error
+    data = _json_body(request)
+    if data is None:
+        return JsonResponse({'error': 'request body must be a JSON object'}, status=400)
+    run_id = data.get('research_run_id')
+    if not run_id:
+        # Editor-only manual executions intentionally have no Django run.
+        return JsonResponse({'research_run': None})
+    try:
+        run = ResearchRun.objects.get(id=run_id)
+    except (ResearchRun.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'error': 'research run not found'}, status=404)
+    requested_status = data.get('status')
+    run.result = data.get('result') if isinstance(data.get('result'), dict) else {
+        key: value for key, value in data.items()
+        if key not in {'research_run_id', 'status', 'error_message'}
+    }
+    if requested_status == ResearchRun.STATUS_FAILED:
+        run.status = ResearchRun.STATUS_FAILED
+        run.error_message = str(data.get('error_message') or 'Research collection failed.')
+    else:
+        run.status = ResearchRun.STATUS_COMPLETED
+        run.error_message = ''
+    run.completed_at = timezone.now()
+    if run.started_at is None:
+        run.started_at = run.created_at
+    run.save(update_fields=[
+        'status', 'result', 'error_message', 'started_at', 'completed_at', 'updated_at',
+    ])
+    return JsonResponse({'research_run': research_run_payload(run)})

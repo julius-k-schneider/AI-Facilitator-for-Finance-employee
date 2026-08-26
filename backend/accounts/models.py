@@ -1,4 +1,5 @@
 import uuid
+from datetime import time
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -138,6 +139,133 @@ class GenerationRun(models.Model):
 
     def __str__(self):
         return f'{self.kind}: {self.id} ({self.status})'
+
+
+class ResearchItem(models.Model):
+    CONFIDENCE_LOW = 'low'
+    CONFIDENCE_MEDIUM = 'medium'
+    CONFIDENCE_HIGH = 'high'
+    CONFIDENCE_CHOICES = [
+        (CONFIDENCE_LOW, 'Low'),
+        (CONFIDENCE_MEDIUM, 'Medium'),
+        (CONFIDENCE_HIGH, 'High'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    item_key = models.CharField(max_length=80, unique=True)
+    title = models.CharField(max_length=500)
+    source_name = models.CharField(max_length=240)
+    source_url = models.URLField(max_length=1200)
+    source_feed = models.URLField(max_length=1200, blank=True, default='')
+    source_tier = models.PositiveSmallIntegerField(default=1)
+    published_at = models.DateTimeField()
+    retrieved_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField()
+    language = models.CharField(max_length=8, default='en')
+    tags = models.JSONField(default=list, blank=True)
+    summary_de = models.TextField(blank=True, default='')
+    summary_en = models.TextField(blank=True, default='')
+    safe_facts = models.JSONField(default=list, blank=True)
+    mission_hooks = models.JSONField(default=list, blank=True)
+    relevance_score = models.PositiveSmallIntegerField(
+        default=0, validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    confidence = models.CharField(max_length=12, choices=CONFIDENCE_CHOICES, default=CONFIDENCE_MEDIUM)
+    valid_until = models.DateTimeField(db_index=True)
+    risk_flags = models.JSONField(default=list, blank=True)
+    eligible = models.BooleanField(default=True, db_index=True)
+    content_hash = models.CharField(max_length=120, blank=True, default='')
+    analysis_method = models.CharField(max_length=80, blank=True, default='')
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='updated_research_items',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('-published_at', '-retrieved_at', 'title')
+
+    def __str__(self):
+        return self.title
+
+
+class ResearchSchedule(models.Model):
+    enabled = models.BooleanField(default=True)
+    weekday = models.PositiveSmallIntegerField(
+        default=0, validators=[MinValueValidator(0), MaxValueValidator(6)],
+    )
+    run_time = models.TimeField(default=time(hour=7))
+    timezone_name = models.CharField(max_length=64, default='Europe/Berlin')
+    last_triggered_at = models.DateTimeField(null=True, blank=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='updated_research_schedules',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        schedule, _created = cls.objects.get_or_create(pk=1)
+        return schedule
+
+    def __str__(self):
+        return f'Research schedule: {self.weekday} {self.run_time}'
+
+
+class ResearchRun(models.Model):
+    TRIGGER_MANUAL = 'manual'
+    TRIGGER_SCHEDULED = 'scheduled'
+    TRIGGER_CHOICES = [
+        (TRIGGER_MANUAL, 'Manual'),
+        (TRIGGER_SCHEDULED, 'Scheduled'),
+    ]
+    STATUS_QUEUED = 'queued'
+    STATUS_RUNNING = 'running'
+    STATUS_COMPLETED = 'completed'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_QUEUED, 'Queued'),
+        (STATUS_RUNNING, 'Running'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+    ACTIVE_STATUSES = {STATUS_QUEUED, STATUS_RUNNING}
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    trigger = models.CharField(max_length=16, choices=TRIGGER_CHOICES)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_QUEUED, db_index=True)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='research_runs',
+    )
+    force_refresh = models.BooleanField(default=False)
+    result = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+
+    def __str__(self):
+        return f'{self.trigger}: {self.id} ({self.status})'
 
 
 class Mission(models.Model):

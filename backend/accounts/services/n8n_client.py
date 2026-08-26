@@ -80,3 +80,12 @@ def start_mission_generation(payload, *, idempotency_key=None):
         payload,
         idempotency_key=idempotency_key,
     )
+
+
+def start_research_collection(payload, *, idempotency_key=None):
+    """Start the asynchronous AI Finance Research collector."""
+    return N8NClient().post_json(
+        settings.N8N_RESEARCH_COLLECTOR_URL,
+        payload,
+        idempotency_key=idempotency_key,
+    )

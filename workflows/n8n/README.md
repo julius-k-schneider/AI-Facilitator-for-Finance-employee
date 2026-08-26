@@ -35,7 +35,7 @@ Die Datei `ai-mission-generator-v2.json` enthält beide zusammengehörigen Workf
 ## 1. AI Finance Research - Collector
 
 - Workflow-ID: `RsrchCollect2026`
-- Zeitplan: täglich um 06:15 Uhr, Zeitzone `Europe/Berlin`
+- Zeitplan: standardmäßig montags um 07:00 Uhr, Zeitzone `Europe/Berlin`; Wochentag, Uhrzeit und Aktivierung werden auf der Research Page verwaltet
 - Manueller Trigger im n8n-Editor
 - Authentifizierter Webhook: `POST /webhook/ai-finance-research-collector-run`
 - Optionaler Request-Body für eine vollständige Neubewertung: `{"force_refresh": true}`
@@ -52,7 +52,7 @@ Die Verarbeitung besteht aus einem 45-Tage-Aktualitätsfilter, einer harten KI-u
 
 Falls der KI-Endpunkt ausfällt oder eine nicht verwertbare Antwort liefert, greift ein konservativer Fallback. Vor einer erneuten Bewertung werden betroffene Datensätze vorsorglich deaktiviert und nur bei erfolgreicher Prüfung wieder freigegeben. Damit bleiben abgelehnte oder veraltete Ergebnisse nicht versehentlich auswählbar.
 
-Gespeichert wird in der n8n Data Table `ai_finance_research_pool`. Die Tabelle wird beim ersten Lauf automatisch angelegt. Wichtige Felder sind:
+Für Deduplizierung und Wiederbewertung bleibt die n8n Data Table `ai_finance_research_pool` erhalten. Der Collector synchronisiert die Einträge zusätzlich in Django. Django ist die gemeinsame Datenquelle für die Research Page und den Context Selector, damit Bearbeiten, Deaktivieren und Löschen unmittelbar auf zukünftige Missionsgenerierungen wirken. Wichtige Felder sind:
 
 - stabile `item_key` und `content_hash` für Idempotenz
 - Quelle, Original-URL, Veröffentlichungs-, Abruf- und Ablaufzeit
@@ -96,6 +96,8 @@ Beispielinput:
 ```
 
 Der Selector berücksichtigt nur freigegebene, noch gültige Einträge mit belegten Fakten und mittlerer oder hoher Confidence. Die Auswahl ist deterministisch und gewichtet Relevanz, Quellenstufe, Confidence, Aktualität, bevorzugte Tags und Missionstyp. Aktuell erhalten ausschließlich Anforderungen mit `output_type: "quiz_mission"` Research-Kontext. Task-Missionen bleiben unverändert.
+
+Der Selector lädt den aktuellen Pool über den authentifizierten Django-Endpunkt `GET /internal/n8n/research/current/`. Ein eigener Django-Scheduler prüft nur die lokale Datenbank und ruft n8n ausschließlich zum gespeicherten Wochenzeitpunkt auf. Dadurch entstehen zwischen den tatsächlichen Research-Läufen keine n8n-Executions oder HTTP-Requests.
 
 Standardmäßig werden höchstens zwei Research-Beiträge gewählt; über `max_research_missions` sind null bis maximal drei möglich. Ein Pool-Eintrag wird innerhalb eines Aufrufs nur einmal verwendet. Bei leerem Pool, nicht passenden Anforderungen oder unterschrittenem Score liefert der Workflow erfolgreich einen leeren `research_context` samt Warnung zurück. Die Missionsgenerierung läuft dann normal mit Evergreen-Inhalten weiter.
 

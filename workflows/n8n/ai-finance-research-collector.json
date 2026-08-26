@@ -10,40 +10,27 @@
         "name": "Run Manually",
         "type": "n8n-nodes-base.manualTrigger",
         "typeVersion": 1,
-        "position": [0, 120]
-      },
-      {
-        "parameters": {
-          "rule": {
-            "interval": [
-              {
-                "field": "days",
-                "daysInterval": 1,
-                "triggerAtHour": 6,
-                "triggerAtMinute": 15
-              }
-            ]
-          }
-        },
-        "id": "76b65ca7-e73b-46df-a49b-15d1eb95d222",
-        "name": "Daily 06:15 Europe Berlin",
-        "type": "n8n-nodes-base.scheduleTrigger",
-        "typeVersion": 1.3,
-        "position": [0, -80]
+        "position": [
+          0,
+          120
+        ]
       },
       {
         "parameters": {
           "httpMethod": "POST",
           "path": "ai-finance-research-collector-run",
           "authentication": "headerAuth",
-          "responseMode": "lastNode",
+          "responseMode": "onReceived",
           "options": {}
         },
         "id": "b66b8fb3-4996-4b52-aa2f-8d7999d93a2d",
         "name": "Authenticated Collector Webhook",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 2.1,
-        "position": [0, -280],
+        "position": [
+          0,
+          -280
+        ],
         "webhookId": "f30ccbbf-ec97-4f34-bec7-dff257f039a0",
         "credentials": {
           "httpHeaderAuth": {
@@ -59,28 +46,94 @@
           "tableName": "ai_finance_research_pool",
           "columns": {
             "column": [
-              { "name": "item_key", "type": "string" },
-              { "name": "title", "type": "string" },
-              { "name": "source_name", "type": "string" },
-              { "name": "source_url", "type": "string" },
-              { "name": "source_feed", "type": "string" },
-              { "name": "source_tier", "type": "number" },
-              { "name": "published_at", "type": "date" },
-              { "name": "retrieved_at", "type": "date" },
-              { "name": "last_seen_at", "type": "date" },
-              { "name": "language", "type": "string" },
-              { "name": "tags_json", "type": "string" },
-              { "name": "summary_de", "type": "string" },
-              { "name": "summary_en", "type": "string" },
-              { "name": "safe_facts_json", "type": "string" },
-              { "name": "mission_hooks_json", "type": "string" },
-              { "name": "relevance_score", "type": "number" },
-              { "name": "confidence", "type": "string" },
-              { "name": "valid_until", "type": "date" },
-              { "name": "risk_flags_json", "type": "string" },
-              { "name": "eligible", "type": "boolean" },
-              { "name": "content_hash", "type": "string" },
-              { "name": "analysis_method", "type": "string" }
+              {
+                "name": "item_key",
+                "type": "string"
+              },
+              {
+                "name": "title",
+                "type": "string"
+              },
+              {
+                "name": "source_name",
+                "type": "string"
+              },
+              {
+                "name": "source_url",
+                "type": "string"
+              },
+              {
+                "name": "source_feed",
+                "type": "string"
+              },
+              {
+                "name": "source_tier",
+                "type": "number"
+              },
+              {
+                "name": "published_at",
+                "type": "date"
+              },
+              {
+                "name": "retrieved_at",
+                "type": "date"
+              },
+              {
+                "name": "last_seen_at",
+                "type": "date"
+              },
+              {
+                "name": "language",
+                "type": "string"
+              },
+              {
+                "name": "tags_json",
+                "type": "string"
+              },
+              {
+                "name": "summary_de",
+                "type": "string"
+              },
+              {
+                "name": "summary_en",
+                "type": "string"
+              },
+              {
+                "name": "safe_facts_json",
+                "type": "string"
+              },
+              {
+                "name": "mission_hooks_json",
+                "type": "string"
+              },
+              {
+                "name": "relevance_score",
+                "type": "number"
+              },
+              {
+                "name": "confidence",
+                "type": "string"
+              },
+              {
+                "name": "valid_until",
+                "type": "date"
+              },
+              {
+                "name": "risk_flags_json",
+                "type": "string"
+              },
+              {
+                "name": "eligible",
+                "type": "boolean"
+              },
+              {
+                "name": "content_hash",
+                "type": "string"
+              },
+              {
+                "name": "analysis_method",
+                "type": "string"
+              }
             ]
           },
           "options": {
@@ -91,7 +144,10 @@
         "name": "Create or Reuse Research Pool",
         "type": "n8n-nodes-base.dataTable",
         "typeVersion": 1.1,
-        "position": [240, 20]
+        "position": [
+          240,
+          20
+        ]
       },
       {
         "parameters": {
@@ -110,18 +166,24 @@
         "name": "Raw Existing Research Keys",
         "type": "n8n-nodes-base.dataTable",
         "typeVersion": 1.1,
-        "position": [480, 20],
+        "position": [
+          480,
+          20
+        ],
         "alwaysOutputData": true
       },
       {
         "parameters": {
-          "jsCode": "let forceRefresh = false;\ntry { forceRefresh = $('Authenticated Collector Webhook').first().json.body?.force_refresh === true; } catch {}\nif (forceRefresh) return [{ json: { force_refresh: true } }];\nreturn $input.all();"
+          "jsCode": "const forceRefresh = $('Resolve Collector Context').first().json.force_refresh === true;\nif (forceRefresh) return [{ json: { force_refresh: true } }];\nreturn $input.all();"
         },
         "id": "56cc8708-7449-4af7-b495-010fa8bf86b9",
         "name": "Load Existing Research Keys",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [600, 20]
+        "position": [
+          600,
+          20
+        ]
       },
       {
         "parameters": {
@@ -131,7 +193,10 @@
         "name": "Research Sources",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [720, 20]
+        "position": [
+          720,
+          20
+        ]
       },
       {
         "parameters": {
@@ -144,7 +209,10 @@
         "name": "Read Official RSS Feeds",
         "type": "n8n-nodes-base.rssFeedRead",
         "typeVersion": 1.2,
-        "position": [960, 20],
+        "position": [
+          960,
+          20
+        ],
         "onError": "continueRegularOutput"
       },
       {
@@ -155,7 +223,10 @@
         "name": "Resolve Source from Domain",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1080, 20]
+        "position": [
+          1080,
+          20
+        ]
       },
       {
         "parameters": {
@@ -165,7 +236,10 @@
         "name": "Prepare Candidate Batch",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1200, 20]
+        "position": [
+          1200,
+          20
+        ]
       },
       {
         "parameters": {
@@ -175,7 +249,10 @@
         "name": "Enforce Official Source Metadata",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [2160, -100]
+        "position": [
+          2160,
+          -100
+        ]
       },
       {
         "parameters": {
@@ -185,7 +262,10 @@
         "name": "Verify Source Metadata from URL Text",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [2280, -100]
+        "position": [
+          2280,
+          -100
+        ]
       },
       {
         "parameters": {
@@ -215,7 +295,10 @@
         "name": "New Candidates Found",
         "type": "n8n-nodes-base.if",
         "typeVersion": 2.3,
-        "position": [1440, 20]
+        "position": [
+          1440,
+          20
+        ]
       },
       {
         "parameters": {
@@ -225,7 +308,10 @@
         "name": "Prepare Conservative Reassessment",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1560, -100]
+        "position": [
+          1560,
+          -100
+        ]
       },
       {
         "parameters": {
@@ -259,7 +345,10 @@
         "name": "Mark Candidates Ineligible Before Review",
         "type": "n8n-nodes-base.dataTable",
         "typeVersion": 1.1,
-        "position": [1680, -100]
+        "position": [
+          1680,
+          -100
+        ]
       },
       {
         "parameters": {
@@ -276,7 +365,10 @@
         "name": "AI Research Assessment",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.4,
-        "position": [1680, -100],
+        "position": [
+          1680,
+          -100
+        ],
         "credentials": {
           "httpHeaderAuth": {
             "id": "T7OO5sQEPVKyuyym",
@@ -293,7 +385,10 @@
         "name": "Normalize AI Assessment Envelope",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1800, -100]
+        "position": [
+          1800,
+          -100
+        ]
       },
       {
         "parameters": {
@@ -303,7 +398,10 @@
         "name": "Validate and Normalize Assessments",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1920, -100]
+        "position": [
+          1920,
+          -100
+        ]
       },
       {
         "parameters": {
@@ -334,7 +432,10 @@
         "name": "Eligible Research Found",
         "type": "n8n-nodes-base.if",
         "typeVersion": 2.3,
-        "position": [2160, -100]
+        "position": [
+          2160,
+          -100
+        ]
       },
       {
         "parameters": {
@@ -368,7 +469,10 @@
         "name": "Upsert Research Pool",
         "type": "n8n-nodes-base.dataTable",
         "typeVersion": 1.1,
-        "position": [2400, -180]
+        "position": [
+          2400,
+          -180
+        ]
       },
       {
         "parameters": {
@@ -378,7 +482,10 @@
         "name": "Collector Completed",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [2640, -180]
+        "position": [
+          2640,
+          -180
+        ]
       },
       {
         "parameters": {
@@ -388,75 +495,463 @@
         "name": "No New Candidates",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1680, 140]
+        "position": [
+          1680,
+          140
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const source = $json.body && typeof $json.body === 'object' ? $json.body : $json;\nreturn [{ json: {\n  research_run_id: source.research_run_id ? String(source.research_run_id) : null,\n  trigger: String(source.trigger || 'manual_editor'),\n  force_refresh: source.force_refresh === true,\n} }];"
+        },
+        "id": "97b7a419-f010-43dc-9418-a0ed2ab6db94",
+        "name": "Resolve Collector Context",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          -180
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{ json: { items: $input.all().map((item) => item.json).filter((item) => item.item_key) } }];"
+        },
+        "id": "e360e0f0-e924-4994-a852-f0302112eddd",
+        "name": "Prepare Existing Django Sync",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          220
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/research/sync/' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ { items: $json.items, research_run_id: null } }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "id": "f07353f5-6cf0-48b1-950a-ff2b9e83a72b",
+        "name": "Sync Existing Research to Django",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          720,
+          220
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const context = $('Resolve Collector Context').first().json;\nreturn [{ json: {\n  research_run_id: context.research_run_id,\n  items: $input.all().map((item) => item.json).filter((item) => item.item_key),\n} }];"
+        },
+        "id": "2c405331-a200-4a44-a106-bb82fe03edfa",
+        "name": "Prepare Django Research Sync",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2320,
+          -180
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/research/sync/' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "id": "7e250026-942d-48aa-b056-a304807ec8b4",
+        "name": "Sync New Research to Django",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          2520,
+          -180
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "return (Array.isArray($json.items) ? $json.items : []).map((item) => ({ json: item }));"
+        },
+        "id": "914d71be-e422-4d31-92e8-60b518431e07",
+        "name": "Restore Synced Research Rows",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2720,
+          -180
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.DJANGO_INTERNAL_BASE_URL || 'http://web:8000').replace(/\\/$/, '') + '/internal/n8n/research/callback/' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-N8N-Callback-Secret",
+                "value": "={{ $env.N8N_CALLBACK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ {\n  research_run_id: $('Resolve Collector Context').first().json.research_run_id,\n  status: 'completed',\n  result: $json,\n} }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "id": "5b8173fc-dd1c-4053-ac09-d1226006720f",
+        "name": "Django Research Completed Callback",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          3120,
+          -80
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       }
     ],
     "connections": {
       "Run Manually": {
-        "main": [[{ "node": "Create or Reuse Research Pool", "type": "main", "index": 0 }]]
-      },
-      "Daily 06:15 Europe Berlin": {
-        "main": [[{ "node": "Create or Reuse Research Pool", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Resolve Collector Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Authenticated Collector Webhook": {
-        "main": [[{ "node": "Create or Reuse Research Pool", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Resolve Collector Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Create or Reuse Research Pool": {
-        "main": [[{ "node": "Raw Existing Research Keys", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Raw Existing Research Keys",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Raw Existing Research Keys": {
-        "main": [[{ "node": "Load Existing Research Keys", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Load Existing Research Keys",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Prepare Existing Django Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Load Existing Research Keys": {
-        "main": [[{ "node": "Research Sources", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Research Sources",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Research Sources": {
-        "main": [[{ "node": "Read Official RSS Feeds", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Read Official RSS Feeds",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Read Official RSS Feeds": {
-        "main": [[{ "node": "Resolve Source from Domain", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Resolve Source from Domain",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Resolve Source from Domain": {
-        "main": [[{ "node": "Prepare Candidate Batch", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Prepare Candidate Batch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Prepare Candidate Batch": {
-        "main": [[{ "node": "New Candidates Found", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "New Candidates Found",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "New Candidates Found": {
         "main": [
-          [{ "node": "Prepare Conservative Reassessment", "type": "main", "index": 0 }],
-          [{ "node": "No New Candidates", "type": "main", "index": 0 }]
+          [
+            {
+              "node": "Prepare Conservative Reassessment",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "No New Candidates",
+              "type": "main",
+              "index": 0
+            }
+          ]
         ]
       },
       "Prepare Conservative Reassessment": {
-        "main": [[{ "node": "Mark Candidates Ineligible Before Review", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Mark Candidates Ineligible Before Review",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Mark Candidates Ineligible Before Review": {
-        "main": [[{ "node": "AI Research Assessment", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "AI Research Assessment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "AI Research Assessment": {
-        "main": [[{ "node": "Normalize AI Assessment Envelope", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Normalize AI Assessment Envelope",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Normalize AI Assessment Envelope": {
-        "main": [[{ "node": "Validate and Normalize Assessments", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Validate and Normalize Assessments",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Validate and Normalize Assessments": {
-        "main": [[{ "node": "Enforce Official Source Metadata", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Enforce Official Source Metadata",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Enforce Official Source Metadata": {
-        "main": [[{ "node": "Verify Source Metadata from URL Text", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Verify Source Metadata from URL Text",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Verify Source Metadata from URL Text": {
-        "main": [[{ "node": "Eligible Research Found", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Eligible Research Found",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Eligible Research Found": {
         "main": [
-          [{ "node": "Upsert Research Pool", "type": "main", "index": 0 }],
-          [{ "node": "Collector Completed", "type": "main", "index": 0 }]
+          [
+            {
+              "node": "Prepare Django Research Sync",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Collector Completed",
+              "type": "main",
+              "index": 0
+            }
+          ]
         ]
       },
       "Upsert Research Pool": {
-        "main": [[{ "node": "Collector Completed", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Collector Completed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Resolve Collector Context": {
+        "main": [
+          [
+            {
+              "node": "Create or Reuse Research Pool",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Existing Django Sync": {
+        "main": [
+          [
+            {
+              "node": "Sync Existing Research to Django",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Django Research Sync": {
+        "main": [
+          [
+            {
+              "node": "Sync New Research to Django",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sync New Research to Django": {
+        "main": [
+          [
+            {
+              "node": "Restore Synced Research Rows",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Restore Synced Research Rows": {
+        "main": [
+          [
+            {
+              "node": "Upsert Research Pool",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Collector Completed": {
+        "main": [
+          [
+            {
+              "node": "Django Research Completed Callback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "No New Candidates": {
+        "main": [
+          [
+            {
+              "node": "Django Research Completed Callback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "settings": {
