@@ -122,7 +122,8 @@
     "tabs": {
       "today": "Heute",
       "available": "Verfügbar",
-      "archive": "Archiv"
+      "archive": "Archiv",
+      "manage": "Missionen verwalten"
     },
     "status": {
       "open": "Offen",
@@ -187,6 +188,8 @@
     },
     "creator": {
       "button": "Missionen verwalten",
+      "manageTitle": "Missionen verwalten",
+      "manageDescription": "Wähle einen Tag in der Monatsübersicht aus, prüfe die dort geplante Mission oder bearbeite alle deutschen und englischen Inhalte.",
       "title": "Mission erstellen",
       "editTitle": "Mission bearbeiten",
       "editing": "Bearbeitungsmodus",
@@ -239,6 +242,33 @@
         "So"
       ],
       "deleteSuccess": "Mission gelöscht."
+      "weekDays": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+      "task": {
+        "caseFormat": "Format der Falldaten",
+        "table": "Tabelle / Zeilen",
+        "prose": "Textabschnitte",
+        "caseData": "Zweisprachige Falldaten",
+        "caseDataHint": "Deutsch und Englisch müssen dieselbe Anzahl inhaltlich übereinstimmender Zeilen oder Abschnitte enthalten.",
+        "addCaseRow": "Zeile hinzufügen",
+        "removeCaseRow": "Zeile entfernen",
+        "resultFields": "Auswertbare Ergebnisfelder",
+        "resultFieldsHint": "Diese Felder bestimmen, welche Ergebnisse Lernende eingeben und wie sie automatisch bewertet werden.",
+        "addResultField": "Ergebnisfeld hinzufügen",
+        "resultField": "Ergebnisfeld {{number}}",
+        "fieldId": "Technische ID",
+        "fieldType": "Ergebnistyp",
+        "number": "Zahl",
+        "text": "Text",
+        "labelDe": "Bezeichnung (Deutsch)",
+        "labelEn": "Bezeichnung (Englisch)",
+        "solution": "Richtige Zahl",
+        "solutionDe": "Richtige Textlösung (Deutsch)",
+        "solutionEn": "Richtige Textlösung (Englisch)",
+        "tolerance": "Toleranz",
+        "unit": "Einheit",
+        "feedbackDe": "Feedback (Deutsch)",
+        "feedbackEn": "Feedback (Englisch)"
+      }
     },
     "review": {
       "title": "KI-generierte Missionen zur Prüfung",
@@ -253,12 +283,43 @@
       "rejectAllConfirm": "Sollen wirklich alle {{count}} Review-Missionen verworfen werden?",
       "approveAllSuccess": "{{count}} Missionen wurden freigegeben.",
       "rejectAllSuccess": "{{count}} Missionen wurden verworfen.",
-      "generated": "{{count}} neue Missionsvorschläge wurden erstellt.",
+      "generated_one": "{{count}} neuer Missionsvorschlag wurde erstellt.",
+      "generated_other": "{{count}} neue Missionsvorschläge wurden erstellt.",
+      "generatedFailed_one": "{{count}} Mission konnte nicht erfolgreich generiert werden.",
+      "generatedFailed_other": "{{count}} Missionen konnten nicht erfolgreich generiert werden.",
+      "failureDetails": "Details zu fehlgeschlagenen Missionen",
+      "failureQuizMission": "Quiz-Mission",
+      "failureTaskMission": "Praxisaufgabe",
+      "failureReason": "Technische Ursache",
+      "failureUnknown": "Es wurde keine konkrete Fehlerursache zurückgegeben.",
+      "repairAttempts_one": "{{count}} Reparaturversuch",
+      "repairAttempts_other": "{{count}} Reparaturversuche",
+      "generationStatus": {
+        "title": "Wochengenerierung läuft",
+        "week": "Woche: {{start}} bis {{end}}",
+        "lastUpdate": "Letztes Statusupdate: {{time}}",
+        "failed": "Die Missionsgenerierung ist fehlgeschlagen.",
+        "statuses": {
+          "preparing": "Vorbereitung",
+          "running": "Generierung",
+          "validating": "Validierung",
+          "reviewing": "Review",
+          "repairing": "Reparatur"
+        },
+        "descriptions": {
+          "preparing": "Der Generierungslauf wird vorbereitet und an n8n übergeben.",
+          "running": "Die KI erstellt gerade die Missionen und Schwierigkeitsvarianten.",
+          "validating": "Django prüft Struktur, Pflichtfelder und fachliche Grenzwerte.",
+          "reviewing": "Ein unabhängiger KI-Reviewer prüft Qualität und Konsistenz.",
+          "repairing": "Beanstandete Inhalte werden korrigiert und anschließend erneut geprüft."
+        }
+      },
       "generateTask": "KI-Praxisaufgabe generieren",
       "taskGenerated": "Eine neue KI-Praxisaufgabe wurde als Vorschlag erstellt.",
       "loading": "Review-Missionen werden geladen...",
       "empty": "Aktuell warten keine KI-generierten Missionen auf eine Prüfung.",
       "status": "Entwurf / Review",
+      "missionNavigation": "Generierte Missionen dieser Woche",
       "learningObjective": "Lernziel",
       "correct": "richtig",
       "showSolution": "Lösung und Feedback anzeigen",

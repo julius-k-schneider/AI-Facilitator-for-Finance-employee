@@ -122,7 +122,8 @@
     "tabs": {
       "today": "Today",
       "available": "Available",
-      "archive": "Archive"
+      "archive": "Archive",
+      "manage": "Manage missions"
     },
     "status": {
       "open": "Open",
@@ -187,6 +188,8 @@
     },
     "creator": {
       "button": "Manage missions",
+      "manageTitle": "Manage missions",
+      "manageDescription": "Select a day in the monthly overview, inspect its scheduled mission, or edit every German and English content field.",
       "title": "Create mission",
       "editTitle": "Edit mission",
       "editing": "Editing mode",
@@ -239,6 +242,33 @@
         "Sun"
       ],
       "deleteSuccess": "Mission deleted."
+      "weekDays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      "task": {
+        "caseFormat": "Case-data format",
+        "table": "Table / rows",
+        "prose": "Text sections",
+        "caseData": "Bilingual case data",
+        "caseDataHint": "German and English must contain the same number of semantically aligned rows or sections.",
+        "addCaseRow": "Add row",
+        "removeCaseRow": "Remove row",
+        "resultFields": "Scored result fields",
+        "resultFieldsHint": "These fields define which results learners enter and how they are scored automatically.",
+        "addResultField": "Add result field",
+        "resultField": "Result field {{number}}",
+        "fieldId": "Technical ID",
+        "fieldType": "Result type",
+        "number": "Number",
+        "text": "Text",
+        "labelDe": "Label (German)",
+        "labelEn": "Label (English)",
+        "solution": "Correct number",
+        "solutionDe": "Correct text solution (German)",
+        "solutionEn": "Correct text solution (English)",
+        "tolerance": "Tolerance",
+        "unit": "Unit",
+        "feedbackDe": "Feedback (German)",
+        "feedbackEn": "Feedback (English)"
+      }
     },
     "review": {
       "title": "AI-generated missions for review",
@@ -253,12 +283,43 @@
       "rejectAllConfirm": "Are you sure you want to reject all {{count}} review missions?",
       "approveAllSuccess": "{{count}} missions were approved.",
       "rejectAllSuccess": "{{count}} missions were rejected.",
-      "generated": "{{count}} new mission proposals were created.",
+      "generated_one": "{{count}} new mission proposal was created.",
+      "generated_other": "{{count}} new mission proposals were created.",
+      "generatedFailed_one": "{{count}} mission could not be generated successfully.",
+      "generatedFailed_other": "{{count}} missions could not be generated successfully.",
+      "failureDetails": "Details for failed missions",
+      "failureQuizMission": "Quiz mission",
+      "failureTaskMission": "Hands-on task",
+      "failureReason": "Technical reason",
+      "failureUnknown": "No specific error reason was returned.",
+      "repairAttempts_one": "{{count}} repair attempt",
+      "repairAttempts_other": "{{count}} repair attempts",
+      "generationStatus": {
+        "title": "Weekly generation in progress",
+        "week": "Week: {{start}} to {{end}}",
+        "lastUpdate": "Last status update: {{time}}",
+        "failed": "Mission generation failed.",
+        "statuses": {
+          "preparing": "Preparing",
+          "running": "Generating",
+          "validating": "Validating",
+          "reviewing": "Reviewing",
+          "repairing": "Repairing"
+        },
+        "descriptions": {
+          "preparing": "The generation run is being prepared and handed over to n8n.",
+          "running": "AI is generating the missions and their difficulty variants.",
+          "validating": "Django is checking the structure, required fields, and domain constraints.",
+          "reviewing": "An independent AI reviewer is checking quality and consistency.",
+          "repairing": "Flagged content is being repaired and will then be validated again."
+        }
+      },
       "generateTask": "Generate AI hands-on task",
       "taskGenerated": "A new AI hands-on task was created as a proposal.",
       "loading": "Loading review missions...",
       "empty": "There are currently no AI-generated missions awaiting review.",
       "status": "Draft / review",
+      "missionNavigation": "Generated missions for this week",
       "learningObjective": "Learning objective",
       "correct": "correct",
       "showSolution": "Show solution and feedback",

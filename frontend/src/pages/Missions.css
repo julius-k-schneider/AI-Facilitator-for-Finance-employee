@@ -6,6 +6,77 @@
 .mission-calendar-count { padding: 1px 6px; border-radius: 999px; background: var(--mantine-color-brand-0); color: var(--mantine-color-brand-8); font-size: 10px; font-weight: 700; }
 .mission-calendar-count.is-full { background: var(--mantine-color-green-0); color: var(--mantine-color-green-8); }
 
+.mission-generation-status {
+  border-color: var(--mantine-color-brand-2);
+  background: linear-gradient(135deg, var(--mantine-color-brand-0), #fff 70%);
+}
+
+.mission-generation-status__steps {
+  flex-wrap: wrap;
+}
+
+.mission-generation-status__steps .mantine-Badge-root {
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.mission-generation-status__steps .is-active {
+  transform: translateY(-1px);
+}
+
+.mission-review-switcher {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--mantine-color-gray-3);
+  border-radius: 12px;
+  background: var(--mantine-color-gray-0);
+  scrollbar-width: thin;
+}
+
+.mission-review-switcher__item {
+  min-width: 180px;
+  max-width: 250px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.mission-review-switcher__item:hover {
+  border-color: var(--mantine-color-brand-3);
+}
+
+.mission-review-switcher__item.is-active {
+  border-color: var(--mantine-color-brand-6);
+  background: var(--mantine-color-brand-0);
+  box-shadow: 0 0 0 1px var(--mantine-color-brand-2);
+}
+
+.mission-review-switcher__date {
+  color: var(--mantine-color-brand-7);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mission-review-switcher__title {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .archive-filter-grid {
   display: grid;
   grid-template-columns: minmax(190px, 220px) minmax(320px, 400px) minmax(210px, 250px);
@@ -47,27 +118,35 @@
   border-radius: 8px;
 }
 
-.mission-manager-modal {
-  max-width: calc(100vw - 48px);
-  max-height: calc(100vh - 48px);
-}
-
-.mission-manager-body {
-  max-height: calc(100vh - 112px);
-  overflow-y: auto;
-  padding: 24px;
-}
-
 .mission-manager-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(420px, 1fr);
-  gap: 32px;
+  grid-template-columns: minmax(360px, 0.8fr) minmax(0, 1.5fr);
+  grid-template-areas: "calendar editor";
+  gap: 24px;
   align-items: start;
+}
+
+.mission-manager-calendar {
+  grid-area: calendar;
+  position: sticky;
+  top: 16px;
+}
+
+.mission-manager-editor {
+  grid-area: editor;
+  min-width: 0;
 }
 
 @media (max-width: 75em) {
   .mission-manager-grid {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "calendar"
+      "editor";
+  }
+
+  .mission-manager-calendar {
+    position: static;
   }
 }
 
@@ -77,13 +156,7 @@
     width: 100%;
   }
 
-    .mission-manager-modal {
-    max-width: calc(100vw - 24px);
-    max-height: calc(100vh - 24px);
-  }
-
-  .mission-manager-body {
-    max-height: calc(100vh - 88px);
-    padding: 16px;
+    .mission-review-switcher__item {
+    min-width: 150px;
   }
 }

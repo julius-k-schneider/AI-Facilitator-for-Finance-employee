@@ -1,8 +1,9 @@
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from accounts.models import Profile
-from accounts.services.ai_mission_generator import AiMissionGenerationError, generate_next_week
+from accounts.models import GenerationRun, Profile
+from accounts.services.n8n_client import N8NClientError
+from accounts.services.n8n_mission_generation import create_weekly_run, dispatch_generation_run
 
 
 class Command(BaseCommand):
@@ -25,10 +26,12 @@ class Command(BaseCommand):
         if creator is None:
             raise CommandError('No matching content creator or admin exists.')
 
+        run = create_weekly_run(creator, force=options['force'])
         try:
-            missions, week_start, week_end = generate_next_week(creator, force=options['force'])
-        except AiMissionGenerationError as error_value:
+            if run.status in {GenerationRun.STATUS_QUEUED, GenerationRun.STATUS_FAILED}:
+                dispatch_generation_run(run)
+        except N8NClientError as error_value:
             raise CommandError(str(error_value)) from error_value
         self.stdout.write(self.style.SUCCESS(
-            f'Created {len(missions)} review missions for {week_start.isoformat()} to {week_end.isoformat()}.'
+            f'Started n8n generation run {run.id} for {run.week_start.isoformat()} to {run.week_end.isoformat()}.'
         ))

@@ -8,6 +8,7 @@ from django.utils import timezone
 from .models import (
     AgentChat,
     DailyMissionReminder,
+    GenerationRun,
     Mission,
     MissionAssignment,
     MissionAttempt,
@@ -139,6 +140,49 @@ class AccountsApiTests(TestCase):
             'topic_en': 'Shared topic',
             'learning_objective_de': 'Gemeinsames Lernziel',
             'learning_objective_en': 'Shared learning objective',
+            'variants': variants,
+        }
+
+    def manual_task_mission_payload(self, scheduled_date, mission_type=Mission.TYPE_BULK_CATEGORIZATION):
+        variants = {}
+        for position, difficulty in enumerate(Mission.DIFFICULTIES):
+            variants[difficulty] = {
+                'title_de': f'Praxisaufgabe {difficulty}',
+                'title_en': f'Hands-on task {difficulty}',
+                'description_de': f'Bearbeite einen Finance-Fall auf Stufe {difficulty}.',
+                'description_en': f'Complete a finance case at {difficulty} level.',
+                'question_de': f'Werte die Falldaten für {difficulty} aus.',
+                'question_en': f'Evaluate the {difficulty} case data.',
+                'case_format': 'prose' if mission_type == Mission.TYPE_INVOICE_EXTRACTION else 'table',
+                'case_data_de': ['2026-08-01 | Beispiel GmbH | 125,00 EUR'],
+                'case_data_en': ['2026-08-01 | Example Ltd | EUR 125.00'],
+                'result_fields': [
+                    {
+                        'id': 'total_amount', 'type': 'number',
+                        'label_de': 'Gesamtbetrag', 'label_en': 'Total amount',
+                        'unit': 'EUR', 'solution': 125, 'tolerance': 0.01,
+                        'feedback_de': 'Der Gesamtbetrag beträgt 125 EUR.',
+                        'feedback_en': 'The total amount is EUR 125.',
+                    },
+                    {
+                        'id': 'vendor', 'type': 'text',
+                        'label_de': 'Lieferant', 'label_en': 'Vendor', 'unit': '',
+                        'solution': {'de': 'Beispiel GmbH', 'en': 'Example Ltd'},
+                        'feedback_de': 'Der Lieferant ist Beispiel GmbH.',
+                        'feedback_en': 'The vendor is Example Ltd.',
+                    },
+                ],
+                'micro_learning_de': 'Prüfe strukturierte Ergebnisse immer gegen die Quelldaten.',
+                'micro_learning_en': 'Always verify structured results against the source data.',
+                'max_points': 30 + position * 10,
+            }
+        return {
+            'type': mission_type,
+            'scheduled_date': scheduled_date.isoformat(),
+            'topic_de': 'Finance-Falldaten strukturiert auswerten',
+            'topic_en': 'Evaluate finance case data in a structured way',
+            'learning_objective_de': 'Falldaten zweisprachig analysieren und Ergebnisse prüfen.',
+            'learning_objective_en': 'Analyze bilingual case data and verify the results.',
             'variants': variants,
         }
 
@@ -521,6 +565,45 @@ class AccountsApiTests(TestCase):
         self.assertEqual(mission.content['feedback']['en'], 'Feedback easy')
         self.assertEqual(mission.variants[Mission.DIFFICULTY_MEDIUM]['title_en'], 'Prompt selection')
 
+    def test_creator_can_create_and_edit_every_task_mission_type(self):
+        creator = self.create_user('creator-task-editor@example.com', Profile.ROLE_CONTENT_CREATOR)
+        self.client.force_login(creator)
+        scheduled_date = self.next_business_day()
+        created_ids = []
+
+        for mission_type in sorted(Mission.TASK_TYPES):
+            payload = self.manual_task_mission_payload(scheduled_date, mission_type)
+            response = self.client.post(
+                '/api/auth/missions/schedule/', payload, content_type='application/json', secure=True,
+            )
+            self.assertEqual(response.status_code, 201, response.json())
+            mission = Mission.objects.get(scheduled_date=scheduled_date)
+            self.assertEqual(mission.mission_type, mission_type)
+            self.assertEqual(mission.variants['medium']['content']['case_data']['en'][0], '2026-08-01 | Example Ltd | EUR 125.00')
+            self.assertEqual(mission.variants['hard']['content']['result_fields'][1]['solution']['de'], 'Beispiel GmbH')
+            created_ids.append(mission.id)
+            scheduled_date = self.next_business_day(scheduled_date)
+
+        mission = Mission.objects.get(id=created_ids[0])
+        payload = self.manual_task_mission_payload(mission.scheduled_date, mission.mission_type)
+        payload['variants']['hard']['result_fields'][1]['solution']['en'] = 'Updated Vendor Ltd'
+        payload['variants']['hard']['result_fields'][1]['feedback_en'] = 'The updated vendor is correct.'
+        updated = self.client.patch(
+            f'/api/auth/missions/{mission.id}/', payload, content_type='application/json', secure=True,
+        )
+        self.assertEqual(updated.status_code, 200, updated.json())
+        mission.refresh_from_db()
+        hard_field = mission.variants['hard']['content']['result_fields'][1]
+        self.assertEqual(hard_field['solution']['en'], 'Updated Vendor Ltd')
+        self.assertEqual(hard_field['feedback']['en'], 'The updated vendor is correct.')
+
+        schedule = self.client.get(
+            f'/api/auth/missions/schedule/?from={mission.scheduled_date}&to={mission.scheduled_date}', secure=True,
+        )
+        result_field = schedule.json()['missions'][mission.scheduled_date.isoformat()][0]['result_fields'][0]
+        self.assertEqual(result_field['tolerance'], 0.01)
+        self.assertEqual(result_field['feedback_en'], 'The total amount is EUR 125.')
+
     def test_manual_creator_requires_all_three_difficulty_variants(self):
         creator = self.create_user('creator-variants@example.com', Profile.ROLE_CONTENT_CREATOR)
         self.client.force_login(creator)
@@ -599,32 +682,19 @@ class AccountsApiTests(TestCase):
         self.assertEqual(self.client.post(f'/api/auth/missions/{mission.id}/approve/', secure=True).status_code, 403)
         self.assertEqual(self.client.post('/api/auth/missions/generate-next-week/', secure=True).status_code, 403)
 
-    @patch('accounts.views.generate_training_candidate')
-    def test_authenticated_user_can_generate_training_without_saving_mission(self, generate_mock):
+    @patch('accounts.views.dispatch_generation_run')
+    def test_authenticated_user_can_start_training_without_saving_mission(self, dispatch_mock):
         player = self.create_user('training@example.com')
-        generate_mock.return_value = {
-            'mission_type': Mission.TYPE_SINGLE_CHOICE,
-            'title_de': 'Training', 'title_en': 'Training',
-            'description_de': 'Beschreibung', 'description_en': 'Description',
-            'max_points': 30,
-            'content': {
-                'question': {'de': 'Frage?', 'en': 'Question?'},
-                'options': [{'de': 'Ja', 'en': 'Yes'}, {'de': 'Nein', 'en': 'No'}],
-                'correct_indices': [0],
-                'feedback': {'de': 'Gut.', 'en': 'Good.'},
-            },
-        }
         self.client.force_login(player)
 
         response = self.client.post('/api/auth/training/generate/', {
             'type': Mission.TYPE_SINGLE_CHOICE,
         }, content_type='application/json', secure=True)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['mission']['question_en'], 'Question?')
-        self.assertEqual(response.json()['mission']['test_solution']['correct_indices'], [0])
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()['generation_run']['kind'], GenerationRun.KIND_TRAINING_CHOICE)
         self.assertEqual(Mission.objects.count(), 0)
-        generate_mock.assert_called_once_with(Mission.TYPE_SINGLE_CHOICE)
+        dispatch_mock.assert_called_once()
 
     def test_training_generation_requires_authentication(self):
         response = self.client.post('/api/auth/training/generate/', {
@@ -647,13 +717,18 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['mission']['content']['feedback'], 'Correct answer: Yes.')
 
-    @patch('accounts.views.generate_chat_challenge')
-    def test_chat_challenge_hides_solutions_and_is_not_saved_as_mission(self, generate_mock):
+    def test_chat_challenge_consume_hides_solutions_and_is_not_saved_as_mission(self):
         player = self.create_user('chat-player@example.com')
-        generate_mock.return_value = self.chat_challenge()
         self.client.force_login(player)
+        run = GenerationRun.objects.create(
+            kind=GenerationRun.KIND_TRAINING_CHAT,
+            status=GenerationRun.STATUS_COMPLETED,
+            requested_by=player,
+            request_payload={},
+            result_payload={'training-chat': self.chat_challenge()},
+        )
 
-        response = self.client.post('/api/auth/training/chat-challenge/generate/', {},
+        response = self.client.post(f'/api/auth/mission-generation-runs/{run.id}/consume/', {},
                                     content_type='application/json', secure=True)
 
         self.assertEqual(response.status_code, 200)
@@ -665,22 +740,25 @@ class AccountsApiTests(TestCase):
         self.assertEqual(Mission.objects.count(), 0)
 
     @patch('accounts.views.chat_reply', return_value='Pruefe zuerst die Differenz zwischen Ist und Plan.')
-    @patch('accounts.views.generate_chat_challenge')
-    def test_chat_challenge_allows_only_three_messages(self, generate_mock, chat_reply_mock):
+    def test_chat_challenge_allows_only_three_messages(self, chat_reply_mock):
         player = self.create_user('chat-limit@example.com')
-        generate_mock.return_value = self.chat_challenge()
         self.client.force_login(player)
-        generated = self.client.post('/api/auth/training/chat-challenge/generate/', {},
-                                     content_type='application/json', secure=True).json()['mission']
+        challenge_id = 'challenge-1'
+        challenge = self.chat_challenge()
+        challenge['history'] = []
+        challenge['prompt_count'] = 0
+        session = self.client.session
+        session['training_chat_challenges'] = {challenge_id: challenge}
+        session.save()
 
         for expected_remaining in (2, 1, 0):
             response = self.client.post('/api/auth/training/chat-challenge/message/', {
-                'challenge_id': generated['id'], 'message': 'Gib mir einen Hinweis.', 'language': 'de',
+                'challenge_id': challenge_id, 'message': 'Gib mir einen Hinweis.', 'language': 'de',
             }, content_type='application/json', secure=True)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()['remaining_prompts'], expected_remaining)
         blocked = self.client.post('/api/auth/training/chat-challenge/message/', {
-            'challenge_id': generated['id'], 'message': 'Noch ein Hinweis.', 'language': 'de',
+            'challenge_id': challenge_id, 'message': 'Noch ein Hinweis.', 'language': 'de',
         }, content_type='application/json', secure=True)
         self.assertEqual(blocked.status_code, 409)
         self.assertEqual(chat_reply_mock.call_count, 3)
@@ -843,31 +921,31 @@ class AccountsApiTests(TestCase):
         published.refresh_from_db()
         self.assertEqual(published.status, Mission.STATUS_PUBLISHED)
 
-    @patch('accounts.views.generate_next_week')
-    def test_creator_can_trigger_generation(self, generate_mock):
+    @patch('accounts.views.dispatch_generation_run')
+    def test_creator_can_trigger_generation(self, dispatch_mock):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
-        start, end = next_calendar_week()
-        generate_mock.return_value = ([], start, end)
         self.client.force_login(creator)
 
         response = self.client.post('/api/auth/missions/generate-next-week/', {}, content_type='application/json', secure=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['created_count'], 0)
-        generate_mock.assert_called_once_with(creator, force=False, week_start=None)
+        self.assertEqual(response.status_code, 202)
+        run = GenerationRun.objects.get()
+        self.assertEqual(run.kind, GenerationRun.KIND_WEEKLY_MISSIONS)
+        self.assertTrue(run.request_payload['requirements'])
+        dispatch_mock.assert_called_once_with(run)
 
-    @patch('accounts.views.generate_next_week')
-    def test_creator_can_select_a_monday_for_generation(self, generate_mock):
+    @patch('accounts.views.dispatch_generation_run')
+    def test_creator_can_select_a_monday_for_generation(self, dispatch_mock):
         creator = self.create_user('creator-week@example.com', Profile.ROLE_CONTENT_CREATOR)
-        start, end = next_calendar_week()
-        generate_mock.return_value = ([], start, end)
+        start, _end = next_calendar_week()
         self.client.force_login(creator)
 
         response = self.client.post('/api/auth/missions/generate-next-week/', {
             'week_start': start.isoformat(),
         }, content_type='application/json', secure=True)
 
-        self.assertEqual(response.status_code, 200)
-        generate_mock.assert_called_once_with(creator, force=False, week_start=start)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(GenerationRun.objects.get().week_start, start)
+        dispatch_mock.assert_called_once()
 
     def test_generation_week_must_be_a_future_monday(self):
         creator = self.create_user('creator-invalid-week@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -880,20 +958,20 @@ class AccountsApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
-    @patch('accounts.views.generate_next_week')
-    def test_creator_can_select_the_current_week_monday(self, generate_mock):
+    @patch('accounts.views.dispatch_generation_run')
+    def test_creator_can_select_the_current_week_monday(self, dispatch_mock):
         creator = self.create_user('creator-current-week@example.com', Profile.ROLE_CONTENT_CREATOR)
         today = timezone.localdate()
         current_monday = today - timedelta(days=today.weekday())
-        generate_mock.return_value = ([], current_monday, current_monday + timedelta(days=6))
         self.client.force_login(creator)
 
         response = self.client.post('/api/auth/missions/generate-next-week/', {
             'week_start': current_monday.isoformat(),
         }, content_type='application/json', secure=True)
 
-        self.assertEqual(response.status_code, 200)
-        generate_mock.assert_called_once_with(creator, force=False, week_start=current_monday)
+        expected_status = 200 if not GenerationRun.objects.get().request_payload['requirements'] else 202
+        self.assertEqual(response.status_code, expected_status)
+        self.assertEqual(GenerationRun.objects.get().week_start, current_monday)
 
     def test_difficulty_leaderboard_uses_classified_attempts_only(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -1373,6 +1451,7 @@ class AiMissionServiceTests(TestCase):
     def test_prompt_targets_accessible_everyday_finance_ai_learning(self):
         start, _ = next_calendar_week()
         prompt = build_user_prompt({start: 1})
+        self.assertTrue(SYSTEM_PROMPT.startswith('Reasoning: low.'))
         self.assertIn('little or no practical AI experience', SYSTEM_PROMPT)
         self.assertIn('beginner-friendly', SYSTEM_PROMPT)
         self.assertIn('monthly, quarterly, and year-end reports', SYSTEM_PROMPT)
@@ -1380,6 +1459,11 @@ class AiMissionServiceTests(TestCase):
         self.assertIn('practical everyday AI usage', prompt)
         self.assertIn('micro_learning_de', prompt)
         self.assertIn('micro-learning explanation', SYSTEM_PROMPT)
+        self.assertIn('output format', SYSTEM_PROMPT)
+        self.assertIn('at least three interacting constraints', SYSTEM_PROMPT)
+        self.assertIn('compare the three questions side by side', prompt)
+        self.assertIn('"points":20', prompt)
+        self.assertIn('"points":40', prompt)
 
     def test_validator_rejects_missing_micro_learning(self):
         start, _ = next_calendar_week()
@@ -1582,6 +1666,9 @@ class AiTaskChallengeTests(TestCase):
         for index in range(30):
             expected[index % 3] += round(10 + index * 1.5, 2)
         self.assertEqual([round(field['solution'], 2) for field in fields], [round(value, 2) for value in expected])
+        self.assertIn('€10.00', candidate['content']['case_data']['en'][0])
+        self.assertIn('€', fields[0]['feedback']['en'])
+        self.assertNotIn('10,00', candidate['content']['case_data']['en'][0])
         public = public_content(candidate['content'], 'de')
         for field in public['result_fields']:
             self.assertNotIn('solution', field)
@@ -1653,35 +1740,19 @@ class AiTaskChallengeTests(TestCase):
         }, content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 400)
 
-    def test_generate_endpoint_creates_review_mission(self):
+    def test_generate_endpoint_starts_review_mission_run(self):
         creator = self.make_user('creator-gen@example.com', Profile.ROLE_CONTENT_CREATOR)
         self.client.force_login(creator)
-        candidate = {
-            'mission_type': Mission.TYPE_BULK_CATEGORIZATION,
-            'title_de': 'Titel', 'title_en': 'Title',
-            'description_de': 'Beschreibung', 'description_en': 'Description',
-            'max_points': 40, 'content': self.content(),
-            'topic_de': 'Kategorisierung', 'topic_en': 'Categorization',
-            'learning_objective_de': 'Buchungen kategorisieren.',
-            'learning_objective_en': 'Categorize bookings.',
-        }
-        candidate['variants'] = {
-            difficulty: {
-                'title_de': candidate['title_de'], 'title_en': candidate['title_en'],
-                'description_de': candidate['description_de'], 'description_en': candidate['description_en'],
-                'max_points': 40, 'content': candidate['content'],
-            }
-            for difficulty in Mission.DIFFICULTIES
-        }
-        with patch('accounts.views.generate_task_challenge_variants', return_value=candidate) as mock_generate:
+        with patch('accounts.views.dispatch_generation_run') as dispatch_mock:
             response = self.client.post('/api/auth/missions/generate-task-challenge/', {
                 'mission_type': 'bulk_categorization',
             }, content_type='application/json', secure=True)
-        self.assertEqual(response.status_code, 201)
-        mock_generate.assert_called_once_with('bulk_categorization')
-        mission = Mission.objects.get(mission_type=Mission.TYPE_BULK_CATEGORIZATION)
-        self.assertEqual(mission.status, Mission.STATUS_REVIEW)
-        self.assertTrue(mission.generated_by_ai)
+        self.assertEqual(response.status_code, 202)
+        run = GenerationRun.objects.get()
+        self.assertEqual(run.kind, GenerationRun.KIND_SCHEDULED_TASK)
+        self.assertEqual(run.request_payload['requirements'][0]['mission_type'], 'bulk_categorization')
+        self.assertEqual(Mission.objects.count(), 0)
+        dispatch_mock.assert_called_once_with(run)
 
     def test_generate_endpoint_rejects_non_creator(self):
         player = self.make_user('player-forbidden@example.com')
@@ -1843,6 +1914,129 @@ class AiTaskChallengeOtherTypesTests(TestCase):
         self.assertEqual(wrong_result['correct_count'], 2)
 
 
+class AiTaskChallengeDifficultyContractTests(TestCase):
+    def common(self):
+        return {
+            'title_de': 'Finanzdaten analysieren', 'title_en': 'Analyze finance data',
+            'description_de': 'Bearbeiten Sie einen fiktiven Finanzdatensatz.',
+            'description_en': 'Work with a fictional finance dataset.',
+            'task_de': 'Wird deterministisch ersetzt.', 'task_en': 'Replaced deterministically.',
+            'micro_learning_de': 'Klare Anforderungen und eine anschließende Stichprobe machen KI-Ergebnisse nachvollziehbar und sicher nutzbar.',
+            'micro_learning_en': 'Clear requirements and a subsequent spot-check make AI output traceable and safe to use.',
+        }
+
+    def bulk_payload(self, difficulty):
+        category_count = {'easy': 3, 'medium': 4, 'hard': 5}[difficulty]
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        categories_de = ['Reise', 'Büro', 'IT', 'Marketing', 'Weiterbildung'][:category_count]
+        categories_en = ['Travel', 'Office', 'IT', 'Marketing', 'Training'][:category_count]
+        return {
+            **self.common(), 'categories_de': categories_de, 'categories_en': categories_en,
+            'rows': [{
+                'date': f'2026-03-{index % 28 + 1:02d}',
+                'description_de': f'{categories_de[index % category_count]} Beleg {index}',
+                'description_en': f'{categories_en[index % category_count]} receipt {index}',
+                'amount': 100 + index, 'category_index': index % category_count,
+            } for index in range(row_count)],
+        }
+
+    def plan_payload(self, difficulty):
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        rows = []
+        for index in range(row_count):
+            actual = 1200 if index < 8 else (900 if difficulty == 'hard' and index < 14 else 1000)
+            rows.append({
+                'cost_center_de': f'Kostenstelle {index}', 'cost_center_en': f'Cost center {index}',
+                'plan': 1000, 'actual': actual,
+            })
+        return {**self.common(), 'rows': rows}
+
+    def duplicate_payload(self, difficulty):
+        pair_count = {'easy': 3, 'medium': 4, 'hard': 6}[difficulty]
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        rows = []
+        for pair_index in range(pair_count):
+            for copy_index in range(2):
+                rows.append({
+                    'date': '2026-03-01', 'invoice_number': f'DUP-{pair_index}',
+                    'vendor_de': f'Lieferant {pair_index}-{copy_index}',
+                    'vendor_en': f'Vendor {pair_index}-{copy_index}', 'amount': 500 + pair_index * 100,
+                })
+        rows.extend({
+            'date': '2026-03-02', 'invoice_number': f'UNIQUE-{index}',
+            'vendor_de': f'Einzellieferant {index}', 'vendor_en': f'Single vendor {index}',
+            'amount': 50 + index,
+        } for index in range(row_count - len(rows)))
+        return {**self.common(), 'rows': rows}
+
+    def invoice_payload(self, difficulty):
+        invoice_count = {'easy': 12, 'medium': 16, 'hard': 20}[difficulty]
+        invoices = []
+        for index in range(invoice_count):
+            vendor = index % 4
+            amount = 100 + index * 10
+            invoices.append({
+                'invoice_number': f'INV-{index}',
+                'vendor_de': f'Lieferant {vendor} GmbH', 'vendor_en': f'Vendor {vendor} Ltd',
+                'date': '2026-03-01', 'amount': amount,
+                'text_de': f'Lieferant {vendor} stellt Rechnung INV-{index} über {amount} Euro.',
+                'text_en': f'Vendor {vendor} issued invoice INV-{index} for {amount} euros.',
+            })
+        return {**self.common(), 'invoices': invoices}
+
+    def test_every_task_type_has_observable_difficulty_progression(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        expected_fields = {
+            'bulk_categorization': {'easy': 3, 'medium': 4, 'hard': 5},
+            'plan_actual_deviation': {'easy': 2, 'medium': 3, 'hard': 5},
+            'duplicate_payment_hunt': {'easy': 1, 'medium': 2, 'hard': 3},
+            'invoice_extraction': {'easy': 2, 'medium': 3, 'hard': 4},
+        }
+        builders = {
+            'bulk_categorization': self.bulk_payload,
+            'plan_actual_deviation': self.plan_payload,
+            'duplicate_payment_hunt': self.duplicate_payload,
+            'invoice_extraction': self.invoice_payload,
+        }
+        expected_items = {
+            'bulk_categorization': [24, 36, 48],
+            'plan_actual_deviation': [24, 36, 48],
+            'duplicate_payment_hunt': [24, 36, 48],
+            'invoice_extraction': [12, 16, 20],
+        }
+        for mission_type, builder in builders.items():
+            variants = [
+                validate_task_challenge(builder(difficulty), mission_type, difficulty=difficulty)
+                for difficulty in ('easy', 'medium', 'hard')
+            ]
+            self.assertEqual([len(item['content']['case_data']['de']) for item in variants], expected_items[mission_type])
+            self.assertEqual(
+                [len(item['content']['result_fields']) for item in variants],
+                [expected_fields[mission_type][difficulty] for difficulty in ('easy', 'medium', 'hard')],
+            )
+            self.assertEqual([item['max_points'] for item in variants], [30, 40, 50])
+            self.assertEqual(len({item['content']['task']['de'] for item in variants}), 3)
+
+    def test_wrong_difficulty_volume_is_rejected(self):
+        payload = self.plan_payload('easy')
+        payload['rows'].append({
+            'cost_center_de': 'Extra', 'cost_center_en': 'Extra', 'plan': 1000, 'actual': 900,
+        })
+        with self.assertRaisesRegex(AiMissionGenerationError, 'exactly 24 rows'):
+            from accounts.services.ai_task_challenge import validate_task_challenge
+            validate_task_challenge(payload, 'plan_actual_deviation', difficulty='easy')
+
+    def test_prompt_contracts_name_exact_volume_and_results(self):
+        from accounts.prompts.task_challenges import build_difficulty_instruction
+        easy = build_difficulty_instruction('plan_actual_deviation', 'easy')
+        hard = build_difficulty_instruction('plan_actual_deviation', 'hard')
+        self.assertIn('exactly 24 rows', easy)
+        self.assertIn('only:', easy)
+        self.assertIn('exactly 48 rows', hard)
+        self.assertIn('average positive overrun', hard)
+        self.assertIn('no others', hard)
+
+
 class AiTaskChallengeTrainingTests(TestCase):
     def make_user(self, email):
         user = get_user_model().objects.create_user(username=email, email=email, password='Test1234!')
@@ -1871,9 +2065,15 @@ class AiTaskChallengeTrainingTests(TestCase):
         player = self.make_user('training-task@example.com')
         self.client.force_login(player)
         candidate = self.candidate()
-        with patch('accounts.views.generate_task_challenge', return_value=candidate):
-            generated = self.client.post('/api/auth/training/task-challenge/generate/', {},
-                                         content_type='application/json', secure=True)
+        run = GenerationRun.objects.create(
+            kind=GenerationRun.KIND_TRAINING_TASK,
+            status=GenerationRun.STATUS_COMPLETED,
+            requested_by=player,
+            request_payload={},
+            result_payload={'training-task': candidate},
+        )
+        generated = self.client.post(f'/api/auth/mission-generation-runs/{run.id}/consume/', {},
+                                     content_type='application/json', secure=True)
         self.assertEqual(generated.status_code, 200)
         mission = generated.json()['mission']
         challenge_id = mission['id']

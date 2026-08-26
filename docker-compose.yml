@@ -1,15 +1,16 @@
-# Local development stack: Django (web) + PostgreSQL (db).
+# Local development stack: Django (web) + PostgreSQL (db) + Vite (frontend)
+# + n8n (workflow orchestration).
 # Railway provides its own managed Postgres in production and builds the web image
 # from backend/Dockerfile (this compose file is not used there).
 #
-#   docker compose up --build        # start everything (rebuild after dep changes)
-#   docker compose up -d             # start in background (no rebuild)
+#   docker compose up --build        # start everything (rebuild images)
+#   docker compose up -d             # start in background
 #   docker compose down              # stop (keeps data)
 #   docker compose down -v           # stop and wipe data
 #   docker compose exec web python manage.py createsuperuser
 #
 # App: http://127.0.0.1:8000   ·   Admin: http://127.0.0.1:8000/admin
-# Frontend: http://127.0.0.1:5173
+# Frontend: http://127.0.0.1:5173   ·   n8n: http://127.0.0.1:5678
 services:
   db:
     image: postgres:16
@@ -26,6 +27,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
 
   web:
     build:
@@ -41,6 +44,10 @@ services:
       # The Vite proxy forwards /api to http://web:8000, so requests arrive with
       # Host "web". Allow it (dev only) alongside the usual local hosts.
       ALLOWED_HOSTS: localhost,127.0.0.1,web
+      # Compose services resolve each other by service name on app-network.
+      N8N_MISSION_GENERATION_URL: http://n8n:5678/webhook/mission-generation
+      N8N_SERVICE_SECRET: "${N8N_SERVICE_SECRET:?Set N8N_SERVICE_SECRET in the root .env}"
+      N8N_CALLBACK_SECRET: "${N8N_CALLBACK_SECRET:?Set N8N_CALLBACK_SECRET in the root .env}"
     volumes:
       # Mount source for live reload; mask host's .venv (macOS binaries).
       - ./backend:/app
@@ -50,6 +57,49 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - app-network
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.20.7
+    restart: unless-stopped
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_LISTEN_ADDRESS: 0.0.0.0
+      N8N_PROTOCOL: http
+      N8N_EDITOR_BASE_URL: http://localhost:5678
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: Europe/Berlin
+      TZ: Europe/Berlin
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      # n8n 2.x blocks $env by default. The workflow needs these server-side
+      # values for webhook verification and authenticated Django callbacks.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      N8N_ENCRYPTION_KEY: "${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in the root .env}"
+      N8N_SERVICE_SECRET: "${N8N_SERVICE_SECRET:?Set N8N_SERVICE_SECRET in the root .env}"
+      N8N_CALLBACK_SECRET: "${N8N_CALLBACK_SECRET:?Set N8N_CALLBACK_SECRET in the root .env}"
+      DJANGO_INTERNAL_BASE_URL: http://web:8000
+      # LLM connection used by the mission generator and reviewer nodes.
+      KICONNECT_API_KEY: "${KICONNECT_API_KEY}"
+      KICONNECT_BASE_URL: "${KICONNECT_BASE_URL}"
+      KICONNECT_MODEL: "${KICONNECT_MODEL}"
+      KICONNECT_CHAT_COMPLETIONS_PATH: "${KICONNECT_CHAT_COMPLETIONS_PATH}"
+
+    # Imports credentials and workflows on the first start of the n8n_data
+    # volume, then hands over to the image's own entrypoint.
+    entrypoint: ["tini", "--", "/bin/sh", "/n8n-init.sh"]
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./docker/n8n-init.sh:/n8n-init.sh:ro
+      - ./workflows/n8n:/workflows:ro
+    ports:
+      - "5678:5678"
+    depends_on:
+      web:
+        condition: service_started
+    networks:
+      - app-network
 
   frontend:
     build:
@@ -68,7 +118,13 @@ services:
       - "5173:5173"
     depends_on:
       - web
+    networks:
+      - app-network
 
 volumes:
   pgdata:
-  
+  n8n_data:
+
+networks:
+  app-network:
+    driver: bridge

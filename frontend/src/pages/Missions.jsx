@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  ActionIcon, Alert, Badge, Box, Button, Group, Menu, Modal, NumberInput, Paper, Select,
+  ActionIcon, Alert, Badge, Box, Button, Group, Loader, Menu, Modal, NumberInput, Paper, Select,
   SegmentedControl, SimpleGrid, Stack, Switch, Tabs, Text, Textarea, TextInput, ThemeIcon, Title,
 } from '@mantine/core'
 import { DatePickerInput, MonthPickerInput } from '@mantine/dates'
 import {
   IconArchive, IconArrowRight, IconCalendar, IconCalendarPlus, IconCheck, IconChevronLeft,
-  IconChevronRight, IconCircleCheck, IconEdit, IconEye, IconPlus, IconRefresh, IconSparkles,
+  IconChevronRight, IconCircleCheck, IconEdit, IconEye, IconRefresh, IconSettings, IconSparkles,
   IconFlame, IconTargetArrow, IconTrash, IconX,
   IconBug,
 } from '@tabler/icons-react'
@@ -18,10 +18,10 @@ import { notifyError, notifySuccess } from '../services/notify'
 import PageShell from './PageShell'
 import { useUserProgress } from '../hooks/useUserProgress'
 import {
-  approveAllReviewMissions, approveMission, createMission, deleteMission, generateNextWeekMissions, generateTaskChallenge,
-  getArchivedMissions, getAvailableMissions, getDailyMissions,
+  approveAllReviewMissions, approveMission, createMission, deleteMission, generateTaskChallenge,
+  getArchivedMissions, getAvailableMissions, getCurrentWeeklyGenerationRun, getDailyMissions, getGenerationRun,
   getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, updateMission,
-  rejectAllReviewMissions,
+  rejectAllReviewMissions, startNextWeekMissionGeneration,
 } from '../services/missionService'
 import { createMissionTypeDefaults, createTestMissions, defaultMissionType, getMissionType, missionTypes, taskChallengeTypes } from './missions/missionTypes'
 import MissionRunner from './missions/MissionRunner'
@@ -171,6 +171,9 @@ function variantToReviewMission(mission, difficulty) {
       ...field,
       label_de: field.label?.de || '',
       label_en: field.label?.en || '',
+      tolerance: field.tolerance ?? 0,
+      feedback_de: field.feedback?.de || '',
+      feedback_en: field.feedback?.en || '',
     })),
     feedback_de: content.feedback?.de || '',
     feedback_en: content.feedback?.en || '',
@@ -182,9 +185,12 @@ function variantToReviewMission(mission, difficulty) {
 function missionToVariantForms(mission) {
   return Object.fromEntries(difficultyVariants.map((difficulty) => [
     difficulty,
-    mission.has_difficulty_variants
+    (() => {
+      const form = mission.has_difficulty_variants
       ? missionToForm(variantToReviewMission(mission, difficulty))
-      : missionToForm(mission),
+      : missionToForm(mission)
+      return getMissionType(form.type).prepareForm?.(form) || form
+    })(),
   ]))
 }
 
@@ -295,7 +301,7 @@ function Calendar({ month, setMonth, schedule, selectedDate, selectedWeekStart, 
   )
 }
 
-function Creator({ opened, onClose, onCreated }) {
+function MissionManager({ enabled, onCreated }) {
   const { i18n, t } = useTranslation()
   const [variantForms, setVariantForms] = useState(createEmptyVariants)
   const [activeDifficulty, setActiveDifficulty] = useState('easy')
@@ -319,7 +325,7 @@ function Creator({ opened, onClose, onCreated }) {
       .catch(() => { setSchedule({}); setScheduledMissions({}) })
   }, [month])
 
-  useEffect(() => { if (opened) loadSchedule() }, [opened, loadSchedule])
+  useEffect(() => { if (enabled) loadSchedule() }, [enabled, loadSchedule])
   const form = variantForms[activeDifficulty]
   const setForm = (update) => setVariantForms((current) => ({
     ...current,
@@ -346,7 +352,11 @@ function Creator({ opened, onClose, onCreated }) {
   const missionsForDate = form.scheduled_date ? scheduledMissions[form.scheduled_date] || [] : []
 
   const resetForm = () => {
-    setVariantForms(createEmptyVariants())
+    const selectedDate = form.scheduled_date
+    setVariantForms(Object.fromEntries(difficultyVariants.map((difficulty) => [
+      difficulty,
+      { ...createEmptyForm(), scheduled_date: selectedDate },
+    ])))
     setSharedFields(createEmptySharedFields())
     setActiveDifficulty('easy')
     setEditingId(null)
@@ -410,17 +420,22 @@ function Creator({ opened, onClose, onCreated }) {
     ? variantToReviewMission(preview, previewDifficulty)
     : preview
 
+  if (!enabled) return null
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={editingId ? t('missions.creator.editTitle') : t('missions.creator.title')}
-      size="calc(80vw)"
-      centered
-      classNames={{ content: 'mission-manager-modal', body: 'mission-manager-body' }}
-    >
+    <Stack gap="lg">
+      <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} bg="white">
+        <Group align="flex-start" wrap="nowrap">
+          <ThemeIcon size={44} radius="md" variant="light" color="brand"><IconSettings size={23} /></ThemeIcon>
+          <Box>
+            <Title order={2} fz="xl">{t('missions.creator.manageTitle')}</Title>
+            <Text c="dimmed" fz="sm" mt={3}>{t('missions.creator.manageDescription')}</Text>
+          </Box>
+        </Group>
+      </Paper>
       <div className="mission-manager-grid">
+        <Paper className="mission-manager-editor" withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} bg="white">
         <Stack gap="md">
+          <Title order={3} fz="lg">{editingId ? t('missions.creator.editTitle') : t('missions.creator.title')}</Title>
           {editingId && <Group justify="space-between"><Badge variant="light" color="brand">{t('missions.creator.editing')}</Badge><Button variant="subtle" size="xs" onClick={resetForm}>{t('missions.creator.cancelEdit')}</Button></Group>}
           <Select label={t('missions.creator.type')} value={form.type} data={missionTypes.map((definition) => ({ value: definition.id, label: t(`missions.types.${definition.labelKey}`) }))} onChange={setType} />
           <TextInput
@@ -455,7 +470,8 @@ function Creator({ opened, onClose, onCreated }) {
           {error && <Alert color="red">{error}</Alert>}
           <Button color="brand" loading={saving} onClick={save}>{editingId ? t('missions.creator.update') : t('missions.creator.save')}</Button>
         </Stack>
-        <Stack gap="sm">
+        </Paper>
+        <Stack className="mission-manager-calendar" gap="sm">
           <Group gap="sm"><IconCalendar size={20} /><Text fw={700}>{t('missions.creator.calendarTitle')}</Text></Group>
           <Text fz="sm" c="dimmed">{t('missions.creator.calendarText')}</Text>
           <Calendar month={month} setMonth={setMonth} schedule={schedule} selectedDate={form.scheduled_date} onSelect={setScheduledDate} />
@@ -513,8 +529,193 @@ function Creator({ opened, onClose, onCreated }) {
         text={t('missions.creator.deleteConfirm', { title: deleteTarget?.title_de || deleteTarget?.title_en || '' })}
         confirmLabel={t('common.delete')}
       />
-    </Modal>
+    </Stack>
   )
+}
+
+const visibleGenerationStatuses = ['running', 'validating', 'reviewing', 'repairing']
+const activeGenerationStatuses = new Set(['queued', 'dispatched', ...visibleGenerationStatuses])
+const weeklyGenerationStorageKey = 'missions.current-weekly-generation-run'
+
+function rememberWeeklyGenerationRun(runId) {
+  try {
+    if (runId) window.localStorage.setItem(weeklyGenerationStorageKey, runId)
+  } catch {
+    // The backend lookup still restores active runs if storage is unavailable.
+  }
+}
+
+function rememberedWeeklyGenerationRun() {
+  try {
+    return window.localStorage.getItem(weeklyGenerationStorageKey)
+  } catch {
+    return null
+  }
+}
+
+function forgetWeeklyGenerationRun() {
+  try {
+    window.localStorage.removeItem(weeklyGenerationStorageKey)
+  } catch {
+    // Nothing else is required when storage is unavailable.
+  }
+}
+
+function GenerationStatus({ run }) {
+  const { i18n, t } = useTranslation()
+  const status = run?.status || 'queued'
+  const displayStatus = ['queued', 'dispatched'].includes(status) ? 'preparing' : status
+  const locale = i18n.resolvedLanguage || i18n.language
+  const updatedAt = run?.updated_at
+    ? new Date(run.updated_at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null
+  const weekStart = run?.week_start
+    ? new Date(`${run.week_start}T12:00:00`).toLocaleDateString(locale)
+    : null
+  const weekEnd = run?.week_end
+    ? new Date(`${run.week_end}T12:00:00`).toLocaleDateString(locale)
+    : null
+
+  return (
+    <Paper className="mission-generation-status" withBorder radius="md" p="md" role="status" aria-live="polite">
+      <Group align="flex-start" wrap="nowrap">
+        <Loader color="brand" size="sm" mt={3} />
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" justify="space-between" align="center">
+            <Text fw={700}>{t('missions.review.generationStatus.title')}</Text>
+            <Badge color="brand" variant="light">
+              {t(`missions.review.generationStatus.statuses.${displayStatus}`)}
+            </Badge>
+          </Group>
+          <Text c="dimmed" fz="sm" mt={4}>
+            {t(`missions.review.generationStatus.descriptions.${displayStatus}`)}
+          </Text>
+          {(weekStart || updatedAt) && <Group gap="md" mt={6}>
+            {weekStart && <Text c="dimmed" fz="xs">
+              {t('missions.review.generationStatus.week', { start: weekStart, end: weekEnd || weekStart })}
+            </Text>}
+            {updatedAt && <Text c="dimmed" fz="xs">
+              {t('missions.review.generationStatus.lastUpdate', { time: updatedAt })}
+            </Text>}
+          </Group>}
+          <Group className="mission-generation-status__steps" gap="xs" mt="sm">
+            {visibleGenerationStatuses.map((step) => (
+              <Badge
+                className={displayStatus === step ? 'is-active' : ''}
+                color={displayStatus === step ? 'brand' : 'gray'}
+                key={step}
+                variant={displayStatus === step ? 'filled' : 'light'}
+              >
+                {t(`missions.review.generationStatus.statuses.${step}`)}
+              </Badge>
+            ))}
+          </Group>
+        </Box>
+      </Group>
+    </Paper>
+  )
+}
+
+function GenerationResultAlert({ run }) {
+  const { i18n, t } = useTranslation()
+  const locale = i18n.resolvedLanguage || i18n.language
+  const failures = Array.isArray(run?.failed_requirements) ? run.failed_requirements : []
+  const createdCount = Number(run?.created_count || 0)
+  const completed = run?.status === 'completed'
+
+  const failureTypeLabel = (failure) => {
+    if (failure.mission_type) return missionTypeLabel(t, failure.mission_type)
+    if (failure.output_type === 'task_mission') return t('missions.review.failureTaskMission')
+    return t('missions.review.failureQuizMission')
+  }
+
+  return (
+    <Alert color={completed ? 'green' : 'red'} role="status" aria-live="polite">
+      <Stack gap={failures.length ? 'sm' : 0}>
+        <Text fz="sm">
+          {completed
+            ? t('missions.review.generated', { count: createdCount })
+            : t('missions.review.generationStatus.failed')}
+          {failures.length > 0 && ` ${t('missions.review.generatedFailed', { count: failures.length })}`}
+        </Text>
+        {failures.length > 0 && <Stack gap="xs">
+          <Text fz="sm" fw={700}>{t('missions.review.failureDetails')}</Text>
+          {failures.map((failure, index) => {
+            const rawDate = failure.scheduled_date || failure.requirement_id
+            const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate || '') ? new Date(`${rawDate}T12:00:00`) : null
+            const dateLabel = parsedDate ? parsedDate.toLocaleDateString(locale, { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }) : rawDate
+            const repairAttempts = Number(failure.repair_attempts || 0)
+            return <Paper key={`${failure.requirement_id || 'failure'}-${index}`} withBorder radius="sm" p="sm" bg="white">
+              <Group justify="space-between" align="flex-start" gap="xs">
+                <Text fz="sm" fw={700}>{dateLabel} · {failureTypeLabel(failure)}</Text>
+                <Badge color="orange" variant="light">
+                  {t('missions.review.repairAttempts', { count: repairAttempts })}
+                </Badge>
+              </Group>
+              <Text fz="xs" c="dimmed" mt={5}>
+                <Text span fw={700}>{t('missions.review.failureReason')}: </Text>
+                {failure.error_message || t('missions.review.failureUnknown')}
+              </Text>
+            </Paper>
+          })}
+        </Stack>}
+      </Stack>
+    </Alert>
+  )
+}
+
+function ReviewMissionCard({ mission, activeAction, onAction }) {
+  const { i18n, t } = useTranslation()
+  return <Paper withBorder radius="md" p="lg">
+    <Stack gap="md">
+      <Group justify="space-between" align="flex-start">
+        <Box>
+          <Group gap="xs" mb={5}>
+            <Badge color="yellow" variant="light">{t('missions.review.status')}</Badge>
+            <Badge color="secondary" variant="light">{missionTypeLabel(t, mission.type)}</Badge>
+            <Text fz="sm" c="dimmed">{new Date(`${mission.scheduled_date}T12:00:00`).toLocaleDateString(i18n.resolvedLanguage)}</Text>
+          </Group>
+          <Text fw={700} fz="lg">{mission.title_de}</Text>
+          <Text c="dimmed" fz="sm">{mission.title_en}</Text>
+        </Box>
+        <Badge color="accent" variant="light">{mission.max_points} {t('missions.points')}</Badge>
+      </Group>
+      {mission.has_difficulty_variants && <Stack gap="sm">
+        <Text fz="sm"><Text span fw={700}>{t('missions.review.learningObjective')}: </Text>{mission.learning_objective_de}</Text>
+        {difficultyVariants.map((difficulty) => {
+          const variantMission = variantToReviewMission(mission, difficulty)
+          return <Paper key={difficulty} withBorder radius="sm" p="md" bg="gray.0">
+            <Badge mb="sm" color="secondary" variant="light">{t(`difficulties.${difficulty}`)}</Badge>
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+              {[['de', 'Deutsch'], ['en', 'English']].map(([language, label]) => <Box key={language}>
+                <Text fz="xs" fw={700} c="dimmed" tt="uppercase">{label}</Text>
+                <Text fw={700}>{variantMission[`title_${language}`]}</Text>
+                <Text fz="sm" c="dimmed">{variantMission[`description_${language}`]}</Text>
+                <Text fw={700} fz="sm" mt="xs">{variantMission[`question_${language}`]}</Text>
+                <MissionSolutionContent mission={variantMission} language={language} />
+                {variantMission[`micro_learning_${language}`] && <Text fz="sm" mt="xs"><Text span fw={700}>{t('missions.microLearning.title')}: </Text>{variantMission[`micro_learning_${language}`]}</Text>}
+              </Box>)}
+            </SimpleGrid>
+          </Paper>
+        })}
+      </Stack>}
+      {!mission.has_difficulty_variants && <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        {[['de', 'Deutsch'], ['en', 'English']].map(([language, label]) => <Box key={language}>
+          <Text fz="xs" fw={700} c="dimmed" tt="uppercase" mb={5}>{label}</Text>
+          <Text fz="sm" c="dimmed" mb="xs">{mission[`description_${language}`]}</Text>
+          <Text fw={700} fz="sm" mb="xs">{mission[`question_${language}`]}</Text>
+          <MissionSolutionContent mission={mission} language={language} />
+          {getMissionType(mission.type).hasSharedFeedback && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{mission[`feedback_${language}`]}</Text>}
+          {mission[`micro_learning_${language}`] && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.microLearning.title')}: </Text>{mission[`micro_learning_${language}`]}</Text>}
+        </Box>)}
+      </SimpleGrid>}
+      <Group justify="flex-end">
+        <Button color="red" variant="subtle" leftSection={<IconX size={16} />} loading={activeAction === `reject-${mission.id}`} onClick={() => onAction(mission, 'reject')}>{t('missions.review.reject')}</Button>
+        <Button color="secondary" variant="light" leftSection={<IconRefresh size={16} />} loading={activeAction === `regenerate-${mission.id}`} onClick={() => onAction(mission, 'regenerate')}>{t('missions.review.regenerate')}</Button>
+        <Button color="green" leftSection={<IconCheck size={16} />} loading={activeAction === `approve-${mission.id}`} onClick={() => onAction(mission, 'approve')}>{t('missions.review.approve')}</Button>
+      </Group>
+    </Stack>
+  </Paper>
 }
 
 function MissionReview({ enabled, onPublished }) {
@@ -522,14 +723,19 @@ function MissionReview({ enabled, onPublished }) {
   const [missions, setMissions] = useState([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [generationRun, setGenerationRun] = useState(null)
   const [activeAction, setActiveAction] = useState('')
   const [error, setError] = useState('')
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectAllOpen, setRejectAllOpen] = useState(false)
+  const [generationResult, setGenerationResult] = useState(null)
   const [weekSelectionOpen, setWeekSelectionOpen] = useState(false)
   const [generationMonth, setGenerationMonth] = useState(() => new Date(`${nextWeekStart()}T12:00:00`))
   const [generationWeek, setGenerationWeek] = useState(nextWeekStart)
   const [generationSchedule, setGenerationSchedule] = useState({})
+  const [activeMissionId, setActiveMissionId] = useState(null)
+  const language = (i18n.resolvedLanguage || i18n.language || 'de').split('-')[0] === 'en' ? 'en' : 'de'
+  const activeReviewMission = missions.find((mission) => mission.id === activeMissionId) || missions[0] || null
 
   const loadGenerationSchedule = useCallback(() => {
     const range = monthRange(generationMonth)
@@ -567,21 +773,133 @@ function MissionReview({ enabled, onPublished }) {
     return () => { active = false }
   }, [enabled, generationWeek])
 
+  const finalizeGeneration = useCallback(async (run) => {
+    forgetWeeklyGenerationRun()
+    setGenerating(false)
+    setGenerationRun(null)
+    if (run.status === 'completed') {
+      setError('')
+      setMessage('')
+      setGenerationResult(run)
+      await Promise.all([loadReview(), loadGenerationSchedule()])
+      return
+    }
+    setMessage('')
+    const failures = Array.isArray(run.failed_requirements) ? run.failed_requirements : []
+    setGenerationResult(failures.length > 0 ? run : null)
+    setError(failures.length > 0 ? '' : (run.error_message || t('missions.review.generationStatus.failed')))
+  }, [loadGenerationSchedule, loadReview, t])
+  const finalizeGenerationRef = useRef(finalizeGeneration)
+
+  useEffect(() => {
+    finalizeGenerationRef.current = finalizeGeneration
+  }, [finalizeGeneration])
+
+  useEffect(() => {
+    if (!enabled) return undefined
+    let active = true
+
+    const restoreGeneration = async () => {
+      let run = null
+      let lookupError = null
+      try {
+        const data = await getCurrentWeeklyGenerationRun()
+        run = data.generation_run
+      } catch (nextError) {
+        lookupError = nextError
+      }
+
+      const rememberedRunId = rememberedWeeklyGenerationRun()
+      if (!run && rememberedRunId) {
+        try {
+          const data = await getGenerationRun(rememberedRunId)
+          run = data.generation_run
+        } catch (nextError) {
+          if (nextError.status === 404 || nextError.status === 403) forgetWeeklyGenerationRun()
+          else lookupError = lookupError || nextError
+        }
+      }
+
+      if (!active) return
+      if (!run) {
+        if (lookupError) setError(lookupError.message)
+        return
+      }
+
+      if (run.week_start) {
+        setGenerationWeek(run.week_start)
+        setGenerationMonth(new Date(`${run.week_start}T12:00:00`))
+      }
+      if (!activeGenerationStatuses.has(run.status)) {
+        await finalizeGenerationRef.current(run)
+        return
+      }
+      rememberWeeklyGenerationRun(run.id)
+      setGenerationRun(run)
+      setGenerating(true)
+    }
+
+    restoreGeneration()
+    return () => { active = false }
+  }, [enabled])
+
+  useEffect(() => {
+    const runId = generationRun?.id
+    if (!enabled || !runId) return undefined
+    let active = true
+    let timerId = null
+
+    const pollGeneration = async () => {
+      try {
+        const data = await getGenerationRun(runId)
+        if (!active) return
+        const run = data.generation_run
+        setGenerationRun(run)
+        if (!activeGenerationStatuses.has(run.status)) {
+          await finalizeGenerationRef.current(run)
+          return
+        }
+        setGenerating(true)
+        timerId = window.setTimeout(pollGeneration, 1500)
+      } catch (nextError) {
+        if (!active) return
+        setError(nextError.message)
+        timerId = window.setTimeout(pollGeneration, 3000)
+      }
+    }
+
+    timerId = window.setTimeout(pollGeneration, 500)
+
+    return () => {
+      active = false
+      if (timerId) window.clearTimeout(timerId)
+    }
+  }, [enabled, generationRun?.id])
+
   const generate = async () => {
     setGenerating(true)
+    setGenerationRun({ status: 'queued' })
+    setError('')
+    setMessage('')
+    setGenerationResult(null)
     try {
-      const data = await generateNextWeekMissions(generationWeek)
-      notifySuccess(t('missions.review.generated', { count: data.created_count }))
-      await Promise.all([loadReview(), loadGenerationSchedule()])
+      const data = await startNextWeekMissionGeneration(generationWeek, false)
+      const run = data.generation_run
+      rememberWeeklyGenerationRun(run.id)
+      setGenerationRun(run)
+      if (!activeGenerationStatuses.has(run.status)) await finalizeGeneration(run)
     } catch (nextError) {
       notifyError(nextError.message)
-    } finally {
       setGenerating(false)
+      setGenerationRun(null)
     }
   }
 
   const generateTask = async (missionType) => {
     setGenerating(true)
+    setError('')
+    setMessage('')
+    setGenerationResult(null)
     try {
       await generateTaskChallenge(missionType, generationWeek)
       notifySuccess(t('missions.review.taskGenerated'))
@@ -596,6 +914,9 @@ function MissionReview({ enabled, onPublished }) {
   const runAction = async (mission, action) => {
     if (!mission) return
     setActiveAction(`${action}-${mission.id}`)
+    setError('')
+    setMessage('')
+    setGenerationResult(null)
     try {
       if (action === 'approve') await approveMission(mission.id)
       if (action === 'regenerate') await regenerateMission(mission.id)
@@ -613,6 +934,9 @@ function MissionReview({ enabled, onPublished }) {
 
   const runBulkAction = async (action) => {
     setActiveAction(`${action}-all`)
+    setError('')
+    setMessage('')
+    setGenerationResult(null)
     try {
       const data = action === 'approve' ? await approveAllReviewMissions(generationWeek) : await rejectAllReviewMissions(generationWeek)
       const count = action === 'approve' ? data.approved_count : data.rejected_count
@@ -676,59 +1000,34 @@ function MissionReview({ enabled, onPublished }) {
           <Stack gap="md"><Text c="dimmed" fz="sm">{t('missions.review.selectWeekDescription')}</Text><Calendar month={generationMonth} setMonth={setGenerationMonth} schedule={generationSchedule} selectedWeekStart={generationWeek} onSelect={(value) => { setGenerationWeek(value); setWeekSelectionOpen(false) }} weekMode /></Stack>
         </Modal>
         {error && <Alert color="red">{error}</Alert>}
+        {message && <Alert color="green">{message}</Alert>}
+        {generationResult && <GenerationResultAlert run={generationResult} />}
+        {generating && generationRun && <GenerationStatus run={generationRun} />}
         {loading ? <Text c="dimmed">{t('missions.review.loading')}</Text> : missions.length === 0 ? (
           <Paper withBorder radius="md" p="xl" bg="gray.0"><Text ta="center" c="dimmed">{t('missions.review.empty')}</Text></Paper>
         ) : <Stack gap="md">
-          {missions.map((mission) => <Paper key={mission.id} withBorder radius="md" p="lg">
-            <Stack gap="md">
-              <Group justify="space-between" align="flex-start">
-                <Box>
-                  <Group gap="xs" mb={5}>
-                    <Badge color="yellow" variant="light">{t('missions.review.status')}</Badge>
-                    <Badge color="secondary" variant="light">{missionTypeLabel(t, mission.type)}</Badge>
-                    <Text fz="sm" c="dimmed">{new Date(`${mission.scheduled_date}T12:00:00`).toLocaleDateString(i18n.resolvedLanguage)}</Text>
-                  </Group>
-                  <Text fw={700} fz="lg">{mission.title_de}</Text>
-                  <Text c="dimmed" fz="sm">{mission.title_en}</Text>
-                </Box>
-                <Badge color="accent" variant="light">{mission.max_points} {t('missions.points')}</Badge>
-              </Group>
-              {mission.has_difficulty_variants && <Stack gap="sm">
-                <Text fz="sm"><Text span fw={700}>{t('missions.review.learningObjective')}: </Text>{mission.learning_objective_de}</Text>
-                {['easy', 'medium', 'hard'].map((difficulty) => {
-                  const variantMission = variantToReviewMission(mission, difficulty)
-                  return <Paper key={difficulty} withBorder radius="sm" p="md" bg="gray.0">
-                    <Badge mb="sm" color="secondary" variant="light">{t(`difficulties.${difficulty}`)}</Badge>
-                    <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-                      {[['de', 'Deutsch'], ['en', 'English']].map(([language, label]) => <Box key={language}>
-                        <Text fz="xs" fw={700} c="dimmed" tt="uppercase">{label}</Text>
-                        <Text fw={700}>{variantMission[`title_${language}`]}</Text>
-                        <Text fz="sm" c="dimmed">{variantMission[`description_${language}`]}</Text>
-                        <Text fw={700} fz="sm" mt="xs">{variantMission[`question_${language}`]}</Text>
-                        <MissionSolutionContent mission={variantMission} language={language} />
-                        {variantMission[`micro_learning_${language}`] && <Text fz="sm" mt="xs"><Text span fw={700}>{t('missions.microLearning.title')}: </Text>{variantMission[`micro_learning_${language}`]}</Text>}
-                      </Box>)}
-                    </SimpleGrid>
-                  </Paper>
-                })}
-              </Stack>}
-              {!mission.has_difficulty_variants && <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-                {[['de', 'Deutsch'], ['en', 'English']].map(([language, label]) => <Box key={language}>
-                  <Text fz="xs" fw={700} c="dimmed" tt="uppercase" mb={5}>{label}</Text>
-                  <Text fz="sm" c="dimmed" mb="xs">{mission[`description_${language}`]}</Text>
-                  <Text fw={700} fz="sm" mb="xs">{mission[`question_${language}`]}</Text>
-                  <MissionSolutionContent mission={mission} language={language} />
-                  {getMissionType(mission.type).hasSharedFeedback && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.review.feedback')}: </Text>{mission[`feedback_${language}`]}</Text>}
-                  {mission[`micro_learning_${language}`] && <Text fz="sm" mt="sm"><Text span fw={700}>{t('missions.microLearning.title')}: </Text>{mission[`micro_learning_${language}`]}</Text>}
-                </Box>)}
-              </SimpleGrid>}
-              <Group justify="flex-end">
-                <Button color="red" variant="subtle" leftSection={<IconX size={16} />} loading={activeAction === `reject-${mission.id}`} onClick={() => setRejectTarget(mission)}>{t('missions.review.reject')}</Button>
-                <Button color="secondary" variant="light" leftSection={<IconRefresh size={16} />} loading={activeAction === `regenerate-${mission.id}`} onClick={() => runAction(mission, 'regenerate')}>{t('missions.review.regenerate')}</Button>
-                <Button color="green" leftSection={<IconCheck size={16} />} loading={activeAction === `approve-${mission.id}`} onClick={() => runAction(mission, 'approve')}>{t('missions.review.approve')}</Button>
-              </Group>
-            </Stack>
-          </Paper>)}
+          <Box className="mission-review-switcher" role="tablist" aria-label={t('missions.review.missionNavigation')}>
+            {missions.map((mission) => {
+              const selected = mission.id === activeReviewMission?.id
+              const date = new Date(`${mission.scheduled_date}T12:00:00`)
+              return <button
+                key={mission.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                className={`mission-review-switcher__item${selected ? ' is-active' : ''}`}
+                onClick={() => setActiveMissionId(mission.id)}
+              >
+                <span className="mission-review-switcher__date">
+                  {date.toLocaleDateString(appLocale(language), { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                </span>
+                <span className="mission-review-switcher__title">
+                  {mission[`title_${language}`] || mission.title_de || mission.title_en}
+                </span>
+              </button>
+            })}
+          </Box>
+          {activeReviewMission && <ReviewMissionCard mission={activeReviewMission} activeAction={activeAction} onAction={runAction} />}
         </Stack>}
       </Stack>
 
@@ -917,7 +1216,7 @@ export default function Missions({ user }) {
   const [canCreate, setCanCreate] = useState(false)
   const [archiveMonth, setArchiveMonth] = useState(defaultArchiveMonth)
   const [archiveType, setArchiveType] = useState('all')
-  const [creatorOpen, setCreatorOpen] = useState(false)
+  const [testMissionId, setTestMissionId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [availableLoading, setAvailableLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1054,7 +1353,7 @@ export default function Missions({ user }) {
             <Box><Text fz="xs" c="dimmed">{t('missions.streak.current')}</Text><Text fw={700}>{progress.currentStreak} · {t('missions.streak.best', { count: progress.maxStreak })}</Text></Box>
           </Group>
         </Paper>
-        {canCreate && <Button color="brand" leftSection={<IconPlus size={18} />} onClick={() => setCreatorOpen(true)}>{t('missions.creator.button')}</Button>}
+
       </>}
     >
       <Tabs value={activeTab} onChange={setTab}>
@@ -1062,6 +1361,7 @@ export default function Missions({ user }) {
           <Tabs.Tab value="today" leftSection={<IconTargetArrow size={16} />}>{t('missions.tabs.today')}</Tabs.Tab>
           <Tabs.Tab value="available" leftSection={<IconCalendarPlus size={16} />}>{t('missions.tabs.available')}</Tabs.Tab>
           <Tabs.Tab value="archive" leftSection={<IconArchive size={16} />}>{t('missions.tabs.archive')}</Tabs.Tab>
+          {canCreate && <Tabs.Tab value="manage" leftSection={<IconSettings size={16} />}>{t('missions.tabs.manage')}</Tabs.Tab>}
         </Tabs.List>
         <Tabs.Panel value="today">
           <MissionList missions={missions} loading={loading} error={error} emptyTitle={t('missions.todayEmptyTitle')} emptyText={t('missions.todayEmptyText')} onSelect={openMission} />
@@ -1081,8 +1381,10 @@ export default function Missions({ user }) {
             onSelect={openMission}
           />
         </Tabs.Panel>
+        {canCreate && <Tabs.Panel value="manage">
+          <MissionManager enabled={activeTab === 'manage'} onCreated={() => { load(false); loadAvailable(false) }} />
+        </Tabs.Panel>}
       </Tabs>
-      <Creator opened={creatorOpen} onClose={() => setCreatorOpen(false)} onCreated={load} />
     </PageShell>
   )
 }

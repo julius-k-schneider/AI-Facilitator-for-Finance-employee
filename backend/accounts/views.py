@@ -1,6 +1,6 @@
 import json
+import math
 import os
-import uuid
 from datetime import date, datetime, time, timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
@@ -8,11 +8,12 @@ from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.http import JsonResponse
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
 from .models import (
     AgentChat,
+    GenerationRun,
     Mission,
     MissionAssignment,
     MissionAttempt,
@@ -20,19 +21,24 @@ from .models import (
     SkillProgressionSettings,
     WeeklyLeaderboardSnapshot,
 )
-from .services.ai_mission_generator import (
-    AiMissionGenerationError,
-    generate_training_candidate,
-    generate_next_week,
-    regenerate_review_mission,
-)
-from .services.ai_chat_challenge import chat_reply, evaluate_final_answers, generate_chat_challenge
+from .services.ai_mission_generator import AiMissionGenerationError
+from .services.ai_chat_challenge import chat_reply, evaluate_final_answers
 from .services.ai_task_challenge import (
     TASK_CHALLENGE_TYPES,
     evaluate_task_answers,
-    generate_task_challenge,
-    generate_task_challenge_variants,
     public_content as task_public_content,
+)
+from .services.n8n_client import N8NClientError, N8NConfigurationError
+from .services.n8n_mission_generation import (
+    GenerationContractError,
+    create_regeneration_run,
+    create_scheduled_task_run,
+    create_training_chat_run,
+    create_training_choice_run,
+    create_training_task_run,
+    create_weekly_run,
+    dispatch_generation_run,
+    generation_run_payload,
 )
 from .services.personal_agent import personal_agent_reply
 from .services.skill_progression import (
@@ -87,6 +93,30 @@ def parse_json(request):
         return json.loads(request.body.decode('utf-8') or '{}')
     except json.JSONDecodeError:
         return {}
+
+
+def dispatch_generation_response(run):
+    if run.status == GenerationRun.STATUS_COMPLETED:
+        return JsonResponse({'generation_run': generation_run_payload(run)}, status=200)
+    if run.status not in {GenerationRun.STATUS_QUEUED, GenerationRun.STATUS_FAILED}:
+        return JsonResponse({'generation_run': generation_run_payload(run)}, status=202)
+    try:
+        dispatch_generation_run(run)
+    except N8NConfigurationError:
+        return JsonResponse({
+            'error': 'n8n mission generation is not configured',
+            'generation_run': generation_run_payload(run),
+        }, status=503)
+    except N8NClientError:
+        return JsonResponse({
+            'error': 'n8n mission generation is currently unavailable',
+            'generation_run': generation_run_payload(run),
+        }, status=502)
+    return JsonResponse({'generation_run': generation_run_payload(run)}, status=202)
+
+
+def can_access_generation_run(user, run):
+    return user.is_authenticated and (run.requested_by_id == user.id or can_create_missions(user))
 
 
 def should_seed_admin(user):
@@ -446,6 +476,9 @@ def mission_schedule_payload(mission, user):
                 'label_en': translated(field.get('label', {}), 'en'),
                 'unit': field.get('unit', ''),
                 'solution': field.get('solution'),
+                'tolerance': field.get('tolerance', 0),
+                'feedback_de': translated(field.get('feedback', {}), 'de'),
+                'feedback_en': translated(field.get('feedback', {}), 'en'),
             }
             for field in content.get('result_fields', [])
         ],
@@ -486,14 +519,7 @@ def parse_iso_date(value):
         return None
 
 
-MANUAL_MISSION_TYPES = {
-    Mission.TYPE_SINGLE_CHOICE,
-    Mission.TYPE_MULTIPLE_CHOICE,
-    Mission.TYPE_COMPLIANCE_DECISION,
-    Mission.TYPE_PROMPT_SELECTION,
-    Mission.TYPE_PROMPT_RANKING,
-    Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT,
-}
+MANUAL_MISSION_TYPES = Mission.CHOICE_TYPES | Mission.TASK_TYPES
 
 
 def validate_mission_identity(data, allow_past_date=False):
@@ -513,6 +539,8 @@ def validate_choice_mission_data(data, allow_past_date=False):
     if identity_error:
         return None, identity_error
     mission_type, scheduled_date = identity
+    if mission_type not in Mission.CHOICE_TYPES:
+        return None, 'unsupported choice mission type'
 
     required_text = (
         'title_de', 'title_en', 'description_de', 'description_en', 'question_de', 'question_en',
@@ -643,6 +671,123 @@ def validate_choice_mission_data(data, allow_past_date=False):
     }, None
 
 
+def validate_task_mission_data(data, allow_past_date=False):
+    identity, identity_error = validate_mission_identity(data, allow_past_date)
+    if identity_error:
+        return None, identity_error
+    mission_type, scheduled_date = identity
+    if mission_type not in Mission.TASK_TYPES:
+        return None, 'unsupported task mission type'
+
+    required_text = (
+        'title_de', 'title_en', 'description_de', 'description_en', 'question_de', 'question_en',
+    )
+    if any(not str(data.get(field, '')).strip() for field in required_text):
+        return None, 'all bilingual task text fields are required'
+
+    case_format = str(data.get('case_format', 'table')).strip()
+    case_data_de = data.get('case_data_de')
+    case_data_en = data.get('case_data_en')
+    if case_format not in {'table', 'prose'}:
+        return None, 'task case format must be table or prose'
+    if (
+        not isinstance(case_data_de, list)
+        or not isinstance(case_data_en, list)
+        or not 1 <= len(case_data_de) <= 100
+        or len(case_data_de) != len(case_data_en)
+        or any(not str(value).strip() for value in [*case_data_de, *case_data_en])
+    ):
+        return None, 'task case data must contain 1 to 100 aligned bilingual rows'
+
+    raw_fields = data.get('result_fields')
+    if not isinstance(raw_fields, list) or not 1 <= len(raw_fields) <= 12:
+        return None, 'task missions require 1 to 12 result fields'
+    result_fields = []
+    field_ids = set()
+    for position, raw_field in enumerate(raw_fields, start=1):
+        if not isinstance(raw_field, dict):
+            return None, f'task result field {position} is invalid'
+        field_id = str(raw_field.get('id', '')).strip()
+        field_type = str(raw_field.get('type', '')).strip()
+        label_de = str(raw_field.get('label_de', '')).strip()
+        label_en = str(raw_field.get('label_en', '')).strip()
+        feedback_de = str(raw_field.get('feedback_de', '')).strip()
+        feedback_en = str(raw_field.get('feedback_en', '')).strip()
+        if (
+            not field_id
+            or len(field_id) > 80
+            or field_id in field_ids
+            or field_type not in {'number', 'text'}
+            or not label_de
+            or not label_en
+            or not feedback_de
+            or not feedback_en
+        ):
+            return None, f'task result field {position} needs a unique id, type, bilingual label, and feedback'
+        field_ids.add(field_id)
+
+        if field_type == 'number':
+            try:
+                solution = float(raw_field.get('solution'))
+                tolerance = float(raw_field.get('tolerance', 0))
+            except (TypeError, ValueError):
+                return None, f'task result field {position} needs a numeric solution and tolerance'
+            if not math.isfinite(solution) or not math.isfinite(tolerance) or tolerance < 0:
+                return None, f'task result field {position} needs a finite solution and non-negative tolerance'
+        else:
+            raw_solution = raw_field.get('solution')
+            solution_de = str(
+                raw_solution.get('de', '') if isinstance(raw_solution, dict) else raw_field.get('solution_de', '')
+            ).strip()
+            solution_en = str(
+                raw_solution.get('en', '') if isinstance(raw_solution, dict) else raw_field.get('solution_en', '')
+            ).strip()
+            if not solution_de or not solution_en:
+                return None, f'task result field {position} needs a bilingual text solution'
+            solution = {'de': solution_de, 'en': solution_en}
+            tolerance = 0
+
+        result_fields.append({
+            'id': field_id,
+            'type': field_type,
+            'label': {'de': label_de, 'en': label_en},
+            'unit': str(raw_field.get('unit', '')).strip(),
+            'solution': solution,
+            'tolerance': tolerance,
+            'feedback': {'de': feedback_de, 'en': feedback_en},
+        })
+
+    try:
+        max_points = int(data.get('max_points', 100))
+    except (TypeError, ValueError):
+        return None, 'invalid points'
+    if not 1 <= max_points <= 1000:
+        return None, 'invalid points'
+
+    return {
+        'mission_type': mission_type,
+        'scheduled_date': scheduled_date,
+        'title_de': str(data['title_de']).strip(),
+        'title_en': str(data['title_en']).strip(),
+        'description_de': str(data['description_de']).strip(),
+        'description_en': str(data['description_en']).strip(),
+        'content': {
+            'task': {'de': str(data['question_de']).strip(), 'en': str(data['question_en']).strip()},
+            'case_data': {
+                'de': [str(value).strip() for value in case_data_de],
+                'en': [str(value).strip() for value in case_data_en],
+            },
+            'case_format': case_format,
+            'result_fields': result_fields,
+            'micro_learning': {
+                'de': str(data.get('micro_learning_de', '')).strip(),
+                'en': str(data.get('micro_learning_en', '')).strip(),
+            },
+        },
+        'max_points': max_points,
+    }, None
+
+
 def validate_manual_mission_data(data, allow_past_date=False):
     identity, identity_error = validate_mission_identity(data, allow_past_date)
     if identity_error:
@@ -662,7 +807,10 @@ def validate_manual_mission_data(data, allow_past_date=False):
         raw_variant = raw_variants[difficulty]
         if not isinstance(raw_variant, dict):
             return None, f'{difficulty} variant must be an object'
-        variant_values, variant_error = validate_choice_mission_data({
+        variant_validator = (
+            validate_task_mission_data if mission_type in Mission.TASK_TYPES else validate_choice_mission_data
+        )
+        variant_values, variant_error = variant_validator({
             **raw_variant,
             'type': mission_type,
             'scheduled_date': scheduled_date.isoformat(),
@@ -743,6 +891,7 @@ def logout_view(request):
 
 
 @require_http_methods(['GET'])
+@ensure_csrf_cookie
 def user_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({'authenticated': False})
@@ -1332,12 +1481,13 @@ def reject_all_review_missions_view(request):
 
 
 @require_http_methods(['POST'])
-@csrf_exempt
 def generate_next_week_missions_view(request):
     if not can_create_missions(request.user):
         return JsonResponse({'error': 'permission denied'}, status=403)
     data = parse_json(request)
-    force = bool(data.get('force', False))
+    force = data.get('force', False)
+    if not isinstance(force, bool):
+        return JsonResponse({'error': 'force must be true or false'}, status=400)
     raw_week_start = data.get('week_start')
     week_start = parse_iso_date(raw_week_start) if raw_week_start else None
     if raw_week_start and week_start is None:
@@ -1346,24 +1496,11 @@ def generate_next_week_missions_view(request):
     current_week_start = today - timedelta(days=today.weekday())
     if week_start is not None and (week_start.weekday() != 0 or week_start < current_week_start):
         return JsonResponse({'error': 'week_start must be the current or a future Monday'}, status=400)
-    try:
-        missions, week_start, week_end = generate_next_week(
-            request.user,
-            force=force,
-            week_start=week_start,
-        )
-    except AiMissionGenerationError as error_value:
-        return JsonResponse({'error': str(error_value)}, status=503)
-    return JsonResponse({
-        'created_count': len(missions),
-        'week_start': week_start.isoformat(),
-        'week_end': week_end.isoformat(),
-        'missions': [mission_schedule_payload(mission, request.user) for mission in missions],
-    })
+    run = create_weekly_run(request.user, force=force, week_start=week_start)
+    return dispatch_generation_response(run)
 
 
 @require_http_methods(['POST'])
-@csrf_exempt
 def generate_task_challenge_view(request):
     """Content creators generate a single task challenge of a chosen type.
 
@@ -1384,48 +1521,63 @@ def generate_task_challenge_view(request):
         status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
     ).exists():
         return JsonResponse({'error': 'this date already has a mission'}, status=409)
-    try:
-        candidate = generate_task_challenge_variants(mission_type)
-    except AiMissionGenerationError as error_value:
-        return JsonResponse({'error': str(error_value)}, status=503)
-    mission = Mission(
-        mission_type=candidate['mission_type'],
-        scheduled_date=scheduled_date,
-        title_de=candidate['title_de'],
-        title_en=candidate['title_en'],
-        description_de=candidate['description_de'],
-        description_en=candidate['description_en'],
-        content=candidate['content'],
-        max_points=candidate['max_points'],
-        topic_de=candidate['topic_de'],
-        topic_en=candidate['topic_en'],
-        learning_objective_de=candidate['learning_objective_de'],
-        learning_objective_en=candidate['learning_objective_en'],
-        variants=candidate['variants'],
-        status=Mission.STATUS_REVIEW,
-        generated_by_ai=True,
-        generation_batch_id=uuid.uuid4(),
-        created_by=request.user,
-    )
-    mission.save()
-    return JsonResponse({'mission': mission_schedule_payload(mission, request.user)}, status=201)
+    run = create_scheduled_task_run(request.user, scheduled_date, mission_type)
+    return dispatch_generation_response(run)
+
+
+@require_http_methods(['GET'])
+def current_weekly_generation_run_view(request):
+    if not can_create_missions(request.user):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    run = GenerationRun.objects.prefetch_related('missions').filter(
+        requested_by=request.user,
+        kind=GenerationRun.KIND_WEEKLY_MISSIONS,
+        status__in=GenerationRun.ACTIVE_STATUSES,
+    ).order_by('-created_at').first()
+    return JsonResponse({
+        'generation_run': generation_run_payload(run) if run is not None else None,
+    })
+
+
+@require_http_methods(['GET'])
+def generation_run_detail_view(request, run_id):
+    run = GenerationRun.objects.prefetch_related('missions').filter(id=run_id).first()
+    if run is None:
+        return JsonResponse({'error': 'generation run not found'}, status=404)
+    if not can_access_generation_run(request.user, run):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    return JsonResponse({'generation_run': generation_run_payload(run)})
 
 
 @require_http_methods(['POST'])
-@csrf_exempt
+def retry_generation_run_view(request, run_id):
+    run = GenerationRun.objects.filter(id=run_id).first()
+    if run is None:
+        return JsonResponse({'error': 'generation run not found'}, status=404)
+    if not can_access_generation_run(request.user, run):
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    if run.status != GenerationRun.STATUS_FAILED:
+        return JsonResponse({'error': 'only failed generation runs can be retried'}, status=409)
+    return dispatch_generation_response(run)
+
+
+@require_http_methods(['POST'])
 def generate_training_mission_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'authentication required'}, status=401)
     mission_type = parse_json(request).get('type')
     try:
-        candidate = generate_training_candidate(mission_type)
-    except AiMissionGenerationError as error_value:
-        return JsonResponse({'error': str(error_value)}, status=503)
+        run = create_training_choice_run(request.user, mission_type)
+    except GenerationContractError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=400)
+    return dispatch_generation_response(run)
 
-    difficulty = difficulty_for_skill(ensure_profile(request.user).skill_level)
+
+def public_training_choice(candidate, user):
+    difficulty = difficulty_for_skill(ensure_profile(user).skill_level)
     variant = candidate.get('variants', {}).get(difficulty, candidate)
     content = variant['content']
-    payload = {
+    return {
         'type': candidate['mission_type'],
         'difficulty': difficulty,
         'title_de': variant['title_de'],
@@ -1448,7 +1600,6 @@ def generate_training_mission_view(request):
             'feedback_en': [translated(statement.get('feedback', {}), 'en') for statement in content.get('statements', [])],
         },
     }
-    return JsonResponse({'mission': payload})
 
 
 def training_challenges(request):
@@ -1478,22 +1629,10 @@ def public_chat_challenge(challenge, challenge_id):
 
 
 @require_http_methods(['POST'])
-@csrf_exempt
 def generate_training_chat_challenge_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'authentication required'}, status=401)
-    try:
-        challenge = generate_chat_challenge()
-    except AiMissionGenerationError as error_value:
-        return JsonResponse({'error': str(error_value)}, status=503)
-    challenge_id = uuid.uuid4().hex
-    challenge['history'] = []
-    challenge['prompt_count'] = 0
-    challenges = training_challenges(request)
-    challenges[challenge_id] = challenge
-    request.session['training_chat_challenges'] = challenges
-    request.session.modified = True
-    return JsonResponse({'mission': public_chat_challenge(challenge, challenge_id)})
+    return dispatch_generation_response(create_training_chat_run(request.user))
 
 @require_http_methods(['POST'])
 @csrf_exempt
@@ -1583,24 +1722,59 @@ def public_task_challenge(candidate, challenge_id):
 
 
 @require_http_methods(['POST'])
-@csrf_exempt
+def consume_training_generation_view(request, run_id):
+    run = GenerationRun.objects.filter(id=run_id).first()
+    if run is None:
+        return JsonResponse({'error': 'generation run not found'}, status=404)
+    if not request.user.is_authenticated or run.requested_by_id != request.user.id:
+        return JsonResponse({'error': 'permission denied'}, status=403)
+    if run.status != GenerationRun.STATUS_COMPLETED:
+        return JsonResponse({'error': 'generation run is not completed'}, status=409)
+    if run.kind not in {
+        GenerationRun.KIND_TRAINING_CHOICE,
+        GenerationRun.KIND_TRAINING_TASK,
+        GenerationRun.KIND_TRAINING_CHAT,
+    }:
+        return JsonResponse({'error': 'generation run is not a training run'}, status=400)
+    if not isinstance(run.result_payload, dict) or not run.result_payload:
+        return JsonResponse({'error': 'generation result is unavailable'}, status=409)
+    candidate = next(iter(run.result_payload.values()))
+
+    if run.kind == GenerationRun.KIND_TRAINING_CHOICE:
+        mission = public_training_choice(candidate, request.user)
+    elif run.kind == GenerationRun.KIND_TRAINING_TASK:
+        challenge_id = run.id.hex
+        challenges = training_task_challenges(request)
+        challenges.setdefault(challenge_id, candidate)
+        request.session['training_task_challenges'] = challenges
+        request.session.modified = True
+        mission = public_task_challenge(challenges[challenge_id], challenge_id)
+    else:
+        challenge_id = run.id.hex
+        challenges = training_challenges(request)
+        if challenge_id not in challenges:
+            candidate['history'] = []
+            candidate['prompt_count'] = 0
+            challenges[challenge_id] = candidate
+        request.session['training_chat_challenges'] = challenges
+        request.session.modified = True
+        mission = public_chat_challenge(challenges[challenge_id], challenge_id)
+    return JsonResponse({'mission': mission})
+
+
+@require_http_methods(['POST'])
 def generate_training_task_challenge_view(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'authentication required'}, status=401)
     mission_type = parse_json(request).get('mission_type') or None
     if mission_type is not None and mission_type not in TASK_CHALLENGE_TYPES:
         return JsonResponse({'error': 'unsupported task challenge type'}, status=400)
+    difficulty = difficulty_for_skill(ensure_profile(request.user).skill_level)
     try:
-        difficulty = difficulty_for_skill(ensure_profile(request.user).skill_level)
-        candidate = generate_task_challenge(mission_type, difficulty=difficulty)
-    except AiMissionGenerationError as error_value:
-        return JsonResponse({'error': str(error_value)}, status=503)
-    challenge_id = uuid.uuid4().hex
-    challenges = training_task_challenges(request)
-    challenges[challenge_id] = candidate
-    request.session['training_task_challenges'] = challenges
-    request.session.modified = True
-    return JsonResponse({'mission': public_task_challenge(candidate, challenge_id)})
+        run = create_training_task_run(request.user, mission_type, difficulty)
+    except GenerationContractError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=400)
+    return dispatch_generation_response(run)
 
 
 @require_http_methods(['POST'])
@@ -1744,7 +1918,6 @@ def approve_mission_view(request, mission_id):
 
 
 @require_http_methods(['POST'])
-@csrf_exempt
 def regenerate_mission_view(request, mission_id):
     if not can_create_missions(request.user):
         return JsonResponse({'error': 'permission denied'}, status=403)
@@ -1752,10 +1925,10 @@ def regenerate_mission_view(request, mission_id):
     if mission is None:
         return JsonResponse({'error': 'mission not found'}, status=404)
     try:
-        mission = regenerate_review_mission(mission, request.user)
-    except AiMissionGenerationError as error_value:
-        return JsonResponse({'error': str(error_value)}, status=503)
-    return JsonResponse({'mission': mission_schedule_payload(mission, request.user)})
+        run = create_regeneration_run(request.user, mission)
+    except GenerationContractError as error_value:
+        return JsonResponse({'error': str(error_value)}, status=400)
+    return dispatch_generation_response(run)
 
 
 @require_http_methods(['POST'])
