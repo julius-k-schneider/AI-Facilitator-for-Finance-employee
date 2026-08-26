@@ -103,6 +103,8 @@ Jeder ausgewählte Kontext enthält Sicherheitsanweisungen: nur `safe_facts` ver
 
 ## Authentifizierung
 
+Credentials und Workflows werden beim ersten Start des `n8n_data`-Volumes automatisch von `docker/n8n-init.sh` importiert; die Geheimnisse stammen dabei aus dem Root-`.env` und stehen in keiner Datei im Repository. Ein manueller Import im Editor ist nur nötig, wenn das Volume bereits eingerichtet ist und die Exporte sich geändert haben.
+
 Beide Webhooks erwarten den Header `X-N8N-Service-Secret`. In der lokalen n8n-Instanz verwenden sie die bereits vorhandene Header-Auth-Credential. Geheimnisse werden nicht in den exportierten Workflow-Dateien gespeichert.
 
 ## Integration in die Missionsgenerierung

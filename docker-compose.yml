@@ -86,8 +86,13 @@ services:
       KICONNECT_MODEL: "${KICONNECT_MODEL}"
       KICONNECT_CHAT_COMPLETIONS_PATH: "${KICONNECT_CHAT_COMPLETIONS_PATH}"
 
+    # Imports credentials and workflows on the first start of the n8n_data
+    # volume, then hands over to the image's own entrypoint.
+    entrypoint: ["tini", "--", "/bin/sh", "/n8n-init.sh"]
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./docker/n8n-init.sh:/n8n-init.sh:ro
+      - ./workflows/n8n:/workflows:ro
     ports:
       - "5678:5678"
     depends_on:

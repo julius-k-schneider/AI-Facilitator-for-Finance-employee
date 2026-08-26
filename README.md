@@ -121,6 +121,23 @@ only inside the shared Compose network. KICOnnect settings in Django are still
 used by interactive assistant/chat replies, but no active mission-generation
 endpoint calls KICOnnect directly.
 
+The first start of the `n8n_data` volume bootstraps the n8n instance itself:
+`docker/n8n-init.sh` imports the two Header-Auth credentials (their values come
+from the root `.env`, so no secret is committed), imports the exports from
+`workflows/n8n/` and publishes all four workflows — the three the mission
+generation calls by webhook, plus the research collector, whose schedule trigger
+then fetches the configured feeds daily at 06:15 Europe/Berlin. No
+manual import or credential setup in the n8n editor is needed. To bootstrap
+again after editing the exports, remove the marker and restart:
+
+```bash
+docker compose exec n8n rm /home/node/.n8n/.bootstrapped
+docker compose restart n8n
+```
+
+Re-importing overwrites workflow changes made in the n8n editor, so export them
+back to `workflows/n8n/` first.
+
 Generate review proposals for the next calendar week with:
 
 ```bash
