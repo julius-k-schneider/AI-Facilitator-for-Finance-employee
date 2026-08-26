@@ -320,6 +320,97 @@ def _parse_date(value):
         raise GenerationContractError('requirement has an invalid scheduled date') from exception
 
 
+def _normalize_task_item_count(payload, mission_type, difficulty):
+    """Trim surplus LLM rows while preserving the task's grading constraints.
+
+    Models frequently overshoot long exact-count arrays even when they finish
+    normally. The deterministic validator remains strict; only the n8n contract
+    normalizes a surplus. Missing items are never invented and still fail.
+    """
+    if not isinstance(payload, dict):
+        return payload
+    expected = (
+        {'easy': 12, 'medium': 16, 'hard': 20}
+        if mission_type == Mission.TYPE_INVOICE_EXTRACTION
+        else {'easy': 24, 'medium': 36, 'hard': 48}
+    ).get(difficulty)
+    collection_name = 'invoices' if mission_type == Mission.TYPE_INVOICE_EXTRACTION else 'rows'
+    items = payload.get(collection_name)
+    if expected is None or not isinstance(items, list) or len(items) <= expected:
+        return payload
+
+    selected = set()
+    excluded = set()
+
+    def select_matching(predicate, limit):
+        for index, item in enumerate(items):
+            if len(selected) >= expected or limit <= 0:
+                break
+            if index not in selected and isinstance(item, dict) and predicate(item):
+                selected.add(index)
+                limit -= 1
+
+    if mission_type == Mission.TYPE_BULK_CATEGORIZATION:
+        categories = payload.get('categories_de')
+        if isinstance(categories, list):
+            for category_index in range(len(categories)):
+                select_matching(
+                    lambda item, category_index=category_index: (
+                        item.get('category_index') == category_index
+                        or str(item.get('category_index')) == str(category_index)
+                    ),
+                    3,
+                )
+    elif mission_type == Mission.TYPE_PLAN_ACTUAL_DEVIATION:
+        if difficulty == Mission.DIFFICULTY_HARD:
+            select_matching(
+                lambda item: isinstance(item.get('plan'), (int, float))
+                and isinstance(item.get('actual'), (int, float))
+                and item['actual'] < item['plan'],
+                6,
+            )
+        select_matching(
+            lambda item: isinstance(item.get('plan'), (int, float))
+            and isinstance(item.get('actual'), (int, float))
+            and item['plan'] > 0
+            and (item['actual'] - item['plan']) / item['plan'] > 0.10,
+            4,
+        )
+    elif mission_type == Mission.TYPE_DUPLICATE_PAYMENT_HUNT:
+        groups = {}
+        for index, item in enumerate(items):
+            if isinstance(item, dict):
+                groups.setdefault(item.get('invoice_number'), []).append(index)
+        expected_pairs = {'easy': 3, 'medium': 4, 'hard': 6}[difficulty]
+        pair_groups = [indices for indices in groups.values() if len(indices) == 2]
+        for indices in pair_groups[:expected_pairs]:
+            selected.update(indices)
+        # Extra generated pairs become ordinary unique rows by retaining at
+        # most one member. This keeps the exact duplicate-pair contract.
+        for indices in pair_groups[expected_pairs:]:
+            excluded.update(indices[1:])
+        for indices in (indices for indices in groups.values() if len(indices) > 2):
+            excluded.update(indices[1:])
+    elif mission_type == Mission.TYPE_INVOICE_EXTRACTION:
+        groups = {}
+        for index, item in enumerate(items):
+            if isinstance(item, dict):
+                groups.setdefault(item.get('vendor_de'), []).append(index)
+        repeated_groups = [indices for indices in groups.values() if len(indices) > 1]
+        for indices in repeated_groups[:3]:
+            selected.update(indices[:2])
+
+    for index in range(len(items)):
+        if len(selected) >= expected:
+            break
+        if index not in excluded:
+            selected.add(index)
+
+    normalized = dict(payload)
+    normalized[collection_name] = [items[index] for index in sorted(selected)[:expected]]
+    return normalized
+
+
 def _validated_task_mission(requirement, result):
     mission_type = requirement.get('mission_type')
     raw_variants = result.get('variants')
@@ -328,8 +419,11 @@ def _validated_task_mission(requirement, result):
     variants = {}
     for difficulty in Mission.DIFFICULTIES:
         try:
+            normalized_payload = _normalize_task_item_count(
+                raw_variants[difficulty], mission_type, difficulty,
+            )
             variants[difficulty] = validate_task_challenge(
-                raw_variants[difficulty], mission_type, difficulty=difficulty,
+                normalized_payload, mission_type, difficulty=difficulty,
             )
         except AiMissionGenerationError as exception:
             raise GenerationContractError(str(exception)) from exception
@@ -375,6 +469,9 @@ def validate_requirement_result(run, requirement_id, result):
         raw_payload = result.get('payload')
         if raw_payload is None and isinstance(result.get('variants'), dict):
             raw_payload = result['variants'].get(difficulty)
+        raw_payload = _normalize_task_item_count(
+            raw_payload, requirement.get('mission_type'), difficulty,
+        )
         try:
             return validate_task_challenge(
                 raw_payload, requirement.get('mission_type'), difficulty=difficulty,

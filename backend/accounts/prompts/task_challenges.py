@@ -75,8 +75,9 @@ def build_difficulty_instruction(mission_type, difficulty):
     return (
         f'{introduction}\nDIFFICULTY CONTRACT: {contract}\n'
         'The German and English task texts must request exactly these result values and no others. '
-        'The contract overrides every generic range in the base prompt. Before returning, count the data items and '
-        'requested outputs and verify that both languages mean the same thing.'
+        'The collection array must contain exactly the stated number of objects: no more and no fewer. Stop the array '
+        'immediately after the final required object. Before returning, count the data items and requested outputs and '
+        'verify that both languages mean the same thing.'
     )
 
 
@@ -98,7 +99,8 @@ def build_task_challenge_prompts(min_rows, max_rows, min_invoices, max_invoices)
     # Bulk categorization: classify booking lines and aggregate amounts.
     bulk_categorization = f"""Create one "bulk categorization" finance task.
 
-Scenario: the learner receives a long list of {min_rows}-{max_rows} booking lines (fictional) and must assign each line
+Scenario: the learner receives a long list of fictional booking lines whose exact size is defined only by the final
+DIFFICULTY CONTRACT and must assign each line
 to exactly one cost category based on its description, then report the total amount per category.
 
 Return exactly this JSON structure:
@@ -119,7 +121,7 @@ Return exactly this JSON structure:
 
 Rules:
 - Provide 3-5 categories as fixed by the appended difficulty contract. categories_de and categories_en must have equal length.
-- Provide between {min_rows} and {max_rows} rows. Every row needs date (YYYY-MM-DD), a bilingual description, a positive
+- Provide exactly the row count from the final DIFFICULTY CONTRACT. Every row needs date (YYYY-MM-DD), a bilingual description, a positive
   amount (number, max 2 decimals), and a category_index that is a valid zero-based index into the categories.
 - Each description must map UNAMBIGUOUSLY to exactly one category for a finance professional. No trick lines.
 - task_de and task_en must explicitly list the generated categories in their matching language.
@@ -131,7 +133,8 @@ Rules:
     # Plan-versus-actual analysis: detect and aggregate budget overruns.
     plan_actual_deviation = f"""Create one "plan vs. actual deviation" finance task.
 
-Scenario: the learner receives a long list of {min_rows}-{max_rows} fictional cost centers, each with a planned
+Scenario: the learner receives a long list of fictional cost centers whose exact size is defined only by the final
+DIFFICULTY CONTRACT, each with a planned
 (budget) amount and an actual (Ist) amount for the period, and must find which cost centers overran their budget.
 
 Return exactly this JSON structure:
@@ -149,7 +152,7 @@ Return exactly this JSON structure:
 }}
 
 Rules:
-- Provide between {min_rows} and {max_rows} rows, each a distinct, plausible cost center name (bilingual).
+- Provide exactly the row count from the final DIFFICULTY CONTRACT, each with a distinct, plausible cost center name (bilingual).
 - plan must be a positive number (max 2 decimals). actual must be a positive number (max 2 decimals).
 - At least 8 rows must overrun their plan (actual > plan), and at least 4 of those must overrun by more than 10%,
   so there is a clear, non-trivial answer.
@@ -159,7 +162,8 @@ Rules:
     # Duplicate-payment hunt: identify pairs despite spelling variations.
     duplicate_payment_hunt = f"""Create one "duplicate payment hunt" finance task.
 
-Scenario: the learner receives a long fictional accounts-payable run of {min_rows}-{max_rows} payment lines. A few
+Scenario: the learner receives a long fictional accounts-payable run whose exact row count is defined only by the final
+DIFFICULTY CONTRACT. A few
 invoices were accidentally entered and paid twice (same invoice number, same amount, but the vendor name is spelled
 slightly differently between the two entries, e.g. "Müller GmbH" vs. "Mueller GmbH", so a simple visual scan misses it).
 The learner must find the duplicate payments.
@@ -178,7 +182,7 @@ Return exactly this JSON structure:
 }}
 
 Rules:
-- Provide between {min_rows} and {max_rows} rows.
+- Provide exactly the row count from the final DIFFICULTY CONTRACT.
 - Every row needs date (YYYY-MM-DD), a bilingual vendor name, an invoice_number (short alphanumeric code), and a
   positive amount (max 2 decimals).
 - Create exactly 3 to 6 duplicate PAIRS: for each pair, use the exact SAME invoice_number and the exact SAME amount
@@ -191,7 +195,8 @@ Rules:
     # Invoice extraction: convert unstructured invoice prose into structured facts.
     invoice_extraction = f"""Create one "invoice extraction" finance task.
 
-Scenario: the learner receives {min_invoices}-{max_invoices} short fictional invoice descriptions written as natural-language
+Scenario: the learner receives the exact number of short fictional invoice descriptions defined only by the final
+DIFFICULTY CONTRACT, written as natural-language
 paragraphs (NOT a table) - each paragraph mentions an invoice number, a vendor name, a date, and an amount embedded
 in ordinary prose, the way a scanned invoice summary or email might read. The learner must extract the requested
 facts across all invoices.
@@ -215,7 +220,7 @@ Return exactly this JSON structure:
 }}
 
 Rules:
-- Provide between {min_invoices} and {max_invoices} invoices.
+- Provide exactly the invoice count from the final DIFFICULTY CONTRACT.
 - Each invoice_number must be unique. Amounts must be positive numbers (max 2 decimals).
 - At least 3 different vendors must appear more than once (across different invoices) so totals per vendor are
   meaningful to compute.

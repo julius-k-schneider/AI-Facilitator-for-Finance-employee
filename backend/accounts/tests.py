@@ -2026,6 +2026,57 @@ class AiTaskChallengeDifficultyContractTests(TestCase):
             from accounts.services.ai_task_challenge import validate_task_challenge
             validate_task_challenge(payload, 'plan_actual_deviation', difficulty='easy')
 
+    def test_n8n_contract_trims_surplus_items_before_strict_validation(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        from accounts.services.n8n_mission_generation import _normalize_task_item_count
+
+        payloads = {
+            'bulk_categorization': self.bulk_payload('medium'),
+            'plan_actual_deviation': self.plan_payload('medium'),
+            'duplicate_payment_hunt': self.duplicate_payload('medium'),
+            'invoice_extraction': self.invoice_payload('medium'),
+        }
+        payloads['bulk_categorization']['rows'].extend(
+            {**payloads['bulk_categorization']['rows'][index], 'description_de': f'Extra {index}',
+             'description_en': f'Extra {index}'}
+            for index in range(5)
+        )
+        payloads['plan_actual_deviation']['rows'].extend(
+            {**payloads['plan_actual_deviation']['rows'][index], 'cost_center_de': f'Extra {index}',
+             'cost_center_en': f'Extra {index}'}
+            for index in range(5)
+        )
+        payloads['duplicate_payment_hunt']['rows'].extend({
+            'date': '2026-03-03',
+            'invoice_number': 'EXTRA-PAIR' if index < 2 else f'EXTRA-{index}',
+            'vendor_de': f'Extra {index}', 'vendor_en': f'Extra {index}',
+            'amount': 75 if index < 2 else 75 + index,
+        } for index in range(5))
+        payloads['invoice_extraction']['invoices'].extend({
+            'invoice_number': f'EXTRA-{index}',
+            'vendor_de': f'Extra {index} GmbH', 'vendor_en': f'Extra {index} Ltd',
+            'date': '2026-03-03', 'amount': 75 + index,
+            'text_de': f'Extra {index} GmbH stellt Rechnung EXTRA-{index} über {75 + index} Euro.',
+            'text_en': f'Extra {index} Ltd issued invoice EXTRA-{index} for {75 + index} euros.',
+        } for index in range(5))
+
+        expected = {'bulk_categorization': 36, 'plan_actual_deviation': 36,
+                    'duplicate_payment_hunt': 36, 'invoice_extraction': 16}
+        for mission_type, payload in payloads.items():
+            normalized = _normalize_task_item_count(payload, mission_type, 'medium')
+            candidate = validate_task_challenge(normalized, mission_type, difficulty='medium')
+            self.assertEqual(len(candidate['content']['case_data']['de']), expected[mission_type])
+
+    def test_n8n_contract_does_not_invent_missing_rows(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        from accounts.services.n8n_mission_generation import _normalize_task_item_count
+
+        payload = self.plan_payload('medium')
+        payload['rows'].pop()
+        normalized = _normalize_task_item_count(payload, 'plan_actual_deviation', 'medium')
+        with self.assertRaisesRegex(AiMissionGenerationError, 'exactly 36 rows'):
+            validate_task_challenge(normalized, 'plan_actual_deviation', difficulty='medium')
+
     def test_prompt_contracts_name_exact_volume_and_results(self):
         from accounts.prompts.task_challenges import build_difficulty_instruction
         easy = build_difficulty_instruction('plan_actual_deviation', 'easy')
