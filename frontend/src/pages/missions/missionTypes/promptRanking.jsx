@@ -38,10 +38,26 @@ function ResultDetails({ mission, result, t }) {
   return <Paper withBorder radius="md" p="md"><Text fw={700} mb="xs">{t('missions.creator.rankingSolution')}</Text>{result.correct_order.map((optionIndex, index) => <Text key={optionIndex} fz="sm">{index + 1}. {mission.content.options[optionIndex]}</Text>)}{result.feedback && <Text fz="sm" c="dimmed" mt="sm">{result.feedback}</Text>}</Paper>
 }
 
+// Keeps a stored solution order as long as it is a full permutation of the
+// options; only a missing or inconsistent order falls back to the identity.
+function prepareRankingForm(form) {
+  const options = form.options.length < 3
+    ? [...form.options, ...Array.from({ length: 3 - form.options.length }, () => ({ de: '', en: '' }))]
+    : form.options
+  const stored = Array.isArray(form.correct_order) ? form.correct_order : []
+  const isPermutation = stored.length === options.length
+    && [...stored].sort((a, b) => a - b).every((value, index) => value === index)
+  return {
+    ...form,
+    options,
+    correct_order: isPermutation ? stored : options.map((_, index) => index),
+  }
+}
+
 export default {
   id: 'prompt_ranking', labelKey: 'promptRanking', hasSharedFeedback: true,
   createDefaults: () => ({ options: [{ de: '', en: '' }, { de: '', en: '' }, { de: '', en: '' }], correct_order: [0, 1, 2], correct_indices: [0] }),
-  prepareForm: (form) => ({ ...form, options: form.options.length < 3 ? [...form.options, ...Array.from({ length: 3 - form.options.length }, () => ({ de: '', en: '' }))] : form.options, correct_order: Array.from({ length: Math.max(3, form.options.length) }, (_, index) => index) }),
+  prepareForm: prepareRankingForm,
   initialAnswer: (mission) => mission.content.options.map((_, index) => index), isAnswerComplete: () => true,
   Runner, Editor, Solution, ResultDetails,
   evaluateTest: (mission, answer) => { const correct = answer.every((value, index) => value === mission.test_solution.correct_order[index]); return { correct, score: correct ? mission.max_points : 0, max_points: mission.max_points, correct_order: mission.test_solution.correct_order, feedback: mission.test_solution.feedback } },

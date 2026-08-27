@@ -137,6 +137,12 @@ function missionToForm(mission) {
     correct_order: mission.correct_order?.length ? mission.correct_order : (mission.options || []).map((_, index) => index),
     options: (mission.options || []).map((option) => ({ ...option })),
     statements: mission.statements?.length ? mission.statements.map((statement) => ({ ...statement })) : createEmptyForm().statements,
+    // Task challenges keep their case data and result fields here; without them
+    // prepareForm() would refill the editor with empty defaults.
+    case_format: mission.case_format,
+    case_data_de: (mission.case_data_de || []).map((row) => row),
+    case_data_en: (mission.case_data_en || []).map((row) => row),
+    result_fields: (mission.result_fields || []).map((field) => ({ ...field })),
   }
 }
 
@@ -197,13 +203,16 @@ function MissionSolutionContent({ mission, language, showSolution = true }) {
 
 function MissionCard({ mission, onOpen, archiveMode = false }) {
   const { i18n, t } = useTranslation()
-  const missionDate = new Date(`${mission.scheduled_date}T12:00:00`)
-  const formattedMissionDate = missionDate.toLocaleDateString(i18n.resolvedLanguage, {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
+  // Test missions are not scheduled, so the date row is skipped for them.
+  const missionDate = mission.scheduled_date ? new Date(`${mission.scheduled_date}T12:00:00`) : null
+  const formattedMissionDate = missionDate && !Number.isNaN(missionDate.getTime())
+    ? missionDate.toLocaleDateString(i18n.resolvedLanguage, {
+      weekday: 'long',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+    : ''
   return (
     <Paper withBorder radius="lg" p="xl" bg="white">
       <Stack gap="lg" h="100%">
@@ -218,10 +227,10 @@ function MissionCard({ mission, onOpen, archiveMode = false }) {
         <Box style={{ flex: 1 }}>
           <Text fw={700} fz="lg">{mission.title}</Text>
           <Text c="dimmed" fz="sm" mt={5}>{mission.description}</Text>
-          <Group gap={6} mt="sm" align="center">
+          {formattedMissionDate && <Group gap={6} mt="sm" align="center">
             <IconCalendar size={15} style={{ display: 'block', flexShrink: 0 }} />
             <Text c="dimmed" fz="sm" lh={1}>{formattedMissionDate}</Text>
-          </Group>
+          </Group>}
         </Box>
         <Group justify="space-between">
           <Badge variant="light" color="secondary">{missionTypeLabel(t, mission.type)}</Badge>

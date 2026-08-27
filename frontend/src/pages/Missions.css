@@ -201,7 +201,10 @@
   }
 }
 
-@media (max-width: 48em) {
+/* The three filter columns need ~730px; with the sidebar in place that is not
+   available until well past the sm breakpoint, so they stack at the same width
+   as .mission-manager-grid. */
+@media (max-width: 75em) {
   .archive-filter-grid {
     grid-template-columns: 1fr;
     width: 100%;
@@ -210,7 +213,9 @@
   .archive-period-value {
     width: 100%;
   }
+}
 
+@media (max-width: 48em) {
   .mission-review-switcher__item {
     min-width: 150px;
   }

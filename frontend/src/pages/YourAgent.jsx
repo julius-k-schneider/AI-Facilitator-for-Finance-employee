@@ -138,7 +138,7 @@ export default function YourAgent() {
 
   const starters = t('agent.starters', { returnObjects: true })
 
-  return <Box px={{ base: 'md', md: 32 }} py={{ base: 10, md: 12 }} w="100%" style={{ height: 'calc(100vh - 65px)', boxSizing: 'border-box', display: 'flex', overflow: 'hidden' }}>
+  return <Box px={{ base: 'md', md: 32 }} py={{ base: 10, md: 12 }} w="100%" style={{ height: 'calc(100vh - var(--app-header-h))', boxSizing: 'border-box', display: 'flex', overflow: 'hidden' }}>
     <Stack gap="sm" maw={1120} mx="auto" w="100%" style={{ flex: 1, minHeight: 0 }}>
       <Group justify="space-between" align="center">
         <Box>
