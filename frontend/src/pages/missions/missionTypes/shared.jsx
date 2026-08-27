@@ -56,7 +56,7 @@ export function evaluateChoiceTest(mission, answer, multiple = false) {
   return { correct, score: correct ? mission.max_points : 0, max_points: mission.max_points, correct_indices: expected, feedback }
 }
 
-export function choiceDefinition({ id, labelKey, multiple = false, example }) {
+export function choiceDefinition({ id, labelKey, multiple = false }) {
   return {
     id,
     labelKey,
@@ -68,7 +68,6 @@ export function choiceDefinition({ id, labelKey, multiple = false, example }) {
     Editor: (props) => <ChoiceEditor {...props} multiple={multiple} />,
     Solution: ChoiceSolution,
     evaluateTest: (mission, answer) => evaluateChoiceTest(mission, answer, multiple),
-    example,
   }
 }
 

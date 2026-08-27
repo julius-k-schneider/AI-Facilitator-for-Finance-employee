@@ -121,11 +121,6 @@ export const startNextWeekMissionGeneration = (weekStart, force = false) => requ
   { method: 'POST', body: JSON.stringify({ force, week_start: weekStart }) },
 )
 
-export const generateTaskChallenge = (missionType, scheduledDate) => startAndWait(
-  '/api/auth/missions/generate-task-challenge/',
-  { mission_type: missionType, scheduled_date: scheduledDate },
-)
-
 export const approveMission = (missionId) => request(`/api/auth/missions/${missionId}/approve/`, {
   method: 'POST',
 })

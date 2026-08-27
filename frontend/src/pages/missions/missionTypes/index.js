@@ -31,8 +31,3 @@ export function createMissionTypeDefaults() {
     correct_order: [0, 1, 2],
   }
 }
-
-export function createTestMissions(language) {
-  const text = (de, en) => language === 'en' ? en : de
-  return quizMissionTypes.map((definition) => definition.example(text))
-}

@@ -244,7 +244,7 @@
     "review": {
       "title": "AI-generated missions for review",
       "description": "Review bilingual proposals before they are published as daily missions.",
-      "generate": "Generate selected week",
+      "generate": "Generate",
       "selectWeek": "Select week for generation",
       "selectWeekButton": "Select week",
       "selectWeekDescription": "Select a week through Monday to Friday in the calendar. Existing missions remain visible for each day.",
@@ -287,8 +287,6 @@
           "repairing": "Flagged content is being repaired and will then be validated again."
         }
       },
-      "generateTask": "Generate AI hands-on task",
-      "taskGenerated": "A new AI hands-on task was created as a proposal.",
       "loading": "Loading review missions...",
       "empty": "There are currently no AI-generated missions awaiting review.",
       "status": "Draft / review",
@@ -304,11 +302,6 @@
       "approveSuccess": "The mission was approved.",
       "regenerateSuccess": "The mission was regenerated.",
       "rejectSuccess": "The mission proposal was rejected."
-    },
-    "test": {
-      "title": "Mission debug area",
-      "description": "Test every mission type with sample data without changing points or database records.",
-      "button": "Test missions"
     }
   },
   "research": {

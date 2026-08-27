@@ -244,7 +244,7 @@
     "review": {
       "title": "KI-generierte Missionen zur Prüfung",
       "description": "Prüfe zweisprachige Vorschläge, bevor sie als Daily Missions veröffentlicht werden.",
-      "generate": "Ausgewählte Woche generieren",
+      "generate": "Generieren",
       "selectWeek": "Woche für die Generierung auswählen",
       "selectWeekButton": "Wochenauswahl",
       "selectWeekDescription": "Wähle im Kalender eine Woche über Montag bis Freitag. Bestehende Missionen werden weiterhin pro Tag angezeigt.",
@@ -287,8 +287,6 @@
           "repairing": "Beanstandete Inhalte werden korrigiert und anschließend erneut geprüft."
         }
       },
-      "generateTask": "KI-Praxisaufgabe generieren",
-      "taskGenerated": "Eine neue KI-Praxisaufgabe wurde als Vorschlag erstellt.",
       "loading": "Review-Missionen werden geladen...",
       "empty": "Aktuell warten keine KI-generierten Missionen auf eine Prüfung.",
       "status": "Entwurf / Review",
@@ -304,11 +302,6 @@
       "approveSuccess": "Die Mission wurde freigegeben.",
       "regenerateSuccess": "Die Mission wurde neu generiert.",
       "rejectSuccess": "Der Missionsvorschlag wurde verworfen."
-    },
-    "test": {
-      "title": "Missions-Debugbereich",
-      "description": "Teste alle Missionsarten mit Beispieldaten, ohne Punkte oder Datenbankeinträge zu verändern.",
-      "button": "Missionen testen"
     }
   },
   "research": {
