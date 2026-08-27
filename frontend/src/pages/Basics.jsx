@@ -59,8 +59,7 @@ export default function Basics({ user, onUserUpdate, apiBase }) {
   const doneCount = chapters.filter((chapter) => completed.has(chapter.id)).length
   const allDone = Boolean(user?.onboarding_completed)
   const started = doneCount > 0
-  const totalSteps = chapters.length + 1
-  // Completed steps including the final quiz once everything is done.
+  const totalSteps = chapters.length
   const completedSteps = allDone ? totalSteps : doneCount
   const progressValue = (completedSteps / totalSteps) * 100
 
@@ -162,25 +161,6 @@ export default function Basics({ user, onUserUpdate, apiBase }) {
               lang={lang}
             />
           ))}
-          {/* Final quiz as the last step */}
-          <Group gap="md" wrap="nowrap" align="flex-start">
-            <ThemeIcon
-              size={32}
-              radius="xl"
-              variant={allDone ? 'filled' : 'light'}
-              color={allDone ? 'green' : 'gray'}
-            >
-              {allDone ? <IconCheck size={18} /> : <IconCircleDashed size={18} />}
-            </ThemeIcon>
-            <Box style={{ flex: 1, minWidth: 0 }}>
-              <Text fw={600} c="secondary.9">
-                {t('onboarding.finalTitle')}
-              </Text>
-              <Text fz="sm" c="dimmed">
-                {t('onboarding.finalSubtitle')}
-              </Text>
-            </Box>
-          </Group>
         </Stack>
 
         <Group>
