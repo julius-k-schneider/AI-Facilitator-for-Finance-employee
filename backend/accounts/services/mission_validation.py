@@ -12,13 +12,9 @@ class MissionValidationError(ValueError):
 ALLOWED_AI_TYPES = {
     Mission.TYPE_SINGLE_CHOICE,
     Mission.TYPE_MULTIPLE_CHOICE,
-    Mission.TYPE_COMPLIANCE_DECISION,
     Mission.TYPE_PROMPT_SELECTION,
     Mission.TYPE_PROMPT_RANKING,
-    Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT,
 }
-
-TRAFFIC_LIGHT_COLORS = {'green', 'yellow', 'red'}
 
 
 def required_text(value, field):
@@ -68,95 +64,57 @@ def normalize_generated_variant(raw_variant, mission_type, field_prefix):
     content = raw_variant.get('content')
     if not isinstance(content, dict):
         raise MissionValidationError(f'{field_prefix} content is required')
-    if mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
-        statements_de = content.get('statements_de')
-        statements_en = content.get('statements_en')
-        colors = content.get('correct_colors')
-        feedback_de = content.get('statement_feedback_de')
-        feedback_en = content.get('statement_feedback_en')
-        values = (statements_de, statements_en, colors, feedback_de, feedback_en)
-        if not all(isinstance(value, list) and len(value) == 3 for value in values):
-            raise MissionValidationError(f'{field_prefix} requires exactly three traffic-light statements')
-        if any(color not in TRAFFIC_LIGHT_COLORS for color in colors):
-            raise MissionValidationError(f'{field_prefix} has an invalid traffic-light color')
-        normalized_content = {
-            'question': {
-                'de': required_text(content.get('question_de'), f'{field_prefix} question_de'),
-                'en': required_text(content.get('question_en'), f'{field_prefix} question_en'),
-            },
-            'statements': [
-                {
-                    'text': {
-                        'de': required_text(de, f'{field_prefix} statement_de'),
-                        'en': required_text(en, f'{field_prefix} statement_en'),
-                    },
-                    'correct_color': color,
-                    'feedback': {
-                        'de': required_text(feedback_de[position], f'{field_prefix} statement_feedback_de'),
-                        'en': required_text(feedback_en[position], f'{field_prefix} statement_feedback_en'),
-                    },
-                }
-                for position, (de, en, color) in enumerate(zip(statements_de, statements_en, colors))
-            ],
-            'micro_learning': required_micro_learning(content, field_prefix),
+    options_de = content.get('options_de')
+    options_en = content.get('options_en')
+    if not isinstance(options_de, list) or not isinstance(options_en, list):
+        raise MissionValidationError(f'{field_prefix} options are required')
+    minimum_options = 3 if mission_type == Mission.TYPE_PROMPT_RANKING else 2
+    maximum_options = 4 if mission_type == Mission.TYPE_PROMPT_RANKING else 6
+    if len(options_de) < minimum_options or len(options_de) > maximum_options or len(options_de) != len(options_en):
+        raise MissionValidationError(
+            f'{field_prefix} must have {minimum_options} to {maximum_options} bilingual options'
+        )
+    options = [
+        {
+            'de': required_text(option_de, f'{field_prefix} option_de'),
+            'en': required_text(option_en, f'{field_prefix} option_en'),
         }
-        traffic_feedback = {
-            language: ' '.join(statement['feedback'][language] for statement in normalized_content['statements'])
-            for language in ('de', 'en')
-        }
-        ensure_distinct_explanations(traffic_feedback, normalized_content['micro_learning'], field_prefix)
+        for option_de, option_en in zip(options_de, options_en)
+    ]
+    normalized_content = {
+        'question': {
+            'de': required_text(content.get('question_de'), f'{field_prefix} question_de'),
+            'en': required_text(content.get('question_en'), f'{field_prefix} question_en'),
+        },
+        'options': options,
+    }
+    if mission_type == Mission.TYPE_PROMPT_RANKING:
+        try:
+            correct_order = [int(value) for value in content.get('correct_order', [])]
+        except (TypeError, ValueError) as error:
+            raise MissionValidationError(f'{field_prefix} has an invalid ranking') from error
+        if sorted(correct_order) != list(range(len(options))):
+            raise MissionValidationError(f'{field_prefix} ranking must contain every option exactly once')
+        normalized_content['correct_order'] = correct_order
     else:
-        options_de = content.get('options_de')
-        options_en = content.get('options_en')
-        if not isinstance(options_de, list) or not isinstance(options_en, list):
-            raise MissionValidationError(f'{field_prefix} options are required')
-        minimum_options = 3 if mission_type == Mission.TYPE_PROMPT_RANKING else 2
-        maximum_options = 4 if mission_type == Mission.TYPE_PROMPT_RANKING else 6
-        if len(options_de) < minimum_options or len(options_de) > maximum_options or len(options_de) != len(options_en):
-            raise MissionValidationError(
-                f'{field_prefix} must have {minimum_options} to {maximum_options} bilingual options'
-            )
-        options = [
-            {
-                'de': required_text(option_de, f'{field_prefix} option_de'),
-                'en': required_text(option_en, f'{field_prefix} option_en'),
-            }
-            for option_de, option_en in zip(options_de, options_en)
-        ]
-        normalized_content = {
-            'question': {
-                'de': required_text(content.get('question_de'), f'{field_prefix} question_de'),
-                'en': required_text(content.get('question_en'), f'{field_prefix} question_en'),
-            },
-            'options': options,
-        }
-        if mission_type == Mission.TYPE_PROMPT_RANKING:
-            try:
-                correct_order = [int(value) for value in content.get('correct_order', [])]
-            except (TypeError, ValueError) as error:
-                raise MissionValidationError(f'{field_prefix} has an invalid ranking') from error
-            if sorted(correct_order) != list(range(len(options))):
-                raise MissionValidationError(f'{field_prefix} ranking must contain every option exactly once')
-            normalized_content['correct_order'] = correct_order
-        else:
-            raw_correct_indices = content.get('correct_option_indices')
-            if raw_correct_indices is None and content.get('correct_option_index') is not None:
-                raw_correct_indices = [content.get('correct_option_index')]
-            try:
-                correct_indices = sorted({int(value) for value in (raw_correct_indices or [])})
-            except (TypeError, ValueError) as error:
-                raise MissionValidationError(f'{field_prefix} has an invalid correct answer') from error
-            if not correct_indices or any(value < 0 or value >= len(options) for value in correct_indices):
-                raise MissionValidationError(f'{field_prefix} correct answer is outside the options')
-            if mission_type != Mission.TYPE_MULTIPLE_CHOICE and len(correct_indices) != 1:
-                raise MissionValidationError(f'{field_prefix} requires exactly one correct answer')
-            normalized_content['correct_indices'] = correct_indices
-        normalized_content['feedback'] = {
-            'de': required_text(content.get('feedback_de'), f'{field_prefix} feedback_de'),
-            'en': required_text(content.get('feedback_en'), f'{field_prefix} feedback_en'),
-        }
-        normalized_content['micro_learning'] = required_micro_learning(content, field_prefix)
-        ensure_distinct_explanations(normalized_content['feedback'], normalized_content['micro_learning'], field_prefix)
+        raw_correct_indices = content.get('correct_option_indices')
+        if raw_correct_indices is None and content.get('correct_option_index') is not None:
+            raw_correct_indices = [content.get('correct_option_index')]
+        try:
+            correct_indices = sorted({int(value) for value in (raw_correct_indices or [])})
+        except (TypeError, ValueError) as error:
+            raise MissionValidationError(f'{field_prefix} has an invalid correct answer') from error
+        if not correct_indices or any(value < 0 or value >= len(options) for value in correct_indices):
+            raise MissionValidationError(f'{field_prefix} correct answer is outside the options')
+        if mission_type != Mission.TYPE_MULTIPLE_CHOICE and len(correct_indices) != 1:
+            raise MissionValidationError(f'{field_prefix} requires exactly one correct answer')
+        normalized_content['correct_indices'] = correct_indices
+    normalized_content['feedback'] = {
+        'de': required_text(content.get('feedback_de'), f'{field_prefix} feedback_de'),
+        'en': required_text(content.get('feedback_en'), f'{field_prefix} feedback_en'),
+    }
+    normalized_content['micro_learning'] = required_micro_learning(content, field_prefix)
+    ensure_distinct_explanations(normalized_content['feedback'], normalized_content['micro_learning'], field_prefix)
 
     return {
         'title_de': required_text(raw_variant.get('title_de'), f'{field_prefix} title_de'),

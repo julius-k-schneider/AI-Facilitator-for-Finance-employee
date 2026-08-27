@@ -23,7 +23,7 @@ Difficulty and learning design:
 - Increase genuine cognitive and execution complexity, not merely text length. The finance scenario and core learning
   objective must remain recognizably equivalent across all three variants.
 - Use this observable progression:
-  - Easy: one explicit decision criterion, direct guidance, and the minimum useful number of options or statements.
+  - Easy: one explicit decision criterion, direct guidance, and the minimum useful number of options.
   - Medium: at least two relevant constraints that must be combined without step-by-step guidance.
   - Hard: at least three interacting constraints plus a trade-off, risk check, or verification decision.
 - Do not reuse the same question and answer logic with only different wording, names, dates, or numbers. The reviewer
@@ -45,8 +45,7 @@ Content and safety:
 - Never use or invent personal, confidential, Lufthansa-internal, SAP, customer, or employee data.
 - Do not present legal or compliance advice as guaranteed truth. Use broadly accepted German enterprise principles and
   phrase compliance examples cautiously when company-specific rules could differ.
-- Only use these automatically scored types: single_choice, multiple_choice, compliance_decision, prompt_selection, prompt_ranking,
-  compliance_traffic_light.
+- Only use these automatically scored types: single_choice, multiple_choice, prompt_selection, prompt_ranking.
 - Single-answer types must have exactly one unambiguous correct answer. Multiple-choice missions may have one, several,
   or all answer options as correct.
 - Distractors must be plausible but clearly wrong at the intended beginner level.
@@ -61,12 +60,10 @@ Content and safety:
   "Why was this answer correct or incorrect?"; micro-learning answers "What should I apply in a similar situation?"
 - Prompt-ranking missions contain 3-4 prompts and rank every prompt from worst to best. Make the quality progression
   clear through goal, context, expected output format, and concrete expectations.
-- Compliance-traffic-light missions contain exactly three independent scenarios. Classify each as green (allowed),
-  yellow (allowed only with safeguards), or red (not allowed), and provide short scenario-specific feedback.
 - Descriptions must be one short, natural sentence summarizing the specific topic. Do not mention the expected duration,
   do not say that the learner must choose or determine an answer, and do not reuse a generic description template.
 - Keep the JSON compact: titles under 80 characters, descriptions under 140 characters, questions under 240 characters,
-  each option or statement under 180 characters, each feedback text under 240 characters, and each micro-learning text
+  each option under 180 characters, each feedback text under 240 characters, and each micro-learning text
   between 180 and 700 characters."""
 
 
@@ -79,31 +76,23 @@ def build_user_prompt(target_slots, requested_type=None):
 {type_requirement}
 Every mission must use one common type and contain exactly easy, medium, and hard. Use one shared bilingual topic and
 learning objective. Each variant uses 10-50 points. Return this structure:
-{{"missions":[{{"date":"YYYY-MM-DD","type":"single_choice|multiple_choice|compliance_decision|prompt_selection|prompt_ranking|compliance_traffic_light",
+{{"missions":[{{"date":"YYYY-MM-DD","type":"single_choice|multiple_choice|prompt_selection|prompt_ranking",
 "topic_de":"...","topic_en":"...","learning_objective_de":"...","learning_objective_en":"...",
 "variants":{{"easy":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":20,"content":{{...}}}},
 "medium":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":30,"content":{{...}}}},
 "hard":{{"title_de":"...","title_en":"...","description_de":"...","description_en":"...","points":40,"content":{{...}}}}}}}}]}}
-Each variant uses the matching content schema below. For single_choice, multiple_choice, compliance_decision, and
-prompt_selection use:
+Each variant uses the matching content schema below. For single_choice, multiple_choice, and prompt_selection use:
 {{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
 "correct_option_indices":[0],"feedback_de":"...","feedback_en":"...",
 "micro_learning_de":"...","micro_learning_en":"..."}}
 micro_learning_de and micro_learning_en must contain 2-4 transferable explanatory sentences, without a
 "Micro-Learning:" prefix and without repeating the feedback. multiple_choice may contain one to all correct indices;
-single_choice, compliance_decision, and prompt_selection require exactly one.
+single_choice and prompt_selection require exactly one.
 For prompt_ranking use exactly 3-4 bilingual prompts and provide their zero-based order from worst to best:
 {{"question_de":"...","question_en":"...","options_de":["..."],"options_en":["..."],
 "correct_order":[0,2,1],"feedback_de":"...","feedback_en":"...",
 "micro_learning_de":"...","micro_learning_en":"..."}}
-For compliance_traffic_light use exactly three bilingual scenarios, one valid color per scenario, and bilingual
-scenario-specific feedback:
-{{"question_de":"...","question_en":"...","statements_de":["...","...","..."],
-"statements_en":["...","...","..."],"correct_colors":["green","yellow","red"],
-"statement_feedback_de":["...","...","..."],"statement_feedback_en":["...","...","..."],
-"micro_learning_de":"...","micro_learning_en":"..."}}
-All five traffic-light arrays must contain exactly three items. Use only fields defined by the selected schema. Favor
-practical everyday AI usage such as prompting, checking outputs, confidentiality, and human review. Keep easy
+Use only fields defined by the selected schema. Favor practical everyday AI usage such as prompting, checking outputs, confidentiality, and human review. Keep easy
 beginner-friendly; medium and hard must add the explicit constraints defined above without changing the shared learning
 objective. Before returning, compare the three questions side by side and reject your draft if difficulty differs only
 by wording or figures. Then verify bilingual alignment, answer uniqueness, format consistency, exact dates, and valid JSON. Return one mission per

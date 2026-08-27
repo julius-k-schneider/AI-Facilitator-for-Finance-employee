@@ -101,7 +101,6 @@
     "rankingInstruction": "Sortiere die Prompts vom schlechtesten zum besten.",
     "moveUp": "Nach oben verschieben",
     "moveDown": "Nach unten verschieben",
-    "trafficLight": { "green": "Grün - erlaubt", "yellow": "Gelb - eingeschränkt", "red": "Rot - nicht erlaubt" },
     "streak": {
       "current": "Aktuelle Serie",
       "best": "Bestwert: {{count}}"
@@ -139,10 +138,8 @@
     "types": {
       "singleChoice": "Single Choice",
       "multipleChoice": "Multiple Choice",
-      "complianceDecision": "Compliance-Entscheidung",
       "promptSelection": "Prompt-Auswahl"
-      ,"promptRanking": "Prompt Ranking",
-      "complianceTrafficLight": "Compliance-Ampel"
+      ,"promptRanking": "Prompt Ranking"
       ,"aiChatChallenge": "AI Chat Challenge"
       ,"bulkCategorization": "Bulk-Kategorisierung"
       ,"planActualDeviation": "Abweichungsanalyse Plan/Ist"
@@ -201,8 +198,6 @@
       "answers": "Antwortmöglichkeiten",
       "addAnswer": "Antwort hinzufügen",
       "correctAnswer": "Richtige Antwort",
-      "statements": "Compliance-Aussagen",
-      "correctColor": "Richtige Ampelfarbe",
       "rankingSolution": "Korrekte Reihenfolge: schlechtester bis bester Prompt",
       "points": "Punkte",
       "save": "Mission planen",
@@ -438,10 +433,8 @@
     "types": {
       "singleChoice": { "title": "Single Choice", "description": "Trainiere eine Frage mit genau einer richtigen Antwort." },
       "multipleChoice": { "title": "Multiple Choice", "description": "Erkenne alle zutreffenden Antworten in einer praktischen Aufgabe." },
-      "complianceDecision": { "title": "Compliance-Entscheidung", "description": "Übe sichere Entscheidungen zur AI-Nutzung im Finance-Kontext." },
       "promptSelection": { "title": "Prompt-Auswahl", "description": "Wähle den klarsten und hilfreichsten Prompt für eine Situation." },
-      "promptRanking": { "title": "Prompt Ranking", "description": "Sortiere Prompts vom schlechtesten bis zum besten Arbeitsauftrag." },
-      "complianceTrafficLight": { "title": "Compliance-Ampel", "description": "Bewerte drei Szenarien einzeln als erlaubt, eingeschränkt oder verboten." }
+      "promptRanking": { "title": "Prompt Ranking", "description": "Sortiere Prompts vom schlechtesten bis zum besten Arbeitsauftrag." }
       ,"aiChatChallenge": { "title": "AI Chat Challenge", "description": "Löse einen Finance-Fall mit höchstens drei gezielten Fragen an einen eingebauten KI-Chat." }
       ,"bulkCategorization": { "title": "Bulk-Kategorisierung", "description": "Ordne viele Buchungszeilen mit deinem KI-Assistenten Kategorien zu und trage die Summen je Kategorie ein." }
       ,"planActualDeviation": { "title": "Abweichungsanalyse Plan/Ist", "description": "Finde mit deinem KI-Assistenten Kostenstellen, die ihr Budget überschritten haben, und trage die Kennzahlen ein." }
