@@ -33,6 +33,13 @@ function AccessDenied() {
   )
 }
 
+// Mirrors the Sidebar's requiresOnboarding rule so the pages it hides cannot be
+// reached by typing the URL either.
+function onboardingGate(user, element) {
+  const unlocked = user?.onboarding_completed || hasPermission(user, PERMISSIONS.CREATE_CONTENT)
+  return unlocked ? element : <Navigate to="/basics" replace />
+}
+
 function App() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -124,7 +131,7 @@ function App() {
     <AppShell layout="alt" navbar={{ width: 272, breakpoint: 'sm', collapsed: { mobile: !mobileOpened } }} padding={0}>
       <AppShell.Navbar withBorder={false}><Sidebar user={user} onLogout={handleLogout} /></AppShell.Navbar>
       <AppShell.Main style={{ background: 'var(--paper)' }}>
-        <Box px={{ base: 'lg', md: 40 }} py="md" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.7)', borderBottom: '1px solid var(--line)', position: 'sticky', top: 0, zIndex: 5 }}>
+        <Box px={{ base: 'lg', md: 40 }} py="md" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.7)', borderBottom: '1px solid var(--line)', position: 'sticky', top: 0, zIndex: 5, height: 'var(--app-header-h)' }}>
           <Group gap="md"><Burger opened={mobileOpened} onClick={toggleMobile} hiddenFrom="sm" size="sm" /><Box><Text fz={11} fw={700} c="brand.6">{NAV_LABEL_KEYS[location.pathname] ? t(NAV_LABEL_KEYS[location.pathname]).toUpperCase() : ''}</Text><Title order={3} fz={18}>{t('app.greeting', { name: user.first_name || user.username })}</Title></Box></Group>
           <Button variant="subtle" color="secondary" size="sm" onClick={() => i18n.changeLanguage(i18n.language === 'de' ? 'en' : 'de')} leftSection={<IconLanguage size={16} />}>{t('language.current')}</Button>
         </Box>
@@ -132,13 +139,13 @@ function App() {
           <Routes>
             <Route path="/" element={<Home user={user} />} />
             <Route path="/basics" element={<Basics user={user} onUserUpdate={setUser} apiBase={API_BASE} />} />
-            <Route path="/missions" element={<Missions key={location.key} user={user} />} />
+            <Route path="/missions" element={onboardingGate(user, <Missions key={location.key} user={user} />)} />
             <Route
               path="/research"
               element={hasPermission(user, PERMISSIONS.CREATE_CONTENT) ? <Research /> : <AccessDenied />}
             />
-            <Route path="/training" element={<Training />} />
-            <Route path="/agent" element={<YourAgent />} />
+            <Route path="/training" element={onboardingGate(user, <Training />)} />
+            <Route path="/agent" element={onboardingGate(user, <YourAgent />)} />
             <Route path="/leaderboard" element={<Leaderboard user={user} />} />
             <Route path="/profile" element={<Profile user={user} />} />
             <Route

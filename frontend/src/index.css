@@ -11,6 +11,9 @@
   --paper: #f4f7fc;
   --line: #e6ecf6;
 
+  /* Height of the sticky app header; full-height pages subtract it. */
+  --app-header-h: 73px;
+
   --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
   --font-body: 'Hanken Grotesk', system-ui, sans-serif;
 }
