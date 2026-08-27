@@ -421,34 +421,6 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.json()['result']['score'], 60)
         self.assertEqual(MissionAttempt.objects.get(user=player, mission=mission).answer['selected_order'], [1, 0, 2])
 
-    def test_compliance_traffic_light_awards_partial_points(self):
-        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
-        player = self.create_user('traffic@example.com')
-        mission = self.create_mission(creator, points=90)
-        mission.mission_type = Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT
-        mission.content = {
-            'question': {'de': 'Bewerte.', 'en': 'Assess.'},
-            'statements': [
-                {'text': {'de': 'A', 'en': 'A'}, 'correct_color': 'green', 'feedback': {'de': 'A', 'en': 'A'}},
-                {'text': {'de': 'B', 'en': 'B'}, 'correct_color': 'yellow', 'feedback': {'de': 'B', 'en': 'B'}},
-                {'text': {'de': 'C', 'en': 'C'}, 'correct_color': 'red', 'feedback': {'de': 'C', 'en': 'C'}},
-            ],
-        }
-        mission.save(update_fields=['mission_type', 'content'])
-        self.client.force_login(player)
-
-        available = self.client.get('/api/auth/missions/today/?lang=en', secure=True).json()['missions'][0]
-        self.assertNotIn('correct_color', str(available['content']))
-        response = self.client.post('/api/auth/progress/complete/', {
-            'mission_id': mission.id, 'answer': ['green', 'red', 'red'],
-        }, content_type='application/json', secure=True)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['result']['score'], 60)
-        self.assertEqual(response.json()['result']['correct_count'], 2)
-        self.assertEqual(response.json()['result']['item_correct'], [True, False, True])
-        self.assertFalse(response.json()['result']['correct'])
-
     def test_only_creators_can_create_and_date_is_limited_to_one_mission(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
         player = self.create_user('player@example.com')
@@ -1522,7 +1494,7 @@ class AiMissionServiceTests(TestCase):
         normalized = validate_generated_payload(payload, {start: 1})
         self.assertEqual(normalized[0]['mission_type'], Mission.TYPE_SINGLE_CHOICE)
 
-    def test_validator_accepts_prompt_ranking_and_traffic_light(self):
+    def test_validator_accepts_prompt_ranking(self):
         start, _ = next_calendar_week()
         ranking = self.valid_payload({start: 1})
         ranking['missions'][0]['type'] = Mission.TYPE_PROMPT_RANKING
@@ -1534,30 +1506,6 @@ class AiMissionServiceTests(TestCase):
         ranking['missions'][0]['content'].pop('correct_option_index')
         normalized = validate_generated_payload(ranking, {start: 1})
         self.assertEqual(normalized[0]['content']['correct_order'], [0, 1, 2])
-
-        traffic = self.valid_payload({start: 1})
-        traffic['missions'][0]['type'] = Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT
-        traffic_content = {
-            'question_de': 'Bewerte die Szenarien.', 'question_en': 'Assess the scenarios.',
-            'statements_de': ['A', 'B', 'C'], 'statements_en': ['A', 'B', 'C'],
-            'correct_colors': ['green', 'yellow', 'red'],
-            'statement_feedback_de': ['Gut', 'Prüfen', 'Verboten'],
-            'statement_feedback_en': ['Fine', 'Check', 'Forbidden'],
-            'micro_learning_de': (
-                'Die Ampel ist eine einfache Denkstütze für AI-Nutzung im Arbeitsalltag. '
-                'Grün bedeutet meist unkritisch, gelb braucht zusätzliche Schutzmaßnahmen, '
-                'und rot sollte nicht in ein AI-Tool eingegeben werden.'
-            ),
-            'micro_learning_en': (
-                'The traffic light is a simple thinking aid for AI use at work. Green usually means low risk, '
-                'yellow requires additional safeguards, and red should not be entered into an AI tool.'
-            ),
-        }
-        traffic['missions'][0]['content'] = traffic_content
-        for variant in traffic['missions'][0]['variants'].values():
-            variant['content'] = traffic_content
-        normalized = validate_generated_payload(traffic, {start: 1})
-        self.assertEqual(normalized[0]['content']['statements'][1]['correct_color'], 'yellow')
 
     def task_candidate(self):
         return {

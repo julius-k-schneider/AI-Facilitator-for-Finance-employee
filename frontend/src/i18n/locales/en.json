@@ -101,7 +101,6 @@
     "rankingInstruction": "Sort the prompts from worst to best.",
     "moveUp": "Move up",
     "moveDown": "Move down",
-    "trafficLight": { "green": "Green - allowed", "yellow": "Yellow - restricted", "red": "Red - not allowed" },
     "streak": {
       "current": "Current streak",
       "best": "Best: {{count}}"
@@ -139,10 +138,8 @@
     "types": {
       "singleChoice": "Single choice",
       "multipleChoice": "Multiple choice",
-      "complianceDecision": "Compliance decision",
       "promptSelection": "Prompt selection"
-      ,"promptRanking": "Prompt ranking",
-      "complianceTrafficLight": "Compliance traffic light"
+      ,"promptRanking": "Prompt ranking"
       ,"aiChatChallenge": "AI chat challenge"
       ,"bulkCategorization": "Bulk categorization"
       ,"planActualDeviation": "Plan vs. actual deviation"
@@ -201,8 +198,6 @@
       "answers": "Answer options",
       "addAnswer": "Add answer",
       "correctAnswer": "Correct answer",
-      "statements": "Compliance statements",
-      "correctColor": "Correct traffic-light color",
       "rankingSolution": "Correct order: worst to best prompt",
       "points": "Points",
       "save": "Schedule mission",
@@ -438,10 +433,8 @@
     "types": {
       "singleChoice": { "title": "Single choice", "description": "Practice a question with exactly one correct answer." },
       "multipleChoice": { "title": "Multiple choice", "description": "Identify all applicable answers in a practical task." },
-      "complianceDecision": { "title": "Compliance decision", "description": "Practice safe decisions about AI usage in finance." },
       "promptSelection": { "title": "Prompt selection", "description": "Choose the clearest and most useful prompt for a situation." },
-      "promptRanking": { "title": "Prompt ranking", "description": "Sort prompts from the weakest to the strongest instruction." },
-      "complianceTrafficLight": { "title": "Compliance traffic light", "description": "Assess three scenarios as allowed, restricted, or prohibited." }
+      "promptRanking": { "title": "Prompt ranking", "description": "Sort prompts from the weakest to the strongest instruction." }
       ,"aiChatChallenge": { "title": "AI chat challenge", "description": "Solve a finance case with no more than three focused questions to an embedded AI chat." }
       ,"bulkCategorization": { "title": "Bulk categorization", "description": "Use your AI assistant to assign many booking lines to categories and enter the totals per category." }
       ,"planActualDeviation": { "title": "Plan vs. actual deviation", "description": "Use your AI assistant to find cost centers that overran their budget and enter the key figures." }

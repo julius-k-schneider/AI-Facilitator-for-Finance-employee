@@ -281,10 +281,8 @@ class Mission(models.Model):
 
     TYPE_SINGLE_CHOICE = 'single_choice'
     TYPE_MULTIPLE_CHOICE = 'multiple_choice'
-    TYPE_COMPLIANCE_DECISION = 'compliance_decision'
     TYPE_PROMPT_SELECTION = 'prompt_selection'
     TYPE_PROMPT_RANKING = 'prompt_ranking'
-    TYPE_COMPLIANCE_TRAFFIC_LIGHT = 'compliance_traffic_light'
     TYPE_BULK_CATEGORIZATION = 'bulk_categorization'
     TYPE_PLAN_ACTUAL_DEVIATION = 'plan_actual_deviation'
     TYPE_DUPLICATE_PAYMENT_HUNT = 'duplicate_payment_hunt'
@@ -296,10 +294,8 @@ class Mission(models.Model):
     TYPE_CHOICES = [
         (TYPE_SINGLE_CHOICE, 'Single Choice'),
         (TYPE_MULTIPLE_CHOICE, 'Multiple Choice'),
-        (TYPE_COMPLIANCE_DECISION, 'Compliance Decision'),
         (TYPE_PROMPT_SELECTION, 'Prompt Selection'),
         (TYPE_PROMPT_RANKING, 'Prompt Ranking'),
-        (TYPE_COMPLIANCE_TRAFFIC_LIGHT, 'Compliance Traffic Light'),
         (TYPE_BULK_CATEGORIZATION, 'Bulk Categorization'),
         (TYPE_PLAN_ACTUAL_DEVIATION, 'Plan vs. Actual Deviation'),
         (TYPE_DUPLICATE_PAYMENT_HUNT, 'Duplicate Payment Hunt'),
@@ -313,10 +309,8 @@ class Mission(models.Model):
     CHOICE_TYPES = {
         TYPE_SINGLE_CHOICE,
         TYPE_MULTIPLE_CHOICE,
-        TYPE_COMPLIANCE_DECISION,
         TYPE_PROMPT_SELECTION,
         TYPE_PROMPT_RANKING,
-        TYPE_COMPLIANCE_TRAFFIC_LIGHT,
     }
     # Task-style types carry a case plus typed result fields scored deterministically.
     TASK_TYPES = {
