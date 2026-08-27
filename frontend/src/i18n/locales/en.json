@@ -554,7 +554,7 @@
   "onboarding": {
     "badge": "ONBOARDING",
     "hubTitle": "Onboarding",
-    "hubSubtitle": "Complete all chapters and the final quiz to unlock the daily challenges.",
+    "hubSubtitle": "Complete all chapters to unlock the daily challenges.",
     "completedBadge": "Completed",
     "overviewProgress": "{{done}} of {{total}} steps",
     "start": "Start onboarding",
@@ -571,15 +571,11 @@
     "wrong": "Not quite",
     "explanation": "Explanation",
     "next": "Continue",
-    "toFinal": "To the final quiz",
     "showResult": "Show result",
     "retry": "Try again",
     "quizPassed": "Passed!",
     "quizFailed": "Not passed yet",
     "score": "{{correct}} of {{total}} correct",
-    "finalTitle": "Final quiz",
-    "finalHeading": "Last step: final quiz",
-    "finalSubtitle": "Answer the following questions to complete your onboarding and unlock the daily challenges.",
     "finish": "Complete onboarding"
   },
   "pages": {
