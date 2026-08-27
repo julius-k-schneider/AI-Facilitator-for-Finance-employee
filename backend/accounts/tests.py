@@ -1984,6 +1984,224 @@ class AiTaskChallengeDifficultyContractTests(TestCase):
             })
         return {**self.common(), 'invoices': invoices}
 
+    def policy_payload(self, difficulty):
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        hotel_count, hospitality_count = {'easy': (3, 2), 'medium': (4, 3), 'hard': (5, 4)}[difficulty]
+        rows = []
+        excess = 10.0
+        for index in range(hotel_count):
+            rows.append({
+                'date': '2026-03-01', 'employee_de': f'M. Vogel {index}', 'employee_en': f'M. Vogel {index}',
+                'category': 'hotel', 'units': 2, 'amount': round(300.0 + excess, 2),
+                'description_de': 'Hotel Rheinblick, 2 Naechte waehrend des Audits',
+                'description_en': 'Hotel Rheinblick, 2 nights during the audit',
+            })
+            excess += 10.0
+        for index in range(hospitality_count):
+            rows.append({
+                'date': '2026-03-02', 'employee_de': f'S. Krause {index}', 'employee_en': f'S. Krause {index}',
+                'category': 'hospitality', 'units': 3, 'amount': round(180.0 + excess, 2),
+                'description_de': 'Abendessen mit 3 Kunden im Restaurant Vitali',
+                'description_en': 'Dinner with 3 clients at Restaurant Vitali',
+            })
+            excess += 10.0
+        rows.extend({
+            'date': '2026-03-03', 'employee_de': 'T. Reiter', 'employee_en': 'T. Reiter',
+            'category': 'other', 'units': 1, 'amount': 48.00,
+            'description_de': 'Bahnticket zweiter Klasse nach Koeln',
+            'description_en': 'Second class train ticket to Cologne',
+        } for _ in range(row_count - len(rows)))
+        return {**self.common(), 'rows': rows}
+
+    def aging_payload(self, difficulty):
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        over_60_count = {'easy': 4, 'medium': 6, 'hard': 8}[difficulty]
+        reference_date = date(2026, 4, 30)
+
+        def row(number, days_overdue):
+            invoice_date = reference_date - timedelta(days=days_overdue + 30)
+            return {
+                'invoice_number': f'RE-{number}', 'customer_de': f'Brandt Logistik {number} GmbH',
+                'customer_en': f'Brandt Logistics {number} GmbH', 'invoice_date': invoice_date.isoformat(),
+                'term_days': 30, 'term_de': '30 Tage netto', 'term_en': '30 days net',
+                'amount': 1000.00 + number,
+            }
+
+        rows = [row(100 + index, 65 + index * 5) for index in range(over_60_count)]
+        rows.extend(row(200 + index, [10, 45, -20][index % 3]) for index in range(row_count - len(rows)))
+        return {**self.common(), 'reference_date': reference_date.isoformat(), 'rows': rows}
+
+    def vat_payload(self, difficulty):
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        wrong_count = {'easy': 4, 'medium': 6, 'hard': 8}[difficulty]
+        rows = [{
+            'date': '2026-03-02', 'category': 'books', 'net': 1000.00 + index * 100, 'booked_rate': 19,
+            'description_de': 'Lieferung von Fachbuechern zum Bilanzrecht',
+            'description_en': 'Delivery of accounting law textbooks',
+        } for index in range(wrong_count)]
+        rows.extend({
+            'date': '2026-03-03', 'category': 'consulting', 'net': 1000.00, 'booked_rate': 19,
+            'description_de': 'Beratungshonorar Prozessoptimierung',
+            'description_en': 'Consulting fee for process optimisation',
+        } for _ in range(row_count - len(rows)))
+        return {**self.common(), 'rows': rows}
+
+    def bank_payload(self, difficulty):
+        pairs, bank_only, ledger_only = {'easy': (10, 3, 1), 'medium': (15, 4, 2), 'hard': (20, 5, 3)}[difficulty]
+        rows = []
+        for index in range(pairs):
+            document = f'RE-{100 + index}'
+            amount = 100.00 + index
+            rows.append({
+                'source': 'bank', 'date': '2026-03-01', 'document': document, 'amount': amount,
+                'text_de': f'zahlung re {100 + index} mueller gmbh',
+                'text_en': f'payment inv {100 + index} mueller gmbh',
+            })
+            rows.append({
+                'source': 'ledger', 'date': '2026-03-01', 'document': document, 'amount': amount,
+                'text_de': 'Mueller GmbH Wartungsvertrag', 'text_en': 'Mueller GmbH maintenance contract',
+            })
+        rows.extend({
+            'source': 'bank', 'date': '2026-03-05', 'document': f'BO-{index}', 'amount': 500.00 + index * 10,
+            'text_de': f'ueberweisung bo {index} seiler ag', 'text_en': f'transfer bo {index} seiler ag',
+        } for index in range(bank_only))
+        rows.extend({
+            'source': 'ledger', 'date': '2026-03-06', 'document': f'LO-{index}', 'amount': 900.00 + index * 10,
+            'text_de': 'Seiler AG Materiallieferung', 'text_en': 'Seiler AG material delivery',
+        } for index in range(ledger_only))
+        return {**self.common(), 'rows': rows}
+
+    def test_analysis_task_answer_keys_are_computed_in_python(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        expected = {
+            'policy_violation_check': {
+                'violation_count': 9, 'non_reimbursable_sum': 450.0, 'largest_violation': 90.0,
+                'top_rule': {'de': 'Hotel', 'en': 'Hotel'},
+            },
+            'receivables_aging': {'count_over_60': 8, 'sum_over_60': 8828.0,
+                                  'oldest_invoice_number': {'de': 'RE-107', 'en': 'RE-107'}},
+            'vat_rate_audit': {'wrong_line_count': 8, 'correct_total_vat': 8356.0,
+                               'vat_difference_sum': 1296.0, 'largest_vat_difference': 204.0},
+            'bank_reconciliation': {'bank_only_count': 5, 'ledger_only_count': 3,
+                                    'unmatched_amount_sum': 5330.0, 'largest_unmatched_amount': 920.0},
+        }
+        builders = {
+            'policy_violation_check': self.policy_payload,
+            'receivables_aging': self.aging_payload,
+            'vat_rate_audit': self.vat_payload,
+            'bank_reconciliation': self.bank_payload,
+        }
+        for mission_type, solutions in expected.items():
+            candidate = validate_task_challenge(builders[mission_type]('hard'), mission_type, difficulty='hard')
+            fields = {field['id']: field for field in candidate['content']['result_fields']}
+            for field_id, solution in solutions.items():
+                self.assertEqual(fields[field_id]['solution'], solution, f'{mission_type}.{field_id}')
+
+    def test_task_generation_budget_is_shared_by_every_call_site(self):
+        # The n8n path builds its own generator request. When its budget drifted below the
+        # direct path's, hard-constraint task types were truncated mid-array and failed the
+        # row-count contract with no sign of the real cause.
+        import inspect
+        from accounts.services import n8n_mission_generation
+        from accounts.services.ai_task_challenge import GENERATION_MAX_TOKENS
+
+        self.assertGreaterEqual(GENERATION_MAX_TOKENS, 9000)
+        task_source = inspect.getsource(n8n_mission_generation._task_requirement)
+        self.assertIn('TASK_GENERATION_MAX_TOKENS', task_source)
+        self.assertNotRegex(task_source, r'max_tokens=\d+')
+
+    def test_ambiguity_guards_only_apply_to_requested_fields(self):
+        # Enforcing every tie regardless of difficulty rejected roughly half of all easy
+        # variants over answers those variants never ask for.
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        payload = self.policy_payload('easy')
+        for row in payload['rows']:
+            if row['category'] == 'hotel':  # 3 hotel + 2 hospitality -> 2 vs 2, a tied top rule
+                row.update({
+                    'category': 'other', 'units': 1, 'amount': 48.00,
+                    'description_de': 'Parkgebuehr Flughafen', 'description_en': 'Airport parking fee',
+                })
+                break
+
+        easy = validate_task_challenge(payload, 'policy_violation_check', difficulty='easy')
+        self.assertEqual(
+            [field['id'] for field in easy['content']['result_fields']],
+            ['violation_count', 'non_reimbursable_sum'],
+        )
+        for field in easy['content']['result_fields']:
+            self.assertNotIn('ambiguous', field)
+
+        # hard does ask for the most-broken rule, so the same data must be rejected there.
+        hard_payload = self.policy_payload('hard')
+        for row in hard_payload['rows']:
+            if row['category'] == 'hotel':
+                row.update({
+                    'category': 'other', 'units': 1, 'amount': 48.00,
+                    'description_de': 'Parkgebuehr Flughafen', 'description_en': 'Airport parking fee',
+                })
+                break
+        with self.assertRaisesRegex(AiMissionGenerationError, 'top_rule has no unique answer'):
+            validate_task_challenge(hard_payload, 'policy_violation_check', difficulty='hard')
+
+    def test_analysis_task_contracts_name_the_schema_key(self):
+        # A contract noun that differs from the JSON key makes the model rename the array,
+        # which surfaces as a bogus "needs exactly 24 rows" failure.
+        from accounts.prompts.task_challenges import TASK_DIFFICULTY_CONTRACTS
+        for mission_type in ('policy_violation_check', 'receivables_aging', 'vat_rate_audit', 'bank_reconciliation'):
+            for difficulty, contract in TASK_DIFFICULTY_CONTRACTS[mission_type].items():
+                self.assertRegex(
+                    contract, r'\d+ rows',
+                    f'{mission_type}/{difficulty} must name the rows key, not a scenario synonym',
+                )
+                for synonym in ('expense lines', 'booking lines', 'open invoices', 'row objects'):
+                    self.assertNotIn(synonym, contract, f'{mission_type}/{difficulty} renames the rows key')
+
+    def test_analysis_task_volume_tolerates_a_stray_row(self):
+        # Models satisfy the content rules but overshoot the count; an exact demand failed the
+        # whole run over a row a learner cannot even perceive.
+        from accounts.services.ai_task_challenge import VOLUME_BAND_TOLERANCE, validate_task_challenge
+        payload = self.policy_payload('easy')
+        extra = dict(payload['rows'][-1])
+        payload['rows'].extend(dict(extra) for _ in range(VOLUME_BAND_TOLERANCE))
+        candidate = validate_task_challenge(payload, 'policy_violation_check', difficulty='easy')
+        self.assertEqual(len(candidate['content']['case_data']['de']), 24 + VOLUME_BAND_TOLERANCE)
+
+        # One row beyond the band is still rejected, so the difficulties stay far apart.
+        payload['rows'].append(dict(extra))
+        with self.assertRaisesRegex(AiMissionGenerationError, 'needs 24 to 28 rows'):
+            validate_task_challenge(payload, 'policy_violation_check', difficulty='easy')
+
+    def test_analysis_task_ambiguous_data_is_rejected(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+
+        # A tie for "largest single violation" is ambiguous from medium up, where the field is asked.
+        payload = self.policy_payload('medium')
+        payload['rows'][4]['amount'] = payload['rows'][6]['amount']
+        with self.assertRaisesRegex(AiMissionGenerationError, 'largest_violation has no unique answer'):
+            validate_task_challenge(payload, 'policy_violation_check', difficulty='medium')
+
+        # The policy input has to be legible from the prose, not from a hidden column.
+        payload = self.policy_payload('easy')
+        payload['rows'][0]['description_de'] = 'Hotel Rheinblick, zwei Naechte waehrend des Audits'
+        with self.assertRaisesRegex(AiMissionGenerationError, 'digit'):
+            validate_task_challenge(payload, 'policy_violation_check', difficulty='easy')
+
+        # An invoice becoming due exactly on the cut-off date is not gradable either way.
+        payload = self.aging_payload('easy')
+        payload['rows'][-1]['invoice_date'] = (date(2026, 4, 30) - timedelta(days=30)).isoformat()
+        with self.assertRaisesRegex(AiMissionGenerationError, 'due exactly on the reference date'):
+            validate_task_challenge(payload, 'receivables_aging', difficulty='easy')
+
+        # Both reconciliation counts being equal would let one guess cover both fields.
+        payload = self.bank_payload('easy')
+        payload['rows'] = [row for row in payload['rows'] if row['document'] != 'BO-2']
+        payload['rows'].append({
+            'source': 'ledger', 'date': '2026-03-06', 'document': 'LO-8', 'amount': 930.00,
+            'text_de': 'Seiler AG Nachlieferung', 'text_en': 'Seiler AG follow-up delivery',
+        })
+        with self.assertRaisesRegex(AiMissionGenerationError, 'different unmatched count'):
+            validate_task_challenge(payload, 'bank_reconciliation', difficulty='easy')
+
     def test_every_task_type_has_observable_difficulty_progression(self):
         from accounts.services.ai_task_challenge import validate_task_challenge
         expected_fields = {
@@ -1991,18 +2209,30 @@ class AiTaskChallengeDifficultyContractTests(TestCase):
             'plan_actual_deviation': {'easy': 2, 'medium': 3, 'hard': 5},
             'duplicate_payment_hunt': {'easy': 1, 'medium': 2, 'hard': 3},
             'invoice_extraction': {'easy': 2, 'medium': 3, 'hard': 4},
+            'policy_violation_check': {'easy': 2, 'medium': 3, 'hard': 4},
+            'receivables_aging': {'easy': 2, 'medium': 3, 'hard': 4},
+            'vat_rate_audit': {'easy': 2, 'medium': 3, 'hard': 4},
+            'bank_reconciliation': {'easy': 2, 'medium': 3, 'hard': 4},
         }
         builders = {
             'bulk_categorization': self.bulk_payload,
             'plan_actual_deviation': self.plan_payload,
             'duplicate_payment_hunt': self.duplicate_payload,
             'invoice_extraction': self.invoice_payload,
+            'policy_violation_check': self.policy_payload,
+            'receivables_aging': self.aging_payload,
+            'vat_rate_audit': self.vat_payload,
+            'bank_reconciliation': self.bank_payload,
         }
         expected_items = {
             'bulk_categorization': [24, 36, 48],
             'plan_actual_deviation': [24, 36, 48],
             'duplicate_payment_hunt': [24, 36, 48],
             'invoice_extraction': [12, 16, 20],
+            'policy_violation_check': [24, 36, 48],
+            'receivables_aging': [24, 36, 48],
+            'vat_rate_audit': [24, 36, 48],
+            'bank_reconciliation': [24, 36, 48],
         }
         for mission_type, builder in builders.items():
             variants = [

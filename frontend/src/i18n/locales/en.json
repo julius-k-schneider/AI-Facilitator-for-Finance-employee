@@ -147,6 +147,10 @@
       ,"planActualDeviation": "Plan vs. actual deviation"
       ,"duplicatePaymentHunt": "Duplicate payment hunt"
       ,"invoiceExtraction": "Invoice extraction"
+      ,"policyViolationCheck": "Travel policy check"
+      ,"receivablesAging": "Receivables aging"
+      ,"vatRateAudit": "VAT rate audit"
+      ,"bankReconciliation": "Bank reconciliation"
     },
     "result": {
       "correctPrefix": "Correct.",
@@ -332,6 +336,10 @@
       ,"planActualDeviation": { "title": "Plan vs. actual deviation", "description": "Use your AI assistant to find cost centers that overran their budget and enter the key figures." }
       ,"duplicatePaymentHunt": { "title": "Duplicate payment hunt", "description": "Use your AI assistant to find accidental duplicate payments in a payment run." }
       ,"invoiceExtraction": { "title": "Invoice extraction", "description": "Use your AI assistant to extract key figures from many invoice texts." }
+      ,"policyViolationCheck": { "title": "Travel policy check", "description": "Use your AI assistant to check expense lines against a given travel policy." }
+      ,"receivablesAging": { "title": "Receivables aging", "description": "Derive due dates from the payment terms and age the open receivables." }
+      ,"vatRateAudit": { "title": "VAT rate audit", "description": "Use your AI assistant to find bookings where the wrong VAT rate was applied." }
+      ,"bankReconciliation": { "title": "Bank reconciliation", "description": "Reconcile free-text payment references from the bank statement against the ledger." }
     },
     "chat": {
       "caseData": "Case data",

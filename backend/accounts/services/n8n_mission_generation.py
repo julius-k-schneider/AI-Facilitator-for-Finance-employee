@@ -21,6 +21,7 @@ from accounts.services.ai_mission_generator import (
     plan_next_week,
 )
 from accounts.services.ai_task_challenge import (
+    GENERATION_MAX_TOKENS as TASK_GENERATION_MAX_TOKENS,
     SYSTEM_PROMPT as TASK_SYSTEM_PROMPT,
     TASK_CHALLENGE_PROMPTS,
     TASK_CHALLENGE_TYPES,
@@ -137,7 +138,7 @@ def _task_requirement(requirement_id, scheduled_date, mission_type, difficulties
                             f'{build_difficulty_instruction(mission_type, difficulty)}'
                         ),
                     },
-                ], temperature=0.5, max_tokens=4500),
+                ], temperature=0.5, max_tokens=TASK_GENERATION_MAX_TOKENS),
             }
             for difficulty in difficulties
         ],
