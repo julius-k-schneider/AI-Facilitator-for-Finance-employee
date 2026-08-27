@@ -289,6 +289,10 @@ class Mission(models.Model):
     TYPE_PLAN_ACTUAL_DEVIATION = 'plan_actual_deviation'
     TYPE_DUPLICATE_PAYMENT_HUNT = 'duplicate_payment_hunt'
     TYPE_INVOICE_EXTRACTION = 'invoice_extraction'
+    TYPE_POLICY_VIOLATION_CHECK = 'policy_violation_check'
+    TYPE_RECEIVABLES_AGING = 'receivables_aging'
+    TYPE_VAT_RATE_AUDIT = 'vat_rate_audit'
+    TYPE_BANK_RECONCILIATION = 'bank_reconciliation'
     TYPE_CHOICES = [
         (TYPE_SINGLE_CHOICE, 'Single Choice'),
         (TYPE_MULTIPLE_CHOICE, 'Multiple Choice'),
@@ -300,6 +304,10 @@ class Mission(models.Model):
         (TYPE_PLAN_ACTUAL_DEVIATION, 'Plan vs. Actual Deviation'),
         (TYPE_DUPLICATE_PAYMENT_HUNT, 'Duplicate Payment Hunt'),
         (TYPE_INVOICE_EXTRACTION, 'Invoice Extraction'),
+        (TYPE_POLICY_VIOLATION_CHECK, 'Policy Violation Check'),
+        (TYPE_RECEIVABLES_AGING, 'Receivables Aging'),
+        (TYPE_VAT_RATE_AUDIT, 'VAT Rate Audit'),
+        (TYPE_BANK_RECONCILIATION, 'Bank Reconciliation'),
     ]
     # Quiz-style types share a common choice/index scoring model.
     CHOICE_TYPES = {
@@ -316,6 +324,10 @@ class Mission(models.Model):
         TYPE_PLAN_ACTUAL_DEVIATION,
         TYPE_DUPLICATE_PAYMENT_HUNT,
         TYPE_INVOICE_EXTRACTION,
+        TYPE_POLICY_VIOLATION_CHECK,
+        TYPE_RECEIVABLES_AGING,
+        TYPE_VAT_RATE_AUDIT,
+        TYPE_BANK_RECONCILIATION,
     }
 
     STATUS_REVIEW = 'review'

@@ -148,6 +148,10 @@
       ,"planActualDeviation": "Abweichungsanalyse Plan/Ist"
       ,"duplicatePaymentHunt": "Doppelzahlungs-Jagd"
       ,"invoiceExtraction": "Rechnungsdaten-Extraktion"
+      ,"policyViolationCheck": "Reisekosten-Richtlinienprüfung"
+      ,"receivablesAging": "Offene-Posten-Analyse"
+      ,"vatRateAudit": "Umsatzsteuer-Prüfung"
+      ,"bankReconciliation": "Bankauszug-Abstimmung"
     },
     "result": {
       "correctPrefix": "Richtig.",
@@ -443,6 +447,10 @@
       ,"planActualDeviation": { "title": "Abweichungsanalyse Plan/Ist", "description": "Finde mit deinem KI-Assistenten Kostenstellen, die ihr Budget überschritten haben, und trage die Kennzahlen ein." }
       ,"duplicatePaymentHunt": { "title": "Doppelzahlungs-Jagd", "description": "Finde mit deinem KI-Assistenten versehentliche Doppelzahlungen in einem Zahlungslauf." }
       ,"invoiceExtraction": { "title": "Rechnungsdaten-Extraktion", "description": "Lass dir mit deinem KI-Assistenten Kennzahlen aus vielen Rechnungstexten extrahieren." }
+      ,"policyViolationCheck": { "title": "Reisekosten-Richtlinienprüfung", "description": "Prüfe Spesenzeilen mit deinem KI-Assistenten gegen eine vorgegebene Reisekostenrichtlinie." }
+      ,"receivablesAging": { "title": "Offene-Posten-Analyse", "description": "Leite Fälligkeiten aus den Zahlungszielen ab und werte die offenen Posten nach Alter aus." }
+      ,"vatRateAudit": { "title": "Umsatzsteuer-Prüfung", "description": "Finde mit deinem KI-Assistenten Buchungen, bei denen der falsche Umsatzsteuersatz gezogen wurde." }
+      ,"bankReconciliation": { "title": "Bankauszug-Abstimmung", "description": "Gleiche Freitext-Verwendungszwecke aus dem Bankauszug gegen die Buchhaltung ab." }
     },
     "chat": {
       "caseData": "Falldaten",
