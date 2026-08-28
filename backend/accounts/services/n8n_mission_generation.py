@@ -30,6 +30,12 @@ from accounts.services.ai_task_challenge import (
     validate_task_challenge,
 )
 from accounts.services.mission_validation import MissionValidationError, validate_generated_payload
+from accounts.services.mission_deduplication import (
+    candidate_duplicate,
+    deduplication_snapshot,
+    history_instruction,
+    recent_mission_history,
+)
 from accounts.services.n8n_client import N8NClientError, start_mission_generation
 
 
@@ -88,6 +94,9 @@ def generation_run_payload(run):
         'failed_count': len(failed_requirements),
         'failed_requirements': failed_requirements,
         'partial_success': run.status == GenerationRun.STATUS_COMPLETED and bool(failed_requirements),
+        'automatic_retry_run_id': metadata.get('automatic_retry_run_id'),
+        'automatic_retry_attempt': metadata.get('automatic_retry_attempt', 0),
+        'automatic_retry_of': metadata.get('automatic_retry_of'),
         'mission_ids': list(run.missions.order_by('scheduled_date').values_list('id', flat=True)),
         'created_at': run.created_at.isoformat() if run.created_at else None,
         'updated_at': run.updated_at.isoformat() if run.updated_at else None,
@@ -106,20 +115,27 @@ def _generator_request(messages, *, temperature, max_tokens):
     }
 
 
-def _quiz_requirement(requirement_id, scheduled_date, requested_type=None):
+def _with_history(messages, history):
+    instruction = history_instruction(history)
+    if instruction:
+        return [*messages, {'role': 'user', 'content': instruction}]
+    return messages
+
+
+def _quiz_requirement(requirement_id, scheduled_date, requested_type=None, history=()):
     return {
         'id': requirement_id,
         'output_type': OUTPUT_QUIZ_MISSION,
         'scheduled_date': scheduled_date.isoformat(),
         'requested_mission_type': requested_type,
-        'generator_requests': [_generator_request([
+        'generator_requests': [_generator_request(_with_history([
             {'role': 'system', 'content': QUIZ_SYSTEM_PROMPT},
             {'role': 'user', 'content': build_user_prompt({scheduled_date: 1}, requested_type)},
-        ], temperature=0.4, max_tokens=9000)],
+        ], history), temperature=0.4, max_tokens=9000)],
     }
 
 
-def _task_requirement(requirement_id, scheduled_date, mission_type, difficulties):
+def _task_requirement(requirement_id, scheduled_date, mission_type, difficulties, history=()):
     return {
         'id': requirement_id,
         'output_type': OUTPUT_TASK_MISSION if len(difficulties) == 3 else OUTPUT_TRAINING_TASK,
@@ -129,7 +145,7 @@ def _task_requirement(requirement_id, scheduled_date, mission_type, difficulties
         'generator_requests': [
             {
                 'difficulty': difficulty,
-                **_generator_request([
+                **_generator_request(_with_history([
                     {'role': 'system', 'content': TASK_SYSTEM_PROMPT},
                     {
                         'role': 'user',
@@ -138,7 +154,7 @@ def _task_requirement(requirement_id, scheduled_date, mission_type, difficulties
                             f'{build_difficulty_instruction(mission_type, difficulty)}'
                         ),
                     },
-                ], temperature=0.5, max_tokens=TASK_GENERATION_MAX_TOKENS),
+                ], history), temperature=0.5, max_tokens=TASK_GENERATION_MAX_TOKENS),
             }
             for difficulty in difficulties
         ],
@@ -199,12 +215,25 @@ def create_weekly_run(requested_by, *, force=False, week_start=None):
     ).first()
     if active:
         return active
+    history = recent_mission_history()
     requirements = []
     for day in sorted(quiz_days):
-        requirements.append(_quiz_requirement(day.isoformat(), day))
+        requirements.append(_quiz_requirement(day.isoformat(), day, history=history))
+    # Prefer the task types that have never been used or were used least recently.
+    # Shuffle first so equally old types do not always follow source-code order.
+    recent_task_types = [item['mission_type'] for item in history]
+    task_type_pool = list(TASK_CHALLENGE_TYPES)
+    random.shuffle(task_type_pool)
+    task_type_pool.sort(
+        key=lambda item: (
+            recent_task_types.index(item) if item in recent_task_types else len(history) + 1
+        ),
+        reverse=True,
+    )
     for day in sorted(task_days):
+        mission_type = task_type_pool.pop(0)
         requirements.append(_task_requirement(
-            day.isoformat(), day, random.choice(TASK_CHALLENGE_TYPES), Mission.DIFFICULTIES,
+            day.isoformat(), day, mission_type, Mission.DIFFICULTIES, history,
         ))
     return _create_run(
         requested_by,
@@ -226,12 +255,14 @@ def create_regeneration_run(requested_by, mission):
     ).first()
     if active:
         return active
+    # Regeneration must also differ materially from the mission it replaces.
+    history = recent_mission_history()
     if mission.mission_type in Mission.TASK_TYPES:
         requirement = _task_requirement(
-            'replacement', mission.scheduled_date, mission.mission_type, Mission.DIFFICULTIES,
+            'replacement', mission.scheduled_date, mission.mission_type, Mission.DIFFICULTIES, history,
         )
     else:
-        requirement = _quiz_requirement('replacement', mission.scheduled_date)
+        requirement = _quiz_requirement('replacement', mission.scheduled_date, history=history)
     return _create_run(
         requested_by,
         GenerationRun.KIND_REGENERATE_MISSION,
@@ -462,9 +493,12 @@ def validate_requirement_result(run, requirement_id, result):
         requested_type = requirement.get('requested_mission_type')
         if requested_type and candidate['mission_type'] != requested_type:
             raise GenerationContractError('result does not use the requested mission type')
+        _reject_duplicate_candidate(run, candidate)
         return candidate
     if output_type == OUTPUT_TASK_MISSION:
-        return _validated_task_mission(requirement, result)
+        candidate = _validated_task_mission(requirement, result)
+        _reject_duplicate_candidate(run, candidate)
+        return candidate
     if output_type == OUTPUT_TRAINING_TASK:
         difficulty = requirement['difficulties'][0]
         raw_payload = result.get('payload')
@@ -485,6 +519,51 @@ def validate_requirement_result(run, requirement_id, result):
         except AiMissionGenerationError as exception:
             raise GenerationContractError(str(exception)) from exception
     raise GenerationContractError('requirement has an unsupported output type')
+
+
+def _reject_duplicate_candidate(run, candidate, *, additional_candidates=()):
+    duplicate = candidate_duplicate(
+        candidate,
+        additional_candidates=additional_candidates,
+    )
+    if duplicate is None:
+        return
+    matched, score = duplicate
+    matched_date = getattr(matched, 'scheduled_date', None)
+    detail = f' from {matched_date.isoformat()}' if matched_date else ' in this generation run'
+    repair_guidance = ''
+    if candidate.get('mission_type') not in Mission.TASK_TYPES:
+        repair_guidance = (
+            ' For a quiz mission, replace /payload/missions/0/topic_de, '
+            '/payload/missions/0/topic_en, /payload/missions/0/learning_objective_de, '
+            '/payload/missions/0/learning_objective_en, and the question fields in all three variants '
+            'with a genuinely different learning focus.'
+        )
+    raise GenerationContractError(
+        f'generated mission substantially duplicates an existing mission{detail} '
+        f'(similarity {score:.0%}); generate a different learning objective and scenario.'
+        f'{repair_guidance}'
+    )
+
+
+def reserve_validated_candidate(run, requirement_id, candidate):
+    """Atomically make parallel results visible to later n8n validations."""
+    with transaction.atomic():
+        locked_run = GenerationRun.objects.select_for_update().get(id=run.id)
+        metadata = locked_run.result_metadata if isinstance(locked_run.result_metadata, dict) else {}
+        reservations = metadata.get('deduplication_candidates', {})
+        if not isinstance(reservations, dict):
+            reservations = {}
+        other_candidates = [
+            item for key, item in reservations.items()
+            if key != requirement_id and isinstance(item, dict)
+        ]
+        _reject_duplicate_candidate(
+            locked_run, candidate, additional_candidates=other_candidates,
+        )
+        reservations[requirement_id] = deduplication_snapshot(candidate)
+        locked_run.result_metadata = {**metadata, 'deduplication_candidates': reservations}
+        locked_run.save(update_fields=['result_metadata', 'updated_at'])
 
 
 def _json_safe(value):
@@ -623,7 +702,10 @@ def _store_new_missions(run, candidates):
             status=Mission.STATUS_REVIEW,
             generated_by_ai=True,
         ).delete()
+    accepted_candidates = []
     for candidate in candidates:
+        _reject_duplicate_candidate(run, candidate, additional_candidates=accepted_candidates)
+        accepted_candidates.append(candidate)
         if Mission.objects.filter(
             scheduled_date=candidate['scheduled_date'],
             status__in=[Mission.STATUS_REVIEW, Mission.STATUS_PUBLISHED],
@@ -644,6 +726,72 @@ def _store_new_missions(run, candidates):
         mission.save()
         missions.append(mission)
     return missions
+
+
+def _automatic_retry_requirements(run, failed_requirements):
+    history = recent_mission_history()
+    original_requirements = {
+        item.get('id'): item for item in run.request_payload.get('requirements', [])
+        if isinstance(item, dict)
+    }
+    requirements = []
+    for failure in failed_requirements:
+        original = original_requirements.get(failure.get('requirement_id'))
+        if not original:
+            continue
+        scheduled_date = _parse_date(original.get('scheduled_date'))
+        output_type = original.get('output_type')
+        if output_type == OUTPUT_QUIZ_MISSION:
+            requirements.append(_quiz_requirement(
+                original['id'], scheduled_date,
+                requested_type=original.get('requested_mission_type'), history=history,
+            ))
+        elif output_type == OUTPUT_TASK_MISSION and original.get('mission_type') in TASK_CHALLENGE_TYPES:
+            requirements.append(_task_requirement(
+                original['id'], scheduled_date, original['mission_type'], Mission.DIFFICULTIES, history,
+            ))
+    return requirements
+
+
+def _schedule_automatic_retry(run, failed_requirements):
+    metadata = run.result_metadata if isinstance(run.result_metadata, dict) else {}
+    try:
+        retry_attempt = max(0, int(metadata.get('automatic_retry_attempt', 0)))
+    except (TypeError, ValueError):
+        retry_attempt = 0
+    if (
+        run.kind != GenerationRun.KIND_WEEKLY_MISSIONS
+        or not failed_requirements
+        or retry_attempt >= 1
+    ):
+        return None
+    requirements = _automatic_retry_requirements(run, failed_requirements)
+    if not requirements:
+        return None
+    retry_run = _create_run(
+        run.requested_by,
+        GenerationRun.KIND_WEEKLY_MISSIONS,
+        requirements,
+        week_start=run.week_start,
+        week_end=run.week_end,
+        force=False,
+        result_metadata={
+            'automatic_retry_attempt': 1,
+            'automatic_retry_of': str(run.id),
+        },
+    )
+    transaction.on_commit(lambda: _dispatch_automatic_retry(retry_run.id))
+    return retry_run
+
+
+def _dispatch_automatic_retry(run_id):
+    retry_run = GenerationRun.objects.get(id=run_id)
+    try:
+        dispatch_generation_run(retry_run)
+    except N8NClientError:
+        # dispatch_generation_run already records the concrete failure on the
+        # follow-up run. The completed parent callback must remain successful.
+        return
 
 
 def complete_generation_run(
@@ -707,6 +855,9 @@ def complete_generation_run(
             'failed_requirements': normalized_failures,
             'mission_metrics': normalized_metrics,
         }
+        retry_run = _schedule_automatic_retry(run, normalized_failures)
+        if retry_run is not None:
+            run.result_metadata['automatic_retry_run_id'] = str(retry_run.id)
         run.save(update_fields=[
             'status', 'completed_at', 'failed_at', 'error_message', 'review_report', 'research_context',
             'result_payload', 'n8n_execution_id', 'result_metadata', 'updated_at',

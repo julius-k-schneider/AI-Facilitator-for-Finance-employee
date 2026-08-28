@@ -115,6 +115,35 @@ class N8NGenerationApiTests(TestCase):
         self.assertTrue(all(item['generator_requests'] for item in outbound['requirements']))
 
     @patch('accounts.services.n8n_mission_generation.start_mission_generation')
+    def test_weekly_contract_tells_generator_about_existing_missions(self, start_mock):
+        start_mock.return_value = {'status': 'accepted', 'execution_id': 'n8n-history'}
+        Mission.objects.create(
+            mission_type=Mission.TYPE_SINGLE_CHOICE,
+            scheduled_date=timezone.localdate(),
+            title_de='Monatsabschluss mit KI kontrollieren',
+            title_en='Checking month-end close with AI',
+            topic_de='Monatsabschlusskontrolle',
+            topic_en='Month-end close checks',
+            learning_objective_de='KI-Ergebnisse mit dem Hauptbuch abgleichen.',
+            learning_objective_en='Reconcile AI output with the general ledger.',
+            content={},
+            created_by=self.creator,
+            status=Mission.STATUS_PUBLISHED,
+        )
+        client, token = self.csrf_client()
+
+        response = client.post(
+            '/api/auth/missions/generate-next-week/', {}, content_type='application/json',
+            HTTP_X_CSRFTOKEN=token, secure=True,
+        )
+
+        self.assertEqual(response.status_code, 202)
+        outbound = start_mock.call_args.args[0]
+        prompt_text = json.dumps(outbound['requirements'], ensure_ascii=False)
+        self.assertIn('Monatsabschlusskontrolle', prompt_text)
+        self.assertIn('Avoid duplicating', prompt_text)
+
+    @patch('accounts.services.n8n_mission_generation.start_mission_generation')
     def test_generation_endpoint_requires_csrf(self, start_mock):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.creator)
@@ -269,6 +298,122 @@ class N8NGenerationApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['valid'])
 
+    def test_validation_rejects_substantially_duplicate_existing_mission(self):
+        first_run, first_date = self.one_quiz_run()
+        first_body = {
+            'generation_run_id': str(first_run.id),
+            'status': 'completed',
+            'results': [{
+                'requirement_id': 'quiz-1',
+                'payload': self.raw_quiz_payload(first_date),
+            }],
+            'review_report': {'verdict': 'pass'},
+        }
+        self.assertEqual(self.callback(first_body).status_code, 200)
+        second_run, second_date = self.one_quiz_run()
+
+        response = self.client.post(
+            '/internal/n8n/validate-mission/',
+            {
+                'generation_run_id': str(second_run.id),
+                'requirement_id': 'quiz-1',
+                'result': {'payload': self.raw_quiz_payload(second_date)},
+            },
+            content_type='application/json',
+            HTTP_X_N8N_CALLBACK_SECRET='callback-secret',
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn('substantially duplicates', response.json()['error'])
+
+    def test_regeneration_must_differ_from_the_mission_it_replaces(self):
+        first_run, scheduled_date = self.one_quiz_run()
+        first_body = {
+            'generation_run_id': str(first_run.id),
+            'status': 'completed',
+            'results': [{
+                'requirement_id': 'quiz-1',
+                'payload': self.raw_quiz_payload(scheduled_date),
+            }],
+            'review_report': {'verdict': 'pass'},
+        }
+        self.assertEqual(self.callback(first_body).status_code, 200)
+        mission = Mission.objects.get()
+        regeneration_run = GenerationRun.objects.create(
+            kind=GenerationRun.KIND_REGENERATE_MISSION,
+            status=GenerationRun.STATUS_RUNNING,
+            requested_by=self.creator,
+            target_mission=mission,
+            request_payload={'requirements': [{
+                'id': 'replacement',
+                'output_type': 'quiz_mission',
+                'scheduled_date': scheduled_date.isoformat(),
+                'requested_mission_type': None,
+            }]},
+        )
+
+        response = self.client.post(
+            '/internal/n8n/validate-mission/',
+            {
+                'generation_run_id': str(regeneration_run.id),
+                'requirement_id': 'replacement',
+                'result': {'payload': self.raw_quiz_payload(scheduled_date)},
+            },
+            content_type='application/json',
+            HTTP_X_N8N_CALLBACK_SECRET='callback-secret',
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn('substantially duplicates', response.json()['error'])
+
+    def test_parallel_weekly_results_cannot_reuse_the_same_topic(self):
+        first_date = timezone.localdate() + timedelta(days=2)
+        second_date = first_date + timedelta(days=1)
+        run = GenerationRun.objects.create(
+            kind=GenerationRun.KIND_WEEKLY_MISSIONS,
+            status=GenerationRun.STATUS_VALIDATING,
+            requested_by=self.creator,
+            week_start=first_date,
+            week_end=second_date,
+            request_payload={'requirements': [
+                {
+                    'id': 'quiz-1', 'output_type': 'quiz_mission',
+                    'scheduled_date': first_date.isoformat(), 'requested_mission_type': None,
+                },
+                {
+                    'id': 'quiz-2', 'output_type': 'quiz_mission',
+                    'scheduled_date': second_date.isoformat(), 'requested_mission_type': None,
+                },
+            ]},
+        )
+
+        first_response = self.client.post(
+            '/internal/n8n/validate-mission/',
+            {
+                'generation_run_id': str(run.id), 'requirement_id': 'quiz-1',
+                'result': {'payload': self.raw_quiz_payload(first_date, title='First title')},
+            },
+            content_type='application/json', HTTP_X_N8N_CALLBACK_SECRET='callback-secret', secure=True,
+        )
+        second_response = self.client.post(
+            '/internal/n8n/validate-mission/',
+            {
+                'generation_run_id': str(run.id), 'requirement_id': 'quiz-2',
+                'result': {'payload': self.raw_quiz_payload(second_date, title='Different title')},
+            },
+            content_type='application/json', HTTP_X_N8N_CALLBACK_SECRET='callback-secret', secure=True,
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 422)
+        self.assertIn('substantially duplicates', second_response.json()['error'])
+        self.assertIn('/payload/missions/0/topic_de', second_response.json()['error'])
+        self.assertIn('question fields in all three variants', second_response.json()['error'])
+        run.refresh_from_db()
+        self.assertEqual(set(run.result_metadata['deduplication_candidates']), {'quiz-1'})
+
     def test_callback_requires_service_secret_and_passed_review(self):
         run, scheduled_date = self.one_quiz_run()
         body = {
@@ -342,7 +487,9 @@ class N8NGenerationApiTests(TestCase):
         self.assertEqual(metric['generator'][0]['finish_reason'], 'stop')
         self.assertEqual(first.json()['generation_run']['mission_metrics'], [metric])
 
-    def test_weekly_callback_saves_successes_and_records_failed_requirements(self):
+    @patch('accounts.services.n8n_mission_generation.start_mission_generation')
+    def test_weekly_callback_saves_successes_and_records_failed_requirements(self, start_mock):
+        start_mock.return_value = {'status': 'accepted', 'execution_id': 'automatic-retry'}
         first_date = timezone.localdate() + timedelta(days=7)
         second_date = first_date + timedelta(days=1)
         run = GenerationRun.objects.create(
@@ -367,20 +514,21 @@ class N8NGenerationApiTests(TestCase):
             ]},
         )
 
-        response = self.callback({
-            'generation_run_id': str(run.id),
-            'status': 'completed',
-            'results': [{
-                'requirement_id': 'quiz-success',
-                'payload': self.raw_quiz_payload(first_date),
-            }],
-            'failed_requirements': [{
-                'requirement_id': 'quiz-failed',
-                'error_message': 'Reviewer rejected the mission after repairs',
-                'repair_attempts': 2,
-            }],
-            'review_report': {'verdict': 'pass', 'score': 0.93, 'issues': []},
-        })
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.callback({
+                'generation_run_id': str(run.id),
+                'status': 'completed',
+                'results': [{
+                    'requirement_id': 'quiz-success',
+                    'payload': self.raw_quiz_payload(first_date),
+                }],
+                'failed_requirements': [{
+                    'requirement_id': 'quiz-failed',
+                    'error_message': 'Reviewer rejected the mission after repairs',
+                    'repair_attempts': 2,
+                }],
+                'review_report': {'verdict': 'pass', 'score': 0.93, 'issues': []},
+            })
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Mission.objects.count(), 1)
@@ -393,6 +541,20 @@ class N8NGenerationApiTests(TestCase):
         self.assertEqual(payload['failed_requirements'][0]['requirement_id'], 'quiz-failed')
         self.assertEqual(payload['failed_requirements'][0]['scheduled_date'], second_date.isoformat())
         self.assertEqual(payload['failed_requirements'][0]['output_type'], 'quiz_mission')
+        retry_run = GenerationRun.objects.exclude(id=run.id).get()
+        self.assertEqual(retry_run.status, GenerationRun.STATUS_DISPATCHED)
+        self.assertEqual(retry_run.n8n_execution_id, 'automatic-retry')
+        self.assertEqual(retry_run.week_start, run.week_start)
+        self.assertEqual(retry_run.result_metadata['automatic_retry_attempt'], 1)
+        self.assertEqual(retry_run.result_metadata['automatic_retry_of'], str(run.id))
+        self.assertEqual(
+            [item['id'] for item in retry_run.request_payload['requirements']],
+            ['quiz-failed'],
+        )
+        retry_messages = retry_run.request_payload['requirements'][0]['generator_requests'][0]['messages']
+        self.assertIn('Avoid duplicating', retry_messages[-1]['content'])
+        self.assertEqual(payload['automatic_retry_run_id'], str(retry_run.id))
+        start_mock.assert_called_once()
         self.assertIsNone(payload['failed_requirements'][0]['mission_type'])
         self.assertEqual(payload['failed_requirements'][0]['error_message'], 'Reviewer rejected the mission after repairs')
         run.refresh_from_db()

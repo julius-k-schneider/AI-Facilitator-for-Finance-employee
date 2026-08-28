@@ -153,6 +153,20 @@ role and starts a `GenerationRun`. Generated missions appear in the existing
 review UI only after n8n has returned a passed AI review and Django has validated
 the complete payload again.
 
+To reduce repeated content, Django adds a compact history of recent review and
+published missions to every weekly generator request. Task challenge types that
+have never been used, or were used least recently, are preferred. Django also
+performs a conservative text-similarity check during n8n validation and again
+before storing a completed batch. Broad topics may recur, but near-identical
+learning objectives, scenarios, and questions are rejected and enter the
+existing n8n repair path.
+
+If a weekly run still has failed requirements after its bounded repair attempts,
+Django automatically starts one full follow-up generation for only those missing
+days. Successful missions from the first run remain in review and are included
+in the follow-up history. The follow-up is limited to one attempt, so persistent
+model or validation failures cannot create an unbounded retry loop.
+
 The webhook receives a versioned object with `generation_run_id`,
 `generation_kind`, `requirements`, `research_context`, `review_policy`, and the
 two relative Django service
