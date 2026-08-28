@@ -13,22 +13,43 @@ serves both the API and the SPA (via WhiteNoise) on a single origin.
 .
 ├── Dockerfile              # Railway prod image: builds frontend + bundles into Django
 ├── railway.json            # Railway: build from the root Dockerfile
-├── docker-compose.yml      # local stack: Django + Postgres + Vite + n8n
+├── docker-compose.yml      # local stack: db, web, research-scheduler, n8n, frontend
+├── .env                    # shared Compose secrets (gitignored)
+├── .env.example            # template — copy to .env
+├── docker/
+│   └── n8n-init.sh         # bootstraps n8n credentials + workflows on first start
+├── workflows/n8n/          # exported n8n workflows (generator, research collector/selector)
 ├── backend/
 │   ├── Dockerfile          # local-dev app image (used by docker-compose)
-│   ├── .dockerignore
-│   ├── .env                # local secrets (gitignored)
+│   ├── .env                # Django settings (gitignored)
 │   ├── .env.example        # template — copy to .env
 │   ├── .python-version     # pins Python 3.12
 │   ├── requirements.txt
 │   ├── manage.py
-│   └── config/             # Django project (settings, urls, wsgi, asgi)
+│   ├── config/             # Django project (settings, urls, wsgi, asgi)
+│   └── accounts/           # the application itself
+│       ├── models.py       # Profile, Mission, GenerationRun, ResearchItem, ...
+│       ├── views.py        # JSON API under /api/auth/
+│       ├── urls.py
+│       ├── n8n_internal_views.py  # service-only endpoints under /internal/n8n/
+│       ├── admin.py
+│       ├── migrations/
+│       ├── prompts/        # all LLM prompts, grouped by request type
+│       ├── services/       # generation planning, n8n contract, research, email, ...
+│       └── management/commands/   # generate_weekly_missions, seed_*, run_research_scheduler
 └── frontend/
     ├── Dockerfile          # frontend image for local Docker development
     ├── vite.config.js      # base '/static/' for prod build; dev /api proxy
     ├── package.json        # React/Vite dependencies and scripts
     ├── index.html
-    └── src/                # React app (App.jsx, pages, services, assets)
+    └── src/
+        ├── App.jsx         # routing, session bootstrap, login/logout
+        ├── pages/          # one module per screen (+ pages/missions/ per mission type)
+        ├── components/     # sidebar, login screen, shared learning views
+        ├── services/       # fetch wrappers per API area
+        ├── onboarding/     # onboarding flow and its content
+        ├── i18n/           # de.json / en.json (the UI is fully bilingual)
+        └── auth/           # role and permission constants
 ```
 
 ## Local development (standard: Docker)
@@ -39,12 +60,16 @@ Prerequisite: Docker Desktop (running). No local Python needed.
 # From the repo root (PowerShell equivalents: Copy-Item ...):
 cp backend/.env.example backend/.env
 cp .env.example .env
-# Replace the three n8n placeholder secrets in .env, then:
+# Replace the placeholder secrets in BOTH files (see Configuration below):
+#   .env          -> the three N8N_* secrets and KICONNECT_API_KEY
+#   backend/.env  -> KICONNECT_API_KEY and the same three N8N_* secrets
 docker compose up --build
 ```
 
-The `web` container applies migrations and starts the dev server with auto-reload,
-`db` is Postgres 16, and n8n stores its local state in the `n8n_data` volume.
+Compose starts five services: `db` (Postgres 16), `web` (Django, applies
+migrations then runs the dev server with auto-reload), `research-scheduler` (a
+long-running Django command that triggers the weekly research collection),
+`n8n` (stores its state in the `n8n_data` volume) and `frontend` (Vite).
 
 - App:   http://127.0.0.1:8000
 - Admin: http://127.0.0.1:8000/admin
@@ -98,22 +123,32 @@ calls Django's deterministic validation endpoint, performs a separate AI review
 and optional repair, then returns the passed result through a callback. Only
 Django writes missions to the database and places them in human review.
 
-Configure the shared secrets in the repository-root `.env` (copied from
-`.env.example`) and the Django connection settings in `backend/.env`. Never put
+There are two `.env` files and they serve different purposes. Never put any of
 these values in Vite or frontend environment files:
 
-```env
-# .env (read by Compose and injected into Django and n8n)
-N8N_SERVICE_SECRET=separate-outbound-secret
-N8N_CALLBACK_SECRET=separate-callback-secret
-N8N_ENCRYPTION_KEY=separate-n8n-encryption-key
+- **`backend/.env`** is loaded by Django (via `env_file` into the `web` and
+  `research-scheduler` containers). It holds everything in the Configuration
+  table below.
+- **`.env` in the repository root** is read by Compose itself, purely for
+  `${VAR}` substitution in `docker-compose.yml`. Compose only needs seven values
+  from it; the rest of the file is ignored.
 
-# backend/.env
-N8N_MISSION_GENERATION_URL=http://n8n:5678/webhook/mission-generation
-N8N_RESEARCH_COLLECTOR_URL=http://n8n:5678/webhook/ai-finance-research-collector-run
-N8N_REQUEST_TIMEOUT=10
-N8N_WORKFLOW_VERSION=v1
+```env
+# .env — the only entries Compose actually substitutes
+N8N_SERVICE_SECRET=separate-outbound-secret        # required
+N8N_CALLBACK_SECRET=separate-callback-secret       # required
+N8N_ENCRYPTION_KEY=separate-n8n-encryption-key     # required
+KICONNECT_API_KEY=...                              # passed into the n8n container
+KICONNECT_BASE_URL=https://chat.kiconnect.nrw/api/v1
+KICONNECT_MODEL=...
+KICONNECT_CHAT_COMPLETIONS_PATH=/chat/completions
 ```
+
+Compose aborts with a message if one of the three `N8N_*` secrets is missing.
+The `KICONNECT_*` values in the root file are what the n8n generator and reviewer
+nodes call; the copies in `backend/.env` are what Django's own assistant and chat
+replies use. Both files ship as full copies of the same template, so the
+duplication is expected — the two sides simply read different subsets.
 
 Compose injects `http://n8n:5678/webhook/mission-generation` into Django. In the
 other direction, n8n receives `DJANGO_INTERNAL_BASE_URL=http://web:8000`; use it
@@ -126,10 +161,12 @@ The first start of the `n8n_data` volume bootstraps the n8n instance itself:
 `docker/n8n-init.sh` imports the two Header-Auth credentials (their values come
 from the root `.env`, so no secret is committed), imports the exports from
 `workflows/n8n/` and publishes all four workflows — the three the mission
-generation calls by webhook, plus the research collector. A lightweight Django
-scheduler waits for the configurable weekly time and invokes the collector only
-when research is actually due; the default is Monday at 07:00 Europe/Berlin. No
-manual import or credential setup in the n8n editor is needed. To bootstrap
+generation calls by webhook, plus the research collector. The separate
+`research-scheduler` Compose service runs `manage.py run_research_scheduler`,
+which polls the local database and invokes the collector only when research is
+actually due; the default is Monday at 07:00 Europe/Berlin, configurable on the
+Research page. No manual import or credential setup in the n8n editor is
+needed. To bootstrap
 again after editing the exports, remove the marker and restart:
 
 ```bash
@@ -260,26 +297,40 @@ workflow uses. The Docker `web` service overrides it to the `db` host internally
 ## Configuration
 
 Configuration is read from environment variables. Locally, Django settings live
-in `backend/.env`; the three shared n8n secrets live in the root `.env` so Compose
-can inject identical values into both services.
+in `backend/.env`; the root `.env` supplies the values Compose substitutes into
+`docker-compose.yml` (see the split described above).
+
+Most variables are exposed through `config/settings.py` and read via
+`django.conf.settings`. Five are read directly from the environment in
+application code and therefore do **not** appear in `settings.py` — they are
+marked accordingly.
 
 | Variable        | Purpose                        | Local default                           |
 |-----------------|--------------------------------|-----------------------------------------|
 | `SECRET_KEY`    | Django secret key              | dev placeholder (override in prod)      |
-| `DEBUG`         | Debug mode                     | `True`                                  |
+| `DEBUG`         | Debug mode                     | `False` (the example `.env` sets `True`) |
 | `ALLOWED_HOSTS` | Comma-separated allowed hosts  | `localhost,127.0.0.1`                   |
 | `DATABASE_URL`  | Postgres connection string     | `postgres://app:app@localhost:5432/app` |
-| `KICONNECT_API_KEY` | Server-side Uni API key | no default |
-| `KICONNECT_BASE_URL` | Uni API base URL | `https://chat.kiconnect.nrw/api/v1` |
-| `KICONNECT_MODEL` | Model used for interactive assistant/chat replies | no default |
+| `TIME_ZONE`     | Django time zone               | `Europe/Berlin`                         |
+| `INITIAL_ADMIN_EMAIL` | Email that gets the admin role on first registration; without it the first registered user becomes admin | no default — *read directly from the environment* |
+| `KICONNECT_API_KEY` | Server-side Uni API key | no default — *read directly from the environment* |
+| `KICONNECT_BASE_URL` | Uni API base URL | `https://chat.kiconnect.nrw/api/v1` — *read directly* |
+| `KICONNECT_MODEL` | Model used for interactive assistant/chat replies | no default — *read directly* |
+| `KICONNECT_CHAT_COMPLETIONS_PATH` | OpenAI-compatible completions path | `/chat/completions` — *read directly* |
 | `N8N_MISSION_GENERATION_URL` | n8n webhook for generation runs | `http://n8n:5678/webhook/mission-generation` in Compose |
+| `N8N_RESEARCH_COLLECTOR_URL` | n8n webhook for the research collector | `http://n8n:5678/webhook/ai-finance-research-collector-run` in Compose |
 | `N8N_SERVICE_SECRET` | Django-to-n8n service credential | required in root `.env` |
 | `N8N_CALLBACK_SECRET` | n8n-to-Django callback credential | required in root `.env` |
-| `N8N_ENCRYPTION_KEY` | Encrypts n8n credentials at rest | required in root `.env` |
+| `N8N_ENCRYPTION_KEY` | Encrypts n8n credentials at rest (used by the n8n container only, not by Django) | required in root `.env` |
 | `DJANGO_INTERNAL_BASE_URL` | Django base URL used by n8n nodes | `http://web:8000` in Compose |
 | `N8N_REQUEST_TIMEOUT` | Timeout for starting a workflow | `10` seconds |
 | `N8N_WORKFLOW_VERSION` | Version included in the workflow contract | `v1` |
 | `MISSION_TASK_DAYS_PER_WEEK` | Task-style days in a generated workweek | `2` |
+| `RESEARCH_SCHEDULER_POLL_SECONDS` | Poll interval of the `research-scheduler` service | `30` seconds |
+| `EMAIL_BACKEND` | Django email backend | console backend when `DEBUG`, otherwise SMTP |
+| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL` | SMTP settings for the weekly reminder | see `backend/.env.example` |
+| `SECURE_SSL_REDIRECT` | Redirect to HTTPS (only applied when `DEBUG=False`) | `True` |
+| `SECURE_HSTS_SECONDS` | HSTS max-age (only applied when `DEBUG=False`) | `0` (disabled) |
 
 Generate a production `SECRET_KEY`:
 
@@ -324,3 +375,11 @@ both the API and the SPA.
 - `DEBUG=False` enables secure cookies, SSL redirect, and SSL-required DB
   connections (see the bottom of `backend/config/settings.py`).
 - Static files (SPA + admin) are collected at startup and served by WhiteNoise.
+- **n8n is not part of the Railway image.** Compose runs it locally; in
+  production `N8N_MISSION_GENERATION_URL` and `N8N_RESEARCH_COLLECTOR_URL` have
+  to point at an n8n instance hosted elsewhere, and that instance needs
+  `DJANGO_INTERNAL_BASE_URL` set to the public Railway URL. Without it the app
+  runs, but weekly mission generation and research collection stay unavailable.
+- The research scheduler is **not** a separate service in prod: the root
+  `Dockerfile` starts `run_research_scheduler` as a background process in the
+  same container before handing over to gunicorn.
