@@ -6,7 +6,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from accounts.models import Mission, Profile
-from accounts.services.ai_mission_generator import next_calendar_week, plan_next_week
+from accounts.services.generation_planning import next_calendar_week, plan_next_week
 
 
 class SeedPlaceholderMissionsTests(TestCase):

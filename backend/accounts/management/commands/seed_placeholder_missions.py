@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import Mission, Profile
-from accounts.services.ai_mission_generator import next_calendar_week
+from accounts.services.generation_planning import next_calendar_week
 
 
 def placeholder_variant(scheduled_date, difficulty, points):

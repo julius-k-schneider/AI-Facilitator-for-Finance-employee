@@ -106,16 +106,6 @@ export const rejectAllReviewMissions = (weekStart) => request('/api/auth/mission
   body: JSON.stringify({ week_start: weekStart }),
 })
 
-export const generateNextWeekMissions = async (weekStart, force = false, onStatus) => {
-  const generationRun = await startAndWait(
-    '/api/auth/missions/generate-next-week/',
-    { force, week_start: weekStart },
-    onStatus,
-    30 * 60 * 1000,
-  )
-  return { created_count: generationRun.created_count || 0, generation_run: generationRun }
-}
-
 export const startNextWeekMissionGeneration = (weekStart, force = false) => request(
   '/api/auth/missions/generate-next-week/',
   { method: 'POST', body: JSON.stringify({ force, week_start: weekStart }) },

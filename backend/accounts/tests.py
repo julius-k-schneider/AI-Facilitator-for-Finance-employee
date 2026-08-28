@@ -19,14 +19,11 @@ from .models import (
     SkillProgressionSettings,
     WeeklyLeaderboardSnapshot,
 )
-from .services.ai_mission_generator import (
+from .prompts.mission_generation import SYSTEM_PROMPT, build_user_prompt
+from .services.generation_planning import (
     AiMissionGenerationError,
-    SYSTEM_PROMPT,
-    build_user_prompt,
     extract_json,
-    generate_next_week,
     next_calendar_week,
-    split_target_slots,
 )
 from .services.ai_chat_challenge import evaluate_final_answers, validate_challenge
 from .services.email_notifications import send_daily_mission_reminder, send_daily_mission_reminders
@@ -1362,13 +1359,6 @@ class SkillProgressionTests(TestCase):
 
 
 class AiMissionServiceTests(TestCase):
-    def create_creator(self):
-        user = get_user_model().objects.create_user(
-            username='creator@example.com', email='creator@example.com', password='Test1234!'
-        )
-        Profile.objects.create(user=user, role=Profile.ROLE_CONTENT_CREATOR)
-        return user
-
     def valid_payload(self, target_slots):
         missions = []
         for scheduled_date, count in target_slots.items():
@@ -1463,13 +1453,6 @@ class AiMissionServiceTests(TestCase):
         with self.assertRaises(MissionValidationError):
             validate_generated_payload(payload, {start: 1})
 
-    def test_generation_batches_are_limited_to_one_day(self):
-        start, _ = next_calendar_week()
-        slots = {start + timedelta(days=offset): 1 for offset in range(7)}
-        batches = split_target_slots(slots)
-        self.assertEqual(len(batches), 7)
-        self.assertTrue(all(sum(batch.values()) == 1 for batch in batches))
-
     def test_json_extractor_accepts_fences_and_trailing_text(self):
         self.assertEqual(extract_json('```json\n{"missions": []}\n```'), {'missions': []})
         self.assertEqual(extract_json('Result: {"missions": []}\nDone'), {'missions': []})
@@ -1506,66 +1489,6 @@ class AiMissionServiceTests(TestCase):
         ranking['missions'][0]['content'].pop('correct_option_index')
         normalized = validate_generated_payload(ranking, {start: 1})
         self.assertEqual(normalized[0]['content']['correct_order'], [0, 1, 2])
-
-    def task_candidate(self):
-        return {
-            'mission_type': Mission.TYPE_BULK_CATEGORIZATION,
-            'title_de': 'Task', 'title_en': 'Task', 'description_de': 'd', 'description_en': 'd',
-            'max_points': 40, 'content': {
-                'task': {'de': 't', 'en': 't'}, 'case_data': {'de': [], 'en': []}, 'case_format': 'table',
-                'result_fields': [], 'micro_learning': {'de': 'x' * 30, 'en': 'x' * 30},
-            },
-        }
-
-    @patch('accounts.services.ai_task_challenge.generate_task_challenge')
-    @patch('accounts.services.ai_mission_generator.call_ai')
-    def test_weekly_generation_splits_workweek_into_quiz_and_task_days(self, call_ai_mock, generate_task_mock):
-        creator = self.create_creator()
-        start, end = next_calendar_week()
-        Mission.objects.create(
-            mission_type=Mission.TYPE_SINGLE_CHOICE,
-            scheduled_date=start,
-            title_de='Veröffentlicht', title_en='Published',
-            content={'question': {'de': 'Frage', 'en': 'Question'}, 'options': [], 'correct_index': 0},
-            max_points=20, created_by=creator, status=Mission.STATUS_PUBLISHED,
-        )
-        call_ai_mock.side_effect = self.valid_payload
-        generate_task_mock.side_effect = lambda *args, **kwargs: self.task_candidate()
-
-        created, actual_start, actual_end = generate_next_week(creator)
-        self.assertEqual((actual_start, actual_end), (start, end))
-
-        # Monday already has content, so it is left untouched entirely - no top-up.
-        monday_missions = Mission.objects.filter(scheduled_date=start)
-        self.assertEqual(monday_missions.count(), 1)
-        self.assertEqual(monday_missions.first().status, Mission.STATUS_PUBLISHED)
-
-        # Weekends are never scheduled.
-        weekend_days = [start + timedelta(days=offset) for offset in (5, 6)]
-        self.assertEqual(Mission.objects.filter(scheduled_date__in=weekend_days).count(), 0)
-
-        # 4 open weekdays (Tue-Fri): each gets exactly one mission topic.
-        self.assertEqual(len(created), 4)
-        self.assertTrue(all(mission.status == Mission.STATUS_REVIEW for mission in created))
-        self.assertTrue(all(mission.generated_by_ai for mission in created))
-        task_created = [mission for mission in created if mission.mission_type in Mission.TASK_TYPES]
-        quiz_created = [mission for mission in created if mission.mission_type in Mission.CHOICE_TYPES]
-        self.assertEqual(len(task_created), 2)
-        self.assertEqual(len(quiz_created), 2)
-        for day in (start + timedelta(days=offset) for offset in range(1, 5)):
-            day_missions = [mission for mission in created if mission.scheduled_date == day]
-            self.assertEqual(len(day_missions), 1)
-            self.assertTrue(day_missions[0].has_difficulty_variants)
-
-    @patch('accounts.services.ai_task_challenge.generate_task_challenge')
-    @patch('accounts.services.ai_mission_generator.call_ai')
-    def test_invalid_ai_response_creates_no_missions(self, call_ai_mock, generate_task_mock):
-        creator = self.create_creator()
-        call_ai_mock.return_value = {'missions': []}
-        generate_task_mock.side_effect = AiMissionGenerationError('boom')
-        with self.assertRaises(AiMissionGenerationError):
-            generate_next_week(creator)
-        self.assertEqual(Mission.objects.count(), 0)
 
 
 class AiTaskChallengeTests(TestCase):
@@ -1627,7 +1550,6 @@ class AiTaskChallengeTests(TestCase):
         self.assertEqual(len(public['case_data']), 30)
 
     def test_invalid_category_index_is_rejected(self):
-        from accounts.services.ai_mission_generator import AiMissionGenerationError
         from accounts.services.ai_task_challenge import validate_task_challenge
         payload = self.raw_payload()
         payload['rows'][0]['category_index'] = 9
@@ -1718,28 +1640,6 @@ class AiTaskChallengeTests(TestCase):
             'mission_type': 'not_a_real_type',
         }, content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 400)
-
-    def test_generate_task_day_candidates_fills_requested_days(self):
-        from accounts.services import ai_mission_generator
-        candidate = {
-            'mission_type': Mission.TYPE_BULK_CATEGORIZATION, 'title_de': 't', 'title_en': 't',
-            'description_de': 'd', 'description_en': 'd', 'max_points': 40, 'content': self.content(),
-        }
-        day = timezone.localdate()
-        with patch('accounts.services.ai_task_challenge.generate_task_challenge', return_value=candidate):
-            candidates, failed_days = ai_mission_generator.generate_task_day_candidates([day])
-        self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0]['scheduled_date'], day)
-        self.assertEqual(failed_days, [])
-
-    def test_generate_task_day_candidates_falls_back_on_failure(self):
-        from accounts.services import ai_mission_generator
-        from accounts.services.ai_mission_generator import AiMissionGenerationError
-        day = timezone.localdate()
-        with patch('accounts.services.ai_task_challenge.generate_task_challenge', side_effect=AiMissionGenerationError('boom')):
-            candidates, failed_days = ai_mission_generator.generate_task_day_candidates([day])
-        self.assertEqual(candidates, [])
-        self.assertEqual(failed_days, [day])
 
 
 class AiTaskChallengeOtherTypesTests(TestCase):
