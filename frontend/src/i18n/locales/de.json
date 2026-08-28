@@ -9,8 +9,7 @@
     }
   },
   "language": {
-    "current": "Deutsch",
-    "switchAria": "Sprache auf Englisch umschalten"
+    "current": "Deutsch"
   },
   "skillLevels": { "beginner": "Einsteiger", "advanced": "Fortgeschritten", "pro": "Pro" },
   "difficulties": { "easy": "Leicht", "medium": "Mittel", "hard": "Schwer" },
@@ -88,8 +87,6 @@
     "description": "Jeden Tag wartet eine Mission auf deinem aktuellen Skill-Level auf dich. Verpasste Missionen bleiben bis Montag 12:00 Uhr der Folgewoche verfügbar.",
     "points": "Punkte",
     "loading": "Missionen werden geladen...",
-    "emptyTitle": "Keine Missionen gefunden",
-    "emptyText": "Sobald Missionen verfügbar sind, erscheinen sie hier.",
     "todayEmptyTitle": "Heute sind noch keine Missionen geplant",
     "todayEmptyText": "Sobald Missionen für heute veröffentlicht wurden, erscheinen sie hier.",
     "availableEmptyTitle": "Keine verfügbaren Missionen zum Nachholen",
@@ -118,7 +115,6 @@
       "filterTitle": "Archiv durchsuchen",
       "filterText": "Zeigt nur vergangene veröffentlichte Missionen, die du bereits bearbeitet hast. Einsehen vergibt keine Punkte.",
       "month": "Monat",
-      "period": "Zeitraum",
       "week": "Woche",
       "day": "Tag",
       "modeMonth": "Monat",
@@ -130,7 +126,6 @@
       "loading": "Archiv wird geladen...",
       "emptyTitle": "Keine archivierten Missionen gefunden",
       "emptyText": "In diesem Zeitraum gibt es keine vergangenen bearbeiteten Missionen.",
-      "monthResult": "Archiv für {{month}}",
       "rangeResult": "Archiv für {{range}}",
       "completedTitle": "Damals abgeschlossen",
       "score": "{{score}} von {{max}} Punkten"
@@ -157,7 +152,6 @@
       "wrongTitle": "Falsch",
       "partialTitle": "Teilweise richtig",
       "pointsEarned": "Du erhältst {{points}} Punkte.",
-      "completed": "Die Mission ist abgeschlossen.",
       "partialSummary": "{{correct}} von {{total}} Aussagen stimmen. Du erhältst {{points}} Punkte.",
       "explanationLabel": "Warum?"
     },
@@ -170,7 +164,6 @@
       "demotion": "Dein aktuelles Skill-Level ist jetzt {{level}}. Deine nächsten Missionen werden entsprechend angepasst."
     },
     "creator": {
-      "button": "Missionen verwalten",
       "manageTitle": "Missionen verwalten",
       "manageDescription": "Wähle einen Tag in der Monatsübersicht aus, prüfe die dort geplante Mission oder bearbeite alle deutschen und englischen Inhalte.",
       "title": "Mission erstellen",
@@ -419,8 +412,6 @@
     "generate": "Übung generieren",
     "back": "Zurück zum Training",
     "result": {
-      "correct": "Richtig gelöst!",
-      "wrong": "Die Antwort war noch nicht richtig. Nutze das Feedback für die nächste Übung.",
       "partial": "{{correct}} von {{total}} Aussagen waren richtig."
     },
     "types": {
@@ -463,7 +454,6 @@
   "agent": {
     "badge": "DEIN AGENT",
     "title": "Dein Agent",
-    "description": "Stelle freie Fragen zu KI-Nutzung, Finance-Arbeit, Prompts, Zusammenfassungen oder sicheren nächsten Schritten.",
     "emptyTitle": "Wobei soll dein Agent helfen?",
     "emptyText": "Du kannst wie in einem Chat schreiben. Bitte keine vertraulichen, personenbezogenen oder Lufthansa-internen Daten eingeben.",
     "you": "Du",
@@ -601,7 +591,6 @@
         "missions": "Abgeschlossene Missionen",
         "streak": "Beste Serie"
       },
-      "days": "Tage",
       "topPerformers": "Top Performer",
       "podiumTitle": "Spitze der Rangliste",
       "fullRanking": "Vollständige Rangliste",
@@ -611,10 +600,8 @@
       "employee": "Mitarbeiter",
       "points": "Punkte",
       "streak": "Beste Serie",
-      "challenges": "Challenges",
       "missions": "Missionen",
       "level": "Level",
-      "streakDays": "{{count}} Tage",
       "you": "Du",
       "rankLabel": "Rang #{{rank}}",
       "emptyTitle": "Noch keine Ranglistendaten",

@@ -9,8 +9,7 @@
     }
   },
   "language": {
-    "current": "English",
-    "switchAria": "Switch language to German"
+    "current": "English"
   },
   "skillLevels": { "beginner": "Beginner", "advanced": "Advanced", "pro": "Pro" },
   "difficulties": { "easy": "Easy", "medium": "Medium", "hard": "Hard" },
@@ -88,8 +87,6 @@
     "description": "One mission at your current skill level awaits you every day. Missed missions stay available until Monday 12:00 noon of the following week.",
     "points": "points",
     "loading": "Loading missions...",
-    "emptyTitle": "No missions found",
-    "emptyText": "Missions will appear here as soon as they are available.",
     "todayEmptyTitle": "No missions are scheduled for today",
     "todayEmptyText": "Missions will appear here as soon as they are published for today.",
     "availableEmptyTitle": "No available catch-up missions",
@@ -118,7 +115,6 @@
       "filterTitle": "Browse archive",
       "filterText": "Shows only past published missions you have already completed. Viewing them does not award points.",
       "month": "Month",
-      "period": "Period",
       "week": "Week",
       "day": "Day",
       "modeMonth": "Month",
@@ -130,7 +126,6 @@
       "loading": "Loading archive...",
       "emptyTitle": "No archived missions found",
       "emptyText": "There are no past completed missions in this period.",
-      "monthResult": "Archive for {{month}}",
       "rangeResult": "Archive for {{range}}",
       "completedTitle": "Completed at the time",
       "score": "{{score}} of {{max}} points"
@@ -157,7 +152,6 @@
       "wrongTitle": "Wrong",
       "partialTitle": "Partly correct",
       "pointsEarned": "You receive {{points}} points.",
-      "completed": "The mission is complete.",
       "partialSummary": "{{correct}} of {{total}} statements are correct. You receive {{points}} points.",
       "explanationLabel": "Why?"
     },
@@ -170,7 +164,6 @@
       "demotion": "Your current skill level is now {{level}}. Your next missions will be adjusted accordingly."
     },
     "creator": {
-      "button": "Manage missions",
       "manageTitle": "Manage missions",
       "manageDescription": "Select a day in the monthly overview, inspect its scheduled mission, or edit every German and English content field.",
       "title": "Create mission",
@@ -419,8 +412,6 @@
     "generate": "Generate exercise",
     "back": "Back to training",
     "result": {
-      "correct": "Correctly solved!",
-      "wrong": "That answer was not correct yet. Use the feedback for your next exercise.",
       "partial": "{{correct}} of {{total}} statements were correct."
     },
     "types": {
@@ -463,7 +454,6 @@
   "agent": {
     "badge": "YOUR AGENT",
     "title": "Your Agent",
-    "description": "Ask free-form questions about AI use, finance work, prompts, summaries, or safe next steps.",
     "emptyTitle": "How should your agent help?",
     "emptyText": "You can write like in a normal chat. Please do not enter confidential, personal, or Lufthansa-internal data.",
     "you": "You",
@@ -601,7 +591,6 @@
         "missions": "Completed missions",
         "streak": "Best streak"
       },
-      "days": "days",
       "topPerformers": "Top performers",
       "podiumTitle": "Top of the leaderboard",
       "fullRanking": "Full ranking",
@@ -611,10 +600,8 @@
       "employee": "Employee",
       "points": "Points",
       "streak": "Best streak",
-      "challenges": "Challenges",
       "missions": "Missions",
       "level": "Level",
-      "streakDays": "{{count}} days",
       "you": "You",
       "rankLabel": "Rank #{{rank}}",
       "emptyTitle": "No leaderboard data yet",
