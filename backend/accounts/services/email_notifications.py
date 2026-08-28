@@ -50,10 +50,6 @@ def incomplete_weekly_mission_users(reminder_date=None):
     return incomplete, missions
 
 
-def incomplete_daily_mission_users(reminder_date=None):
-    return incomplete_weekly_mission_users(reminder_date)
-
-
 def send_daily_mission_reminder(user, reminder_date, missions, missing_missions):
     subject = 'Reminder: Offene Missionen der Woche / Open missions for this week'
     week_start, week_end = current_week_range(reminder_date)

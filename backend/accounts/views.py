@@ -26,7 +26,7 @@ from .models import (
     SkillProgressionSettings,
     WeeklyLeaderboardSnapshot,
 )
-from .services.ai_mission_generator import AiMissionGenerationError
+from .services.generation_planning import AiMissionGenerationError
 from .services.ai_chat_challenge import chat_reply, evaluate_final_answers
 from .services.ai_task_challenge import (
     TASK_CHALLENGE_TYPES,

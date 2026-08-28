@@ -50,9 +50,3 @@ export async function getUserProgress() {
   const data = await request('/api/auth/progress/')
   return normalizeProgress(data.progress)
 }
-
-export function getLevel(totalPoints) {
-  if (totalPoints >= 180) return 'Advanced'
-  if (totalPoints >= 90) return 'Practitioner'
-  return 'Starter'
-}

@@ -1,6 +1,6 @@
 from accounts.prompts.personal_agent import SYSTEM_PROMPT_DE, SYSTEM_PROMPT_EN
 from accounts.services.ai_chat_challenge import _completion
-from accounts.services.ai_mission_generator import AiMissionGenerationError
+from accounts.services.generation_planning import AiMissionGenerationError
 
 
 def _normalize_history(messages):

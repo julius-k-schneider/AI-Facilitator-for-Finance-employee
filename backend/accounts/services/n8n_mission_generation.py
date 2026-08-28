@@ -8,25 +8,29 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import GenerationRun, Mission
-from accounts.services.ai_chat_challenge import (
+from accounts.prompts.chat_challenges import (
     SYSTEM_PROMPT as CHAT_SYSTEM_PROMPT,
     USER_PROMPT as CHAT_USER_PROMPT,
-    validate_challenge,
 )
-from accounts.services.ai_mission_generator import (
+from accounts.prompts.task_challenges import (
+    SYSTEM_PROMPT as TASK_SYSTEM_PROMPT,
+    build_difficulty_instruction,
+)
+from accounts.services.ai_chat_challenge import validate_challenge
+from accounts.prompts.mission_generation import (
     SYSTEM_PROMPT as QUIZ_SYSTEM_PROMPT,
+    build_user_prompt,
+)
+from accounts.services.generation_planning import (
     AiMissionGenerationError,
     apply_candidate,
-    build_user_prompt,
     plan_next_week,
 )
 from accounts.services.ai_task_challenge import (
     GENERATION_MAX_TOKENS as TASK_GENERATION_MAX_TOKENS,
-    SYSTEM_PROMPT as TASK_SYSTEM_PROMPT,
     TASK_CHALLENGE_PROMPTS,
     TASK_CHALLENGE_TYPES,
     TASK_TOPICS,
-    build_difficulty_instruction,
     validate_task_challenge,
 )
 from accounts.services.mission_validation import MissionValidationError, validate_generated_payload

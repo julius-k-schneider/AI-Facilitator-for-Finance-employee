@@ -28,16 +28,10 @@ never taken from the model - so a language model cannot corrupt the answer key
 by miscalculating sums over dozens of rows.
 """
 
-import random
 from datetime import date
 
-from accounts.prompts.task_challenges import (
-    SYSTEM_PROMPT,
-    build_difficulty_instruction,
-    build_task_challenge_prompts,
-)
-from accounts.services.ai_chat_challenge import _completion
-from accounts.services.ai_mission_generator import AiMissionGenerationError, extract_json
+from accounts.prompts.task_challenges import build_task_challenge_prompts
+from accounts.services.generation_planning import AiMissionGenerationError
 
 
 TYPE_BULK_CATEGORIZATION = 'bulk_categorization'
@@ -924,16 +918,6 @@ TASK_CHALLENGE_PROMPTS = build_task_challenge_prompts(
     MAX_INVOICES,
 )
 
-# Preserve the previous module-level names for imports outside this module.
-BULK_CATEGORIZATION_PROMPT = TASK_CHALLENGE_PROMPTS[TYPE_BULK_CATEGORIZATION]
-PLAN_ACTUAL_DEVIATION_PROMPT = TASK_CHALLENGE_PROMPTS[TYPE_PLAN_ACTUAL_DEVIATION]
-DUPLICATE_PAYMENT_HUNT_PROMPT = TASK_CHALLENGE_PROMPTS[TYPE_DUPLICATE_PAYMENT_HUNT]
-INVOICE_EXTRACTION_PROMPT = TASK_CHALLENGE_PROMPTS[TYPE_INVOICE_EXTRACTION]
-POLICY_VIOLATION_CHECK_PROMPT = TASK_CHALLENGE_PROMPTS[TYPE_POLICY_VIOLATION_CHECK]
-RECEIVABLES_AGING_PROMPT = TASK_CHALLENGE_PROMPTS[TYPE_RECEIVABLES_AGING]
-VAT_RATE_AUDIT_PROMPT = TASK_CHALLENGE_PROMPTS[TYPE_VAT_RATE_AUDIT]
-BANK_RECONCILIATION_PROMPT = TASK_CHALLENGE_PROMPTS[TYPE_BANK_RECONCILIATION]
-
 TASK_CHALLENGE_VALIDATORS = {
     TYPE_BULK_CATEGORIZATION: _validate_bulk_categorization,
     TYPE_PLAN_ACTUAL_DEVIATION: _validate_plan_actual_deviation,
@@ -1292,42 +1276,6 @@ def validate_task_challenge(payload, mission_type, difficulty=None):
         'description_en': _text(payload.get('description_en'), 'description_en'),
         'max_points': DIFFICULTY_POINTS.get(difficulty, DEFAULT_POINTS),
         'content': content,
-    }
-
-
-def generate_task_challenge(mission_type=None, difficulty=None):
-    mission_type = mission_type or random.choice(TASK_CHALLENGE_TYPES)
-    if mission_type not in TASK_CHALLENGE_PROMPTS:
-        raise AiMissionGenerationError('Unsupported task challenge type')
-    difficulty_instruction = build_difficulty_instruction(mission_type, difficulty) if difficulty else ''
-    payload = extract_json(_completion([
-        {'role': 'system', 'content': SYSTEM_PROMPT},
-        {'role': 'user', 'content': f'{TASK_CHALLENGE_PROMPTS[mission_type]}\n\n{difficulty_instruction}'},
-    ], json_mode=True, temperature=0.5, max_tokens=GENERATION_MAX_TOKENS))
-    return validate_task_challenge(payload, mission_type, difficulty=difficulty)
-
-
-def generate_task_challenge_variants(mission_type=None):
-    mission_type = mission_type or random.choice(TASK_CHALLENGE_TYPES)
-    variants = {
-        difficulty: generate_task_challenge(mission_type, difficulty=difficulty)
-        for difficulty in ('easy', 'medium', 'hard')
-    }
-    easy = variants['easy']
-    return {
-        **easy,
-        **TASK_TOPICS[mission_type],
-        'variants': {
-            difficulty: {
-                'title_de': candidate['title_de'],
-                'title_en': candidate['title_en'],
-                'description_de': candidate['description_de'],
-                'description_en': candidate['description_en'],
-                'max_points': candidate['max_points'],
-                'content': candidate['content'],
-            }
-            for difficulty, candidate in variants.items()
-        },
     }
 
 
