@@ -223,7 +223,16 @@ class N8NGenerationApiTests(TestCase):
         self.assertEqual(response.status_code, 502)
         self.assertEqual(GenerationRun.objects.get().status, GenerationRun.STATUS_FAILED)
 
-    def raw_quiz_payload(self, scheduled_date, title='Generated title'):
+    def raw_quiz_payload(
+        self, scheduled_date, title='Generated title',
+        topic_de='KI-Ergebnisse pruefen', topic_en='Checking AI output',
+        objective_de='KI-Ergebnisse vor der Nutzung systematisch pruefen.',
+        objective_en='Systematically check AI output before use.',
+        question_de='Was sollte vor der Weiterverwendung geprueft werden?',
+        question_en='What should be checked before reusing the result?',
+        options_de=('Ausgangsdaten und Ergebnis', 'Nur das Layout'),
+        options_en=('Source data and result', 'Only the layout'),
+    ):
         learning_de = 'Pruefe KI-Ausgaben anhand der Ausgangsdaten und dokumentiere Abweichungen, bevor du Ergebnisse in einem Finanzprozess weiterverwendest. Eine Stichprobe schafft zusaetzliche Sicherheit.'
         learning_en = 'Check AI output against the source data and document discrepancies before reusing results in a finance process. A documented spot-check adds another layer of assurance.'
         variants = {}
@@ -235,10 +244,10 @@ class N8NGenerationApiTests(TestCase):
                 'description_en': 'A practical question about checking AI output.',
                 'points': 30,
                 'content': {
-                    'question_de': 'Was sollte vor der Weiterverwendung geprueft werden?',
-                    'question_en': 'What should be checked before reusing the result?',
-                    'options_de': ['Ausgangsdaten und Ergebnis', 'Nur das Layout'],
-                    'options_en': ['Source data and result', 'Only the layout'],
+                    'question_de': question_de,
+                    'question_en': question_en,
+                    'options_de': list(options_de),
+                    'options_en': list(options_en),
                     'correct_option_indices': [0],
                     'feedback_de': 'Die Gegenpruefung mit den Ausgangsdaten deckt Abweichungen auf.',
                     'feedback_en': 'Comparing against source data reveals discrepancies.',
@@ -249,10 +258,10 @@ class N8NGenerationApiTests(TestCase):
         return {'missions': [{
             'date': scheduled_date.isoformat(),
             'type': Mission.TYPE_SINGLE_CHOICE,
-            'topic_de': 'KI-Ergebnisse pruefen',
-            'topic_en': 'Checking AI output',
-            'learning_objective_de': 'KI-Ergebnisse vor der Nutzung systematisch pruefen.',
-            'learning_objective_en': 'Systematically check AI output before use.',
+            'topic_de': topic_de,
+            'topic_en': topic_en,
+            'learning_objective_de': objective_de,
+            'learning_objective_en': objective_en,
             'variants': variants,
         }]}
 
@@ -326,6 +335,70 @@ class N8NGenerationApiTests(TestCase):
 
         self.assertEqual(response.status_code, 422)
         self.assertIn('substantially duplicates', response.json()['error'])
+
+    def store_first_quiz_mission(self, **payload_overrides):
+        run, scheduled_date = self.one_quiz_run()
+        response = self.callback({
+            'generation_run_id': str(run.id),
+            'status': 'completed',
+            'results': [{
+                'requirement_id': 'quiz-1',
+                'payload': self.raw_quiz_payload(scheduled_date, **payload_overrides),
+            }],
+            'review_report': {'verdict': 'pass'},
+        })
+        self.assertEqual(response.status_code, 200)
+        return scheduled_date
+
+    def validate_quiz_result(self, run, payload):
+        return self.client.post(
+            '/internal/n8n/validate-mission/',
+            {
+                'generation_run_id': str(run.id),
+                'requirement_id': 'quiz-1',
+                'result': {'payload': payload},
+            },
+            content_type='application/json',
+            HTTP_X_N8N_CALLBACK_SECRET='callback-secret',
+            secure=True,
+        )
+
+    def test_validation_rejects_a_reworded_duplicate_of_the_same_question(self):
+        """The topic may be rephrased freely - the question decides."""
+        self.store_first_quiz_mission()
+        second_run, second_date = self.one_quiz_run()
+
+        response = self.validate_quiz_result(second_run, self.raw_quiz_payload(
+            second_date,
+            title='Qualitaetssicherung',
+            topic_de='Qualitaetssicherung im Reporting',
+            topic_en='Quality assurance in reporting',
+            objective_de='Ergebnisse vor der Weitergabe absichern.',
+            objective_en='Secure results before handing them on.',
+        ))
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn('substantially duplicates', response.json()['error'])
+
+    def test_validation_accepts_a_different_question_on_a_different_topic(self):
+        self.store_first_quiz_mission()
+        second_run, second_date = self.one_quiz_run()
+
+        response = self.validate_quiz_result(second_run, self.raw_quiz_payload(
+            second_date,
+            title='Vertraulichkeit',
+            topic_de='Datenvertraulichkeit',
+            topic_en='Data confidentiality',
+            objective_de='Vertrauliche Daten aus Prompts heraushalten.',
+            objective_en='Keep confidential data out of prompts.',
+            question_de='Welche Angaben duerfen nicht in einen Prompt kopiert werden?',
+            question_en='Which details must not be pasted into a prompt?',
+            options_de=('Personenbezogene Daten', 'Oeffentliche Kennzahlen'),
+            options_en=('Personal data', 'Public key figures'),
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['valid'])
 
     def test_regeneration_must_differ_from_the_mission_it_replaces(self):
         first_run, scheduled_date = self.one_quiz_run()
