@@ -1,7 +1,6 @@
 # Local development stack: Django (web) + PostgreSQL (db) + Vite (frontend)
 # + n8n (workflow orchestration).
-# Railway provides its own managed Postgres in production and builds the web image
-# from backend/Dockerfile (this compose file is not used there).
+# This file is for local development only
 #
 #   docker compose up --build        # start everything (rebuild images)
 #   docker compose up -d             # start in background
