@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1.6
 #
-# Single-service image for Railway: builds the Vite/React frontend and bundles it
+# Single-service production image: builds the Vite/React frontend and bundles it
 # into the Django app, which serves both the API and the SPA (via WhiteNoise) on
-# one origin. Railway builds from this root Dockerfile (see railway.json).
+# one origin.
 #
-# Local development still uses docker-compose.yml (two separate containers).
+# Local development still uses docker-compose.yml (separate containers).
 
 # ─── Stage 1: build the Vite/React frontend ────────────────────────────────
 FROM node:20-alpine AS frontend
@@ -37,6 +37,6 @@ WORKDIR /app/backend
 EXPOSE 8000
 
 # collectstatic + migrate run at startup (not build time) because settings.py
-# requires DATABASE_URL, which Railway only injects into the running container.
-# Railway provides $PORT; falls back to 8000 when run standalone.
+# requires DATABASE_URL, which is only available in the running container.
+# Honours $PORT when the host provides one; falls back to 8000.
 CMD sh -c "python manage.py collectstatic --noinput && python manage.py migrate --noinput && (python manage.py run_research_scheduler &) && exec gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3"

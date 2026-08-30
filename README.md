@@ -3,16 +3,15 @@
 Django + PostgreSQL backend with a React/Vite frontend. Local development runs
 the application and n8n as **separate Docker containers** (with Vite proxying
 `/api` to Django).
-On [Railway](https://railway.app) they ship as **one service**: the root
-`Dockerfile` builds the frontend and bundles it into the Django image, which
-serves both the API and the SPA (via WhiteNoise) on a single origin.
+In production they ship as **one service**: the root `Dockerfile` builds the
+frontend and bundles it into the Django image, which serves both the API and the
+SPA (via WhiteNoise) on a single origin.
 
 ## Project layout
 
 ```
 .
-├── Dockerfile              # Railway prod image: builds frontend + bundles into Django
-├── railway.json            # Railway: build from the root Dockerfile
+├── Dockerfile              # prod image: builds frontend + bundles into Django
 ├── docker-compose.yml      # local stack: db, web, research-scheduler, n8n, frontend
 ├── .env                    # shared Compose secrets (gitignored)
 ├── .env.example            # template — copy to .env
@@ -258,8 +257,8 @@ week, run:
 docker compose exec web python manage.py send_daily_mission_reminders
 ```
 
-Schedule this command externally on Fridays at 12:00, for example with Railway
-Cron or a server cron job. The command also skips non-Fridays, so an accidentally
+Schedule this command externally on Fridays at 12:00, for example with a server
+cron job or the scheduler of the hosting platform. The command also skips non-Fridays, so an accidentally
 daily schedule will not send daily reminder emails. It records one reminder per
 user and Friday, so reruns do not send duplicate reminders. Each email lists only
 the missions that are still missing for that user.
@@ -324,6 +323,7 @@ marked accordingly.
 | `SECRET_KEY`    | Django secret key              | dev placeholder (override in prod)      |
 | `DEBUG`         | Debug mode                     | `False` (the example `.env` sets `True`) |
 | `ALLOWED_HOSTS` | Comma-separated allowed hosts  | `localhost,127.0.0.1`                   |
+| `CSRF_TRUSTED_ORIGINS` | Comma-separated origins (with scheme) trusted for CSRF | `https://` of every non-local `ALLOWED_HOSTS` entry |
 | `DATABASE_URL`  | Postgres connection string     | `postgres://app:app@localhost:5432/app` |
 | `TIME_ZONE`     | Django time zone               | `Europe/Berlin`                         |
 | `INITIAL_ADMIN_EMAIL` | Email that gets the admin role on first registration; without it the first registered user becomes admin | no default — *read directly from the environment* |
@@ -352,48 +352,3 @@ Generate a production `SECRET_KEY`:
 python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
 ```
 
-## Deploy to Railway
-
-The whole app runs as **one service**. The root `Dockerfile` builds the frontend
-and bundles it into the Django image (no Nixpacks), so a single container serves
-both the API and the SPA.
-
-1. **Create the project**: Railway dashboard → *New Project* → *Deploy from GitHub repo*.
-2. **Leave the root directory empty** (repo root). Railway reads the root
-   `railway.json` and builds the root `Dockerfile`. Do **not** set it to `backend`.
-3. **Add Postgres**: project → *New* → *Database* → *Add PostgreSQL*. Railway injects
-   `DATABASE_URL` into the service automatically.
-4. **Set service variables** (Service → *Variables*):
-   - `SECRET_KEY` = a generated value (see command above)
-   - `DEBUG` = `False`
-   - `ALLOWED_HOSTS` is optional; the app already trusts Railway's
-     `RAILWAY_PUBLIC_DOMAIN` automatically.
-   - n8n variables described above, optional `KICONNECT_*` values for interactive
-     chat features, and the `EMAIL_*` variables for reminders.
-   - Optional: `SECURE_HSTS_SECONDS` (e.g. `31536000`) once the site is HTTPS-only.
-5. **Deploy.** The container's start command runs `collectstatic`, then `migrate`,
-   then `gunicorn` (see the root `Dockerfile`). The built SPA and Django static
-   files are served by WhiteNoise under `/static/`.
-6. **Expose it**: Service → *Settings* → *Networking* → *Generate Domain*. Create the
-   first admin user via the service shell: `python manage.py createsuperuser`.
-7. **Schedule the cron commands** (optional): add Railway Cron jobs for
-   `generate_weekly_missions` (weekly) and `send_daily_mission_reminders`
-   (Fridays at 12:00).
-
-### How prod differs from local
-
-- Frontend and backend are **one origin** in prod (Django serves the built SPA);
-  locally they are two containers and Vite proxies `/api` to Django.
-- `DATABASE_URL` comes from the Railway Postgres plugin (not Docker compose).
-- The container runs `gunicorn` (prod) instead of `runserver` (dev auto-reload).
-- `DEBUG=False` enables secure cookies, SSL redirect, and SSL-required DB
-  connections (see the bottom of `backend/config/settings.py`).
-- Static files (SPA + admin) are collected at startup and served by WhiteNoise.
-- **n8n is not part of the Railway image.** Compose runs it locally; in
-  production `N8N_MISSION_GENERATION_URL` and `N8N_RESEARCH_COLLECTOR_URL` have
-  to point at an n8n instance hosted elsewhere, and that instance needs
-  `DJANGO_INTERNAL_BASE_URL` set to the public Railway URL. Without it the app
-  runs, but weekly mission generation and research collection stay unavailable.
-- The research scheduler is **not** a separate service in prod: the root
-  `Dockerfile` starts `run_research_scheduler` as a background process in the
-  same container before handing over to gunicorn.
