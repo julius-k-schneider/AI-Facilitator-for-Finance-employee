@@ -762,6 +762,28 @@ function MissionReview({ enabled, onPublished }) {
   }, [enabled, generationWeek])
 
   const finalizeGeneration = useCallback(async (run) => {
+    if (run.status === 'completed' && run.automatic_retry_run_id) {
+      const data = await getGenerationRun(run.automatic_retry_run_id)
+      const retryRun = data.generation_run
+      await Promise.all([loadReview(), loadGenerationSchedule()])
+      rememberWeeklyGenerationRun(retryRun.id)
+      setGenerationRun(retryRun)
+      setGenerating(activeGenerationStatuses.has(retryRun.status))
+      if (!activeGenerationStatuses.has(retryRun.status)) {
+        forgetWeeklyGenerationRun()
+        setGenerationRun(null)
+        if (retryRun.status === 'completed') {
+          setError('')
+          setMessage('')
+          setGenerationResult(retryRun)
+        } else {
+          const failures = Array.isArray(retryRun.failed_requirements) ? retryRun.failed_requirements : []
+          setGenerationResult(failures.length > 0 ? retryRun : null)
+          setError(failures.length > 0 ? '' : (retryRun.error_message || t('missions.review.generationStatus.failed')))
+        }
+      }
+      return
+    }
     forgetWeeklyGenerationRun()
     setGenerating(false)
     setGenerationRun(null)
