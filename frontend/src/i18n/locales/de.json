@@ -29,12 +29,12 @@
     "accountant": "Accountant"
   },
   "sidebar": {
-    "subtitle": "AI FACILITATOR",
+    "subtitle": "FIN.PILOT",
     "tooltipProfile": "Profil",
     "tooltipLogout": "Logout"
   },
   "login": {
-    "platform": "AI ENABLEMENT PLATFORM",
+    "platform": "FIN.PILOT",
     "heroTitle": "Baue die AI-Skills von morgen.",
     "heroSubtitle": "{{tagline}}. Lernen, anwenden und wachsen – direkt in deinem Arbeitsalltag im Finance-Bereich.",
     "highlights": [
