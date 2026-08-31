@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -18,6 +20,17 @@ SKILL_ORDER = [
 
 def difficulty_for_skill(skill_level):
     return SKILL_TO_DIFFICULTY.get(skill_level, Mission.DIFFICULTY_EASY)
+
+
+def _next_phase_checkpoint(profile):
+    """Return a checkpoint strictly after every persisted user attempt."""
+    checkpoint = timezone.now()
+    latest_attempt_at = MissionAttempt.objects.filter(user=profile.user).order_by(
+        '-completed_at', '-id',
+    ).values_list('completed_at', flat=True).first()
+    if latest_attempt_at is not None and checkpoint <= latest_attempt_at:
+        return latest_attempt_at + timedelta(microseconds=1)
+    return checkpoint
 
 
 def _relevant_attempts(profile):
@@ -96,6 +109,6 @@ def set_skill_level_manually(profile, skill_level):
     changed = locked.skill_level != skill_level
     if changed:
         locked.skill_level = skill_level
-        locked.skill_level_entered_at = timezone.now()
+        locked.skill_level_entered_at = _next_phase_checkpoint(locked)
         locked.save(update_fields=['skill_level', 'skill_level_entered_at'])
     return locked, changed
