@@ -1,4 +1,4 @@
-# AI-Facilitator-for-Finance-employee
+# Fin.pilot
 
 Django + PostgreSQL backend with a React/Vite frontend. Local development runs
 the application and n8n as **separate Docker containers** (with Vite proxying

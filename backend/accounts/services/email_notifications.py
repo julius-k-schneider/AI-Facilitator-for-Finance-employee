@@ -72,7 +72,7 @@ def send_daily_mission_reminder(user, reminder_date, missions, missing_missions)
         f'Noch offene Missionen:\n{mission_lines_de}\n\n'
         'Schau kurz in die App und erledige sie, wenn du Zeit hast.\n\n'
         'Viele Grüße\n'
-        'AI Facilitator\n\n'
+        'Fin.pilot\n\n'
         '----------\n\n'
         f'Hello {user.first_name or user.username},\n\n'
         'you have not completed all missions for this week yet.\n\n'
@@ -82,7 +82,7 @@ def send_daily_mission_reminder(user, reminder_date, missions, missing_missions)
         f'Still open missions:\n{mission_lines_en}\n\n'
         'Take a quick look at the app and complete them when you have time.\n\n'
         'Best regards\n'
-        'AI Facilitator'
+        'Fin.pilot'
     )
     return send_mail(
         subject,
