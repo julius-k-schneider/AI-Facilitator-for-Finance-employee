@@ -1,5 +1,3 @@
-import complianceDecision from './complianceDecision'
-import complianceTrafficLight from './complianceTrafficLight'
 import multipleChoice from './multipleChoice'
 import promptRanking from './promptRanking'
 import promptSelection from './promptSelection'
@@ -9,9 +7,13 @@ import bulkCategorization from './bulkCategorization'
 import planActualDeviation from './planActualDeviation'
 import duplicatePaymentHunt from './duplicatePaymentHunt'
 import invoiceExtraction from './invoiceExtraction'
+import policyViolationCheck from './policyViolationCheck'
+import receivablesAging from './receivablesAging'
+import vatRateAudit from './vatRateAudit'
+import bankReconciliation from './bankReconciliation'
 
-export const quizMissionTypes = [singleChoice, multipleChoice, complianceDecision, promptSelection, promptRanking, complianceTrafficLight]
-export const taskChallengeTypes = [bulkCategorization, planActualDeviation, duplicatePaymentHunt, invoiceExtraction]
+export const quizMissionTypes = [singleChoice, multipleChoice, promptSelection, promptRanking]
+export const taskChallengeTypes = [bulkCategorization, planActualDeviation, duplicatePaymentHunt, invoiceExtraction, policyViolationCheck, receivablesAging, vatRateAudit, bankReconciliation]
 // Every scheduled mission type is editable in Manage Missions. The chat challenge remains training-only.
 export const missionTypes = [...quizMissionTypes, ...taskChallengeTypes]
 export const trainingMissionTypes = [...quizMissionTypes, aiChatChallenge, ...taskChallengeTypes]
@@ -25,13 +27,7 @@ export function getMissionType(type) {
 export function createMissionTypeDefaults() {
   return {
     ...singleChoice.createDefaults(),
-    ...complianceTrafficLight.createDefaults(),
     ...bulkCategorization.createDefaults(),
     correct_order: [0, 1, 2],
   }
-}
-
-export function createTestMissions(language) {
-  const text = (de, en) => language === 'en' ? en : de
-  return quizMissionTypes.map((definition) => definition.example(text))
 }

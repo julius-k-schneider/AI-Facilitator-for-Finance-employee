@@ -281,34 +281,36 @@ class Mission(models.Model):
 
     TYPE_SINGLE_CHOICE = 'single_choice'
     TYPE_MULTIPLE_CHOICE = 'multiple_choice'
-    TYPE_COMPLIANCE_DECISION = 'compliance_decision'
     TYPE_PROMPT_SELECTION = 'prompt_selection'
     TYPE_PROMPT_RANKING = 'prompt_ranking'
-    TYPE_COMPLIANCE_TRAFFIC_LIGHT = 'compliance_traffic_light'
     TYPE_BULK_CATEGORIZATION = 'bulk_categorization'
     TYPE_PLAN_ACTUAL_DEVIATION = 'plan_actual_deviation'
     TYPE_DUPLICATE_PAYMENT_HUNT = 'duplicate_payment_hunt'
     TYPE_INVOICE_EXTRACTION = 'invoice_extraction'
+    TYPE_POLICY_VIOLATION_CHECK = 'policy_violation_check'
+    TYPE_RECEIVABLES_AGING = 'receivables_aging'
+    TYPE_VAT_RATE_AUDIT = 'vat_rate_audit'
+    TYPE_BANK_RECONCILIATION = 'bank_reconciliation'
     TYPE_CHOICES = [
         (TYPE_SINGLE_CHOICE, 'Single Choice'),
         (TYPE_MULTIPLE_CHOICE, 'Multiple Choice'),
-        (TYPE_COMPLIANCE_DECISION, 'Compliance Decision'),
         (TYPE_PROMPT_SELECTION, 'Prompt Selection'),
         (TYPE_PROMPT_RANKING, 'Prompt Ranking'),
-        (TYPE_COMPLIANCE_TRAFFIC_LIGHT, 'Compliance Traffic Light'),
         (TYPE_BULK_CATEGORIZATION, 'Bulk Categorization'),
         (TYPE_PLAN_ACTUAL_DEVIATION, 'Plan vs. Actual Deviation'),
         (TYPE_DUPLICATE_PAYMENT_HUNT, 'Duplicate Payment Hunt'),
         (TYPE_INVOICE_EXTRACTION, 'Invoice Extraction'),
+        (TYPE_POLICY_VIOLATION_CHECK, 'Policy Violation Check'),
+        (TYPE_RECEIVABLES_AGING, 'Receivables Aging'),
+        (TYPE_VAT_RATE_AUDIT, 'VAT Rate Audit'),
+        (TYPE_BANK_RECONCILIATION, 'Bank Reconciliation'),
     ]
     # Quiz-style types share a common choice/index scoring model.
     CHOICE_TYPES = {
         TYPE_SINGLE_CHOICE,
         TYPE_MULTIPLE_CHOICE,
-        TYPE_COMPLIANCE_DECISION,
         TYPE_PROMPT_SELECTION,
         TYPE_PROMPT_RANKING,
-        TYPE_COMPLIANCE_TRAFFIC_LIGHT,
     }
     # Task-style types carry a case plus typed result fields scored deterministically.
     TASK_TYPES = {
@@ -316,6 +318,10 @@ class Mission(models.Model):
         TYPE_PLAN_ACTUAL_DEVIATION,
         TYPE_DUPLICATE_PAYMENT_HUNT,
         TYPE_INVOICE_EXTRACTION,
+        TYPE_POLICY_VIOLATION_CHECK,
+        TYPE_RECEIVABLES_AGING,
+        TYPE_VAT_RATE_AUDIT,
+        TYPE_BANK_RECONCILIATION,
     }
 
     STATUS_REVIEW = 'review'

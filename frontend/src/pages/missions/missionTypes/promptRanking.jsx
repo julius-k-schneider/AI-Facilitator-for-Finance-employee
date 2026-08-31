@@ -38,12 +38,27 @@ function ResultDetails({ mission, result, t }) {
   return <Paper withBorder radius="md" p="md"><Text fw={700} mb="xs">{t('missions.creator.rankingSolution')}</Text>{result.correct_order.map((optionIndex, index) => <Text key={optionIndex} fz="sm">{index + 1}. {mission.content.options[optionIndex]}</Text>)}{result.feedback && <Text fz="sm" c="dimmed" mt="sm">{result.feedback}</Text>}</Paper>
 }
 
+// Keeps a stored solution order as long as it is a full permutation of the
+// options; only a missing or inconsistent order falls back to the identity.
+function prepareRankingForm(form) {
+  const options = form.options.length < 3
+    ? [...form.options, ...Array.from({ length: 3 - form.options.length }, () => ({ de: '', en: '' }))]
+    : form.options
+  const stored = Array.isArray(form.correct_order) ? form.correct_order : []
+  const isPermutation = stored.length === options.length
+    && [...stored].sort((a, b) => a - b).every((value, index) => value === index)
+  return {
+    ...form,
+    options,
+    correct_order: isPermutation ? stored : options.map((_, index) => index),
+  }
+}
+
 export default {
   id: 'prompt_ranking', labelKey: 'promptRanking', hasSharedFeedback: true,
   createDefaults: () => ({ options: [{ de: '', en: '' }, { de: '', en: '' }, { de: '', en: '' }], correct_order: [0, 1, 2], correct_indices: [0] }),
-  prepareForm: (form) => ({ ...form, options: form.options.length < 3 ? [...form.options, ...Array.from({ length: 3 - form.options.length }, () => ({ de: '', en: '' }))] : form.options, correct_order: Array.from({ length: Math.max(3, form.options.length) }, (_, index) => index) }),
+  prepareForm: prepareRankingForm,
   initialAnswer: (mission) => mission.content.options.map((_, index) => index), isAnswerComplete: () => true,
   Runner, Editor, Solution, ResultDetails,
   evaluateTest: (mission, answer) => { const correct = answer.every((value, index) => value === mission.test_solution.correct_order[index]); return { correct, score: correct ? mission.max_points : 0, max_points: mission.max_points, correct_order: mission.test_solution.correct_order, feedback: mission.test_solution.feedback } },
-  example: (text) => ({ id: 'test-ranking', type: 'prompt_ranking', title: text('Prompts sortieren', 'Rank prompts'), description: text('Ordne drei Prompts nach ihrer Qualität.', 'Order three prompts by quality.'), max_points: 30, completed: false, score: null, content: { question: text('Sortiere vom schlechtesten zum besten Prompt.', 'Sort from the worst to the best prompt.'), options: [text('Was ist hier los?', 'What is going on?'), text('Analysiere die Abweichungen.', 'Analyze the variances.'), text('Vergleiche Plan und Ist, nenne die fünf größten Abweichungen und mögliche Ursachen als Tabelle.', 'Compare plan and actuals, listing the five largest variances and possible causes in a table.')] }, test_solution: { correct_order: [0, 1, 2], feedback: text('Ziel, Kontext und Ausgabeformat machen einen Prompt konkret.', 'Goal, context, and output format make a prompt specific.'), micro_learning: text('Ein Prompt wird besser, wenn er der AI weniger Interpretationsspielraum lässt. In Finance-Aufgaben helfen besonders Ziel, Datenbezug und Ausgabeformat, weil Ergebnisse später nachvollziehbar und prüfbar sein müssen. So wird aus einer allgemeinen Bitte ein klarer Arbeitsauftrag.', 'A prompt improves when it leaves less room for interpretation. In finance tasks, the goal, data context, and output format are especially useful because results need to be traceable and checkable. This turns a general request into a clear work instruction.') } }),
 }

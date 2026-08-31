@@ -19,14 +19,11 @@ from .models import (
     SkillProgressionSettings,
     WeeklyLeaderboardSnapshot,
 )
-from .services.ai_mission_generator import (
+from .prompts.mission_generation import SYSTEM_PROMPT, build_user_prompt
+from .services.generation_planning import (
     AiMissionGenerationError,
-    SYSTEM_PROMPT,
-    build_user_prompt,
     extract_json,
-    generate_next_week,
     next_calendar_week,
-    split_target_slots,
 )
 from .services.ai_chat_challenge import evaluate_final_answers, validate_challenge
 from .services.email_notifications import send_daily_mission_reminder, send_daily_mission_reminders
@@ -420,34 +417,6 @@ class AccountsApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['result']['score'], 60)
         self.assertEqual(MissionAttempt.objects.get(user=player, mission=mission).answer['selected_order'], [1, 0, 2])
-
-    def test_compliance_traffic_light_awards_partial_points(self):
-        creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
-        player = self.create_user('traffic@example.com')
-        mission = self.create_mission(creator, points=90)
-        mission.mission_type = Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT
-        mission.content = {
-            'question': {'de': 'Bewerte.', 'en': 'Assess.'},
-            'statements': [
-                {'text': {'de': 'A', 'en': 'A'}, 'correct_color': 'green', 'feedback': {'de': 'A', 'en': 'A'}},
-                {'text': {'de': 'B', 'en': 'B'}, 'correct_color': 'yellow', 'feedback': {'de': 'B', 'en': 'B'}},
-                {'text': {'de': 'C', 'en': 'C'}, 'correct_color': 'red', 'feedback': {'de': 'C', 'en': 'C'}},
-            ],
-        }
-        mission.save(update_fields=['mission_type', 'content'])
-        self.client.force_login(player)
-
-        available = self.client.get('/api/auth/missions/today/?lang=en', secure=True).json()['missions'][0]
-        self.assertNotIn('correct_color', str(available['content']))
-        response = self.client.post('/api/auth/progress/complete/', {
-            'mission_id': mission.id, 'answer': ['green', 'red', 'red'],
-        }, content_type='application/json', secure=True)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['result']['score'], 60)
-        self.assertEqual(response.json()['result']['correct_count'], 2)
-        self.assertEqual(response.json()['result']['item_correct'], [True, False, True])
-        self.assertFalse(response.json()['result']['correct'])
 
     def test_only_creators_can_create_and_date_is_limited_to_one_mission(self):
         creator = self.create_user('creator@example.com', Profile.ROLE_CONTENT_CREATOR)
@@ -1390,13 +1359,6 @@ class SkillProgressionTests(TestCase):
 
 
 class AiMissionServiceTests(TestCase):
-    def create_creator(self):
-        user = get_user_model().objects.create_user(
-            username='creator@example.com', email='creator@example.com', password='Test1234!'
-        )
-        Profile.objects.create(user=user, role=Profile.ROLE_CONTENT_CREATOR)
-        return user
-
     def valid_payload(self, target_slots):
         missions = []
         for scheduled_date, count in target_slots.items():
@@ -1491,13 +1453,6 @@ class AiMissionServiceTests(TestCase):
         with self.assertRaises(MissionValidationError):
             validate_generated_payload(payload, {start: 1})
 
-    def test_generation_batches_are_limited_to_one_day(self):
-        start, _ = next_calendar_week()
-        slots = {start + timedelta(days=offset): 1 for offset in range(7)}
-        batches = split_target_slots(slots)
-        self.assertEqual(len(batches), 7)
-        self.assertTrue(all(sum(batch.values()) == 1 for batch in batches))
-
     def test_json_extractor_accepts_fences_and_trailing_text(self):
         self.assertEqual(extract_json('```json\n{"missions": []}\n```'), {'missions': []})
         self.assertEqual(extract_json('Result: {"missions": []}\nDone'), {'missions': []})
@@ -1522,7 +1477,7 @@ class AiMissionServiceTests(TestCase):
         normalized = validate_generated_payload(payload, {start: 1})
         self.assertEqual(normalized[0]['mission_type'], Mission.TYPE_SINGLE_CHOICE)
 
-    def test_validator_accepts_prompt_ranking_and_traffic_light(self):
+    def test_validator_accepts_prompt_ranking(self):
         start, _ = next_calendar_week()
         ranking = self.valid_payload({start: 1})
         ranking['missions'][0]['type'] = Mission.TYPE_PROMPT_RANKING
@@ -1534,90 +1489,6 @@ class AiMissionServiceTests(TestCase):
         ranking['missions'][0]['content'].pop('correct_option_index')
         normalized = validate_generated_payload(ranking, {start: 1})
         self.assertEqual(normalized[0]['content']['correct_order'], [0, 1, 2])
-
-        traffic = self.valid_payload({start: 1})
-        traffic['missions'][0]['type'] = Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT
-        traffic_content = {
-            'question_de': 'Bewerte die Szenarien.', 'question_en': 'Assess the scenarios.',
-            'statements_de': ['A', 'B', 'C'], 'statements_en': ['A', 'B', 'C'],
-            'correct_colors': ['green', 'yellow', 'red'],
-            'statement_feedback_de': ['Gut', 'Prüfen', 'Verboten'],
-            'statement_feedback_en': ['Fine', 'Check', 'Forbidden'],
-            'micro_learning_de': (
-                'Die Ampel ist eine einfache Denkstütze für AI-Nutzung im Arbeitsalltag. '
-                'Grün bedeutet meist unkritisch, gelb braucht zusätzliche Schutzmaßnahmen, '
-                'und rot sollte nicht in ein AI-Tool eingegeben werden.'
-            ),
-            'micro_learning_en': (
-                'The traffic light is a simple thinking aid for AI use at work. Green usually means low risk, '
-                'yellow requires additional safeguards, and red should not be entered into an AI tool.'
-            ),
-        }
-        traffic['missions'][0]['content'] = traffic_content
-        for variant in traffic['missions'][0]['variants'].values():
-            variant['content'] = traffic_content
-        normalized = validate_generated_payload(traffic, {start: 1})
-        self.assertEqual(normalized[0]['content']['statements'][1]['correct_color'], 'yellow')
-
-    def task_candidate(self):
-        return {
-            'mission_type': Mission.TYPE_BULK_CATEGORIZATION,
-            'title_de': 'Task', 'title_en': 'Task', 'description_de': 'd', 'description_en': 'd',
-            'max_points': 40, 'content': {
-                'task': {'de': 't', 'en': 't'}, 'case_data': {'de': [], 'en': []}, 'case_format': 'table',
-                'result_fields': [], 'micro_learning': {'de': 'x' * 30, 'en': 'x' * 30},
-            },
-        }
-
-    @patch('accounts.services.ai_task_challenge.generate_task_challenge')
-    @patch('accounts.services.ai_mission_generator.call_ai')
-    def test_weekly_generation_splits_workweek_into_quiz_and_task_days(self, call_ai_mock, generate_task_mock):
-        creator = self.create_creator()
-        start, end = next_calendar_week()
-        Mission.objects.create(
-            mission_type=Mission.TYPE_SINGLE_CHOICE,
-            scheduled_date=start,
-            title_de='Veröffentlicht', title_en='Published',
-            content={'question': {'de': 'Frage', 'en': 'Question'}, 'options': [], 'correct_index': 0},
-            max_points=20, created_by=creator, status=Mission.STATUS_PUBLISHED,
-        )
-        call_ai_mock.side_effect = self.valid_payload
-        generate_task_mock.side_effect = lambda *args, **kwargs: self.task_candidate()
-
-        created, actual_start, actual_end = generate_next_week(creator)
-        self.assertEqual((actual_start, actual_end), (start, end))
-
-        # Monday already has content, so it is left untouched entirely - no top-up.
-        monday_missions = Mission.objects.filter(scheduled_date=start)
-        self.assertEqual(monday_missions.count(), 1)
-        self.assertEqual(monday_missions.first().status, Mission.STATUS_PUBLISHED)
-
-        # Weekends are never scheduled.
-        weekend_days = [start + timedelta(days=offset) for offset in (5, 6)]
-        self.assertEqual(Mission.objects.filter(scheduled_date__in=weekend_days).count(), 0)
-
-        # 4 open weekdays (Tue-Fri): each gets exactly one mission topic.
-        self.assertEqual(len(created), 4)
-        self.assertTrue(all(mission.status == Mission.STATUS_REVIEW for mission in created))
-        self.assertTrue(all(mission.generated_by_ai for mission in created))
-        task_created = [mission for mission in created if mission.mission_type in Mission.TASK_TYPES]
-        quiz_created = [mission for mission in created if mission.mission_type in Mission.CHOICE_TYPES]
-        self.assertEqual(len(task_created), 2)
-        self.assertEqual(len(quiz_created), 2)
-        for day in (start + timedelta(days=offset) for offset in range(1, 5)):
-            day_missions = [mission for mission in created if mission.scheduled_date == day]
-            self.assertEqual(len(day_missions), 1)
-            self.assertTrue(day_missions[0].has_difficulty_variants)
-
-    @patch('accounts.services.ai_task_challenge.generate_task_challenge')
-    @patch('accounts.services.ai_mission_generator.call_ai')
-    def test_invalid_ai_response_creates_no_missions(self, call_ai_mock, generate_task_mock):
-        creator = self.create_creator()
-        call_ai_mock.return_value = {'missions': []}
-        generate_task_mock.side_effect = AiMissionGenerationError('boom')
-        with self.assertRaises(AiMissionGenerationError):
-            generate_next_week(creator)
-        self.assertEqual(Mission.objects.count(), 0)
 
 
 class AiTaskChallengeTests(TestCase):
@@ -1679,7 +1550,6 @@ class AiTaskChallengeTests(TestCase):
         self.assertEqual(len(public['case_data']), 30)
 
     def test_invalid_category_index_is_rejected(self):
-        from accounts.services.ai_mission_generator import AiMissionGenerationError
         from accounts.services.ai_task_challenge import validate_task_challenge
         payload = self.raw_payload()
         payload['rows'][0]['category_index'] = 9
@@ -1770,28 +1640,6 @@ class AiTaskChallengeTests(TestCase):
             'mission_type': 'not_a_real_type',
         }, content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 400)
-
-    def test_generate_task_day_candidates_fills_requested_days(self):
-        from accounts.services import ai_mission_generator
-        candidate = {
-            'mission_type': Mission.TYPE_BULK_CATEGORIZATION, 'title_de': 't', 'title_en': 't',
-            'description_de': 'd', 'description_en': 'd', 'max_points': 40, 'content': self.content(),
-        }
-        day = timezone.localdate()
-        with patch('accounts.services.ai_task_challenge.generate_task_challenge', return_value=candidate):
-            candidates, failed_days = ai_mission_generator.generate_task_day_candidates([day])
-        self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0]['scheduled_date'], day)
-        self.assertEqual(failed_days, [])
-
-    def test_generate_task_day_candidates_falls_back_on_failure(self):
-        from accounts.services import ai_mission_generator
-        from accounts.services.ai_mission_generator import AiMissionGenerationError
-        day = timezone.localdate()
-        with patch('accounts.services.ai_task_challenge.generate_task_challenge', side_effect=AiMissionGenerationError('boom')):
-            candidates, failed_days = ai_mission_generator.generate_task_day_candidates([day])
-        self.assertEqual(candidates, [])
-        self.assertEqual(failed_days, [day])
 
 
 class AiTaskChallengeOtherTypesTests(TestCase):
@@ -1987,6 +1835,224 @@ class AiTaskChallengeDifficultyContractTests(TestCase):
             })
         return {**self.common(), 'invoices': invoices}
 
+    def policy_payload(self, difficulty):
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        hotel_count, hospitality_count = {'easy': (3, 2), 'medium': (4, 3), 'hard': (5, 4)}[difficulty]
+        rows = []
+        excess = 10.0
+        for index in range(hotel_count):
+            rows.append({
+                'date': '2026-03-01', 'employee_de': f'M. Vogel {index}', 'employee_en': f'M. Vogel {index}',
+                'category': 'hotel', 'units': 2, 'amount': round(300.0 + excess, 2),
+                'description_de': 'Hotel Rheinblick, 2 Naechte waehrend des Audits',
+                'description_en': 'Hotel Rheinblick, 2 nights during the audit',
+            })
+            excess += 10.0
+        for index in range(hospitality_count):
+            rows.append({
+                'date': '2026-03-02', 'employee_de': f'S. Krause {index}', 'employee_en': f'S. Krause {index}',
+                'category': 'hospitality', 'units': 3, 'amount': round(180.0 + excess, 2),
+                'description_de': 'Abendessen mit 3 Kunden im Restaurant Vitali',
+                'description_en': 'Dinner with 3 clients at Restaurant Vitali',
+            })
+            excess += 10.0
+        rows.extend({
+            'date': '2026-03-03', 'employee_de': 'T. Reiter', 'employee_en': 'T. Reiter',
+            'category': 'other', 'units': 1, 'amount': 48.00,
+            'description_de': 'Bahnticket zweiter Klasse nach Koeln',
+            'description_en': 'Second class train ticket to Cologne',
+        } for _ in range(row_count - len(rows)))
+        return {**self.common(), 'rows': rows}
+
+    def aging_payload(self, difficulty):
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        over_60_count = {'easy': 4, 'medium': 6, 'hard': 8}[difficulty]
+        reference_date = date(2026, 4, 30)
+
+        def row(number, days_overdue):
+            invoice_date = reference_date - timedelta(days=days_overdue + 30)
+            return {
+                'invoice_number': f'RE-{number}', 'customer_de': f'Brandt Logistik {number} GmbH',
+                'customer_en': f'Brandt Logistics {number} GmbH', 'invoice_date': invoice_date.isoformat(),
+                'term_days': 30, 'term_de': '30 Tage netto', 'term_en': '30 days net',
+                'amount': 1000.00 + number,
+            }
+
+        rows = [row(100 + index, 65 + index * 5) for index in range(over_60_count)]
+        rows.extend(row(200 + index, [10, 45, -20][index % 3]) for index in range(row_count - len(rows)))
+        return {**self.common(), 'reference_date': reference_date.isoformat(), 'rows': rows}
+
+    def vat_payload(self, difficulty):
+        row_count = {'easy': 24, 'medium': 36, 'hard': 48}[difficulty]
+        wrong_count = {'easy': 4, 'medium': 6, 'hard': 8}[difficulty]
+        rows = [{
+            'date': '2026-03-02', 'category': 'books', 'net': 1000.00 + index * 100, 'booked_rate': 19,
+            'description_de': 'Lieferung von Fachbuechern zum Bilanzrecht',
+            'description_en': 'Delivery of accounting law textbooks',
+        } for index in range(wrong_count)]
+        rows.extend({
+            'date': '2026-03-03', 'category': 'consulting', 'net': 1000.00, 'booked_rate': 19,
+            'description_de': 'Beratungshonorar Prozessoptimierung',
+            'description_en': 'Consulting fee for process optimisation',
+        } for _ in range(row_count - len(rows)))
+        return {**self.common(), 'rows': rows}
+
+    def bank_payload(self, difficulty):
+        pairs, bank_only, ledger_only = {'easy': (10, 3, 1), 'medium': (15, 4, 2), 'hard': (20, 5, 3)}[difficulty]
+        rows = []
+        for index in range(pairs):
+            document = f'RE-{100 + index}'
+            amount = 100.00 + index
+            rows.append({
+                'source': 'bank', 'date': '2026-03-01', 'document': document, 'amount': amount,
+                'text_de': f'zahlung re {100 + index} mueller gmbh',
+                'text_en': f'payment inv {100 + index} mueller gmbh',
+            })
+            rows.append({
+                'source': 'ledger', 'date': '2026-03-01', 'document': document, 'amount': amount,
+                'text_de': 'Mueller GmbH Wartungsvertrag', 'text_en': 'Mueller GmbH maintenance contract',
+            })
+        rows.extend({
+            'source': 'bank', 'date': '2026-03-05', 'document': f'BO-{index}', 'amount': 500.00 + index * 10,
+            'text_de': f'ueberweisung bo {index} seiler ag', 'text_en': f'transfer bo {index} seiler ag',
+        } for index in range(bank_only))
+        rows.extend({
+            'source': 'ledger', 'date': '2026-03-06', 'document': f'LO-{index}', 'amount': 900.00 + index * 10,
+            'text_de': 'Seiler AG Materiallieferung', 'text_en': 'Seiler AG material delivery',
+        } for index in range(ledger_only))
+        return {**self.common(), 'rows': rows}
+
+    def test_analysis_task_answer_keys_are_computed_in_python(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        expected = {
+            'policy_violation_check': {
+                'violation_count': 9, 'non_reimbursable_sum': 450.0, 'largest_violation': 90.0,
+                'top_rule': {'de': 'Hotel', 'en': 'Hotel'},
+            },
+            'receivables_aging': {'count_over_60': 8, 'sum_over_60': 8828.0,
+                                  'oldest_invoice_number': {'de': 'RE-107', 'en': 'RE-107'}},
+            'vat_rate_audit': {'wrong_line_count': 8, 'correct_total_vat': 8356.0,
+                               'vat_difference_sum': 1296.0, 'largest_vat_difference': 204.0},
+            'bank_reconciliation': {'bank_only_count': 5, 'ledger_only_count': 3,
+                                    'unmatched_amount_sum': 5330.0, 'largest_unmatched_amount': 920.0},
+        }
+        builders = {
+            'policy_violation_check': self.policy_payload,
+            'receivables_aging': self.aging_payload,
+            'vat_rate_audit': self.vat_payload,
+            'bank_reconciliation': self.bank_payload,
+        }
+        for mission_type, solutions in expected.items():
+            candidate = validate_task_challenge(builders[mission_type]('hard'), mission_type, difficulty='hard')
+            fields = {field['id']: field for field in candidate['content']['result_fields']}
+            for field_id, solution in solutions.items():
+                self.assertEqual(fields[field_id]['solution'], solution, f'{mission_type}.{field_id}')
+
+    def test_task_generation_budget_is_shared_by_every_call_site(self):
+        # The n8n path builds its own generator request. When its budget drifted below the
+        # direct path's, hard-constraint task types were truncated mid-array and failed the
+        # row-count contract with no sign of the real cause.
+        import inspect
+        from accounts.services import n8n_mission_generation
+        from accounts.services.ai_task_challenge import GENERATION_MAX_TOKENS
+
+        self.assertGreaterEqual(GENERATION_MAX_TOKENS, 9000)
+        task_source = inspect.getsource(n8n_mission_generation._task_requirement)
+        self.assertIn('TASK_GENERATION_MAX_TOKENS', task_source)
+        self.assertNotRegex(task_source, r'max_tokens=\d+')
+
+    def test_ambiguity_guards_only_apply_to_requested_fields(self):
+        # Enforcing every tie regardless of difficulty rejected roughly half of all easy
+        # variants over answers those variants never ask for.
+        from accounts.services.ai_task_challenge import validate_task_challenge
+        payload = self.policy_payload('easy')
+        for row in payload['rows']:
+            if row['category'] == 'hotel':  # 3 hotel + 2 hospitality -> 2 vs 2, a tied top rule
+                row.update({
+                    'category': 'other', 'units': 1, 'amount': 48.00,
+                    'description_de': 'Parkgebuehr Flughafen', 'description_en': 'Airport parking fee',
+                })
+                break
+
+        easy = validate_task_challenge(payload, 'policy_violation_check', difficulty='easy')
+        self.assertEqual(
+            [field['id'] for field in easy['content']['result_fields']],
+            ['violation_count', 'non_reimbursable_sum'],
+        )
+        for field in easy['content']['result_fields']:
+            self.assertNotIn('ambiguous', field)
+
+        # hard does ask for the most-broken rule, so the same data must be rejected there.
+        hard_payload = self.policy_payload('hard')
+        for row in hard_payload['rows']:
+            if row['category'] == 'hotel':
+                row.update({
+                    'category': 'other', 'units': 1, 'amount': 48.00,
+                    'description_de': 'Parkgebuehr Flughafen', 'description_en': 'Airport parking fee',
+                })
+                break
+        with self.assertRaisesRegex(AiMissionGenerationError, 'top_rule has no unique answer'):
+            validate_task_challenge(hard_payload, 'policy_violation_check', difficulty='hard')
+
+    def test_analysis_task_contracts_name_the_schema_key(self):
+        # A contract noun that differs from the JSON key makes the model rename the array,
+        # which surfaces as a bogus "needs exactly 24 rows" failure.
+        from accounts.prompts.task_challenges import TASK_DIFFICULTY_CONTRACTS
+        for mission_type in ('policy_violation_check', 'receivables_aging', 'vat_rate_audit', 'bank_reconciliation'):
+            for difficulty, contract in TASK_DIFFICULTY_CONTRACTS[mission_type].items():
+                self.assertRegex(
+                    contract, r'\d+ rows',
+                    f'{mission_type}/{difficulty} must name the rows key, not a scenario synonym',
+                )
+                for synonym in ('expense lines', 'booking lines', 'open invoices', 'row objects'):
+                    self.assertNotIn(synonym, contract, f'{mission_type}/{difficulty} renames the rows key')
+
+    def test_analysis_task_volume_tolerates_a_stray_row(self):
+        # Models satisfy the content rules but overshoot the count; an exact demand failed the
+        # whole run over a row a learner cannot even perceive.
+        from accounts.services.ai_task_challenge import VOLUME_BAND_TOLERANCE, validate_task_challenge
+        payload = self.policy_payload('easy')
+        extra = dict(payload['rows'][-1])
+        payload['rows'].extend(dict(extra) for _ in range(VOLUME_BAND_TOLERANCE))
+        candidate = validate_task_challenge(payload, 'policy_violation_check', difficulty='easy')
+        self.assertEqual(len(candidate['content']['case_data']['de']), 24 + VOLUME_BAND_TOLERANCE)
+
+        # One row beyond the band is still rejected, so the difficulties stay far apart.
+        payload['rows'].append(dict(extra))
+        with self.assertRaisesRegex(AiMissionGenerationError, 'needs 24 to 28 rows'):
+            validate_task_challenge(payload, 'policy_violation_check', difficulty='easy')
+
+    def test_analysis_task_ambiguous_data_is_rejected(self):
+        from accounts.services.ai_task_challenge import validate_task_challenge
+
+        # A tie for "largest single violation" is ambiguous from medium up, where the field is asked.
+        payload = self.policy_payload('medium')
+        payload['rows'][4]['amount'] = payload['rows'][6]['amount']
+        with self.assertRaisesRegex(AiMissionGenerationError, 'largest_violation has no unique answer'):
+            validate_task_challenge(payload, 'policy_violation_check', difficulty='medium')
+
+        # The policy input has to be legible from the prose, not from a hidden column.
+        payload = self.policy_payload('easy')
+        payload['rows'][0]['description_de'] = 'Hotel Rheinblick, zwei Naechte waehrend des Audits'
+        with self.assertRaisesRegex(AiMissionGenerationError, 'digit'):
+            validate_task_challenge(payload, 'policy_violation_check', difficulty='easy')
+
+        # An invoice becoming due exactly on the cut-off date is not gradable either way.
+        payload = self.aging_payload('easy')
+        payload['rows'][-1]['invoice_date'] = (date(2026, 4, 30) - timedelta(days=30)).isoformat()
+        with self.assertRaisesRegex(AiMissionGenerationError, 'due exactly on the reference date'):
+            validate_task_challenge(payload, 'receivables_aging', difficulty='easy')
+
+        # Both reconciliation counts being equal would let one guess cover both fields.
+        payload = self.bank_payload('easy')
+        payload['rows'] = [row for row in payload['rows'] if row['document'] != 'BO-2']
+        payload['rows'].append({
+            'source': 'ledger', 'date': '2026-03-06', 'document': 'LO-8', 'amount': 930.00,
+            'text_de': 'Seiler AG Nachlieferung', 'text_en': 'Seiler AG follow-up delivery',
+        })
+        with self.assertRaisesRegex(AiMissionGenerationError, 'different unmatched count'):
+            validate_task_challenge(payload, 'bank_reconciliation', difficulty='easy')
+
     def test_every_task_type_has_observable_difficulty_progression(self):
         from accounts.services.ai_task_challenge import validate_task_challenge
         expected_fields = {
@@ -1994,18 +2060,30 @@ class AiTaskChallengeDifficultyContractTests(TestCase):
             'plan_actual_deviation': {'easy': 2, 'medium': 3, 'hard': 5},
             'duplicate_payment_hunt': {'easy': 1, 'medium': 2, 'hard': 3},
             'invoice_extraction': {'easy': 2, 'medium': 3, 'hard': 4},
+            'policy_violation_check': {'easy': 2, 'medium': 3, 'hard': 4},
+            'receivables_aging': {'easy': 2, 'medium': 3, 'hard': 4},
+            'vat_rate_audit': {'easy': 2, 'medium': 3, 'hard': 4},
+            'bank_reconciliation': {'easy': 2, 'medium': 3, 'hard': 4},
         }
         builders = {
             'bulk_categorization': self.bulk_payload,
             'plan_actual_deviation': self.plan_payload,
             'duplicate_payment_hunt': self.duplicate_payload,
             'invoice_extraction': self.invoice_payload,
+            'policy_violation_check': self.policy_payload,
+            'receivables_aging': self.aging_payload,
+            'vat_rate_audit': self.vat_payload,
+            'bank_reconciliation': self.bank_payload,
         }
         expected_items = {
             'bulk_categorization': [24, 36, 48],
             'plan_actual_deviation': [24, 36, 48],
             'duplicate_payment_hunt': [24, 36, 48],
             'invoice_extraction': [12, 16, 20],
+            'policy_violation_check': [24, 36, 48],
+            'receivables_aging': [24, 36, 48],
+            'vat_rate_audit': [24, 36, 48],
+            'bank_reconciliation': [24, 36, 48],
         }
         for mission_type, builder in builders.items():
             variants = [

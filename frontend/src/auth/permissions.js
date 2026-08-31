@@ -22,7 +22,7 @@ export const PERMISSIONS = {
   ASSIGN_ROLES: 'roles:assign',
 }
 
-export const ROLE_PERMISSIONS = {
+const ROLE_PERMISSIONS = {
   [ROLES.USER]: [PERMISSIONS.PLAY_MISSIONS],
   [ROLES.CONTROLLER]: [PERMISSIONS.PLAY_MISSIONS],
   [ROLES.ACCOUNTANT]: [PERMISSIONS.PLAY_MISSIONS],
@@ -36,11 +36,11 @@ export const ROLE_PERMISSIONS = {
   ],
 }
 
-export function getUserRole(user) {
+function getUserRole(user) {
   return user?.role && ROLE_PERMISSIONS[user.role] ? user.role : ROLES.USER
 }
 
-export function getRolePermissions(role) {
+function getRolePermissions(role) {
   return ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS[ROLES.USER]
 }
 
@@ -48,18 +48,6 @@ export function getAvailableRoles() {
   return Object.values(ROLES)
 }
 
-export function hasRole(user, role) {
-  return getUserRole(user) === role
-}
-
 export function hasPermission(user, permission) {
   return getRolePermissions(getUserRole(user)).includes(permission)
-}
-
-export function canManageUsers(user) {
-  return hasPermission(user, PERMISSIONS.MANAGE_USERS)
-}
-
-export function canCreateContent(user) {
-  return hasPermission(user, PERMISSIONS.CREATE_CONTENT)
 }

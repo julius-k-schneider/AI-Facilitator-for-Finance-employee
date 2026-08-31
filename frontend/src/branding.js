@@ -15,7 +15,7 @@ import logo from './assets/Lufthansa_Group_2025.svg.png'
  * in the assets folder (adjust the import above) or with a URL.
  */
 export const branding = {
-  name: 'AI Facilitator',
+  name: 'Fin.pilot',
   tagline: 'AI Enablement for the Lufthansa Group',
   logo,
   logoAlt: 'Lufthansa Group',

@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { Badge, Button, Checkbox, Group, Paper, Radio, Stack, Text, TextInput } from '@mantine/core'
+import { Button, Checkbox, Group, Paper, Radio, Stack, Text, TextInput } from '@mantine/core'
 import { IconPlus } from '@tabler/icons-react'
 
 export const emptyOptions = () => [{ de: '', en: '' }, { de: '', en: '' }]
@@ -56,7 +56,7 @@ export function evaluateChoiceTest(mission, answer, multiple = false) {
   return { correct, score: correct ? mission.max_points : 0, max_points: mission.max_points, correct_indices: expected, feedback }
 }
 
-export function choiceDefinition({ id, labelKey, multiple = false, example }) {
+export function choiceDefinition({ id, labelKey, multiple = false }) {
   return {
     id,
     labelKey,
@@ -68,10 +68,5 @@ export function choiceDefinition({ id, labelKey, multiple = false, example }) {
     Editor: (props) => <ChoiceEditor {...props} multiple={multiple} />,
     Solution: ChoiceSolution,
     evaluateTest: (mission, answer) => evaluateChoiceTest(mission, answer, multiple),
-    example,
   }
-}
-
-export function typeBadge(position) {
-  return <Badge variant="light">{position + 1}</Badge>
 }

@@ -16,6 +16,7 @@ from .services.n8n_mission_generation import (
     GenerationContractError,
     complete_generation_run,
     generation_run_payload,
+    reserve_validated_candidate,
     update_generation_run,
     validate_requirement_result,
 )
@@ -70,6 +71,7 @@ def validate_mission_view(request):
         return JsonResponse({'error': 'requirement_id is required'}, status=400)
     try:
         candidate = validate_requirement_result(run, requirement_id, data.get('result'))
+        reserve_validated_candidate(run, requirement_id, candidate)
     except GenerationContractError as exception:
         return JsonResponse({'valid': False, 'error': str(exception)}, status=422)
     return JsonResponse({'valid': True, 'normalized_result': candidate})

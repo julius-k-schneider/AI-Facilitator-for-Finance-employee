@@ -1,75 +1,107 @@
 # n8n Workflows
 
-Die Research-Funktion ist bewusst in zwei eigenständige Workflows aufgeteilt. Die Missionsgenerierung verwendet zusätzlich den neu aufgebauten V2-Orchestrator und einen getrennten Single-Mission-Worker.
+The research feature is deliberately split into two independent workflows.
+Mission generation additionally uses the rebuilt V2 orchestrator and a separate
+single-mission worker.
 
 ## AI Mission Generator V2
 
-- Workflow-IDs: `MissionGeneratorV2Prod` und `MissionWorkerV2Prod`
-- Produktiver Webhook: `POST /webhook/mission-generation`
-- Interner Worker-Webhook: `POST /webhook/mission-generation-worker-v2`
-- Vor einer Wochengenerierung ruft der Orchestrator den Research-Selector lokal auf. Bei einer normalen Woche werden
-  abhängig von der Zahl der Quiz-Missionen höchstens zwei bis drei passende aktuelle Kontexte zugeordnet.
-- Research-Kontext wird nur an die konkret ausgewählte Quiz-Mission weitergereicht. Generator, Reviewer und Repair
-  erhalten denselben geprüften Kontext; Task-Missionen und die übrigen Quiz-Missionen bleiben Evergreen-Inhalte.
-- Ein leerer Pool, eine nicht passende Auswahl oder ein Ausfall des Selectors blockiert die Missionsgenerierung nicht.
-  Der Lauf wird dann ohne Research-Kontext fortgesetzt und hinterlegt eine Warnung im Review-Bericht.
-- Modellaufrufe laufen in echten Zweier-Batches, damit die Kapazitätsgrenze des Modellendpunkts nicht überschritten wird.
-- Generator, Reviewer und Repair übergeben `reasoning_effort: "low"` als echten KI:connect-API-Parameter.
-- Laufzeit, Prompt-, Completion- und Gesamttokens sowie `finish_reason` werden für jeden Generator-, Reviewer- und
-  Repair-Aufruf pro Missionsanforderung in `GenerationRun.result_metadata.mission_metrics` gespeichert.
-- Jede Mission wird unabhängig validiert und reviewed; höchstens zwei gezielte Repair-Versuche sind möglich.
-- Der semantische Reviewer erhält bei großen Task-Missionen nur eine kompakte, repräsentative Projektion; Schema,
-  Zeilenzahlen, Berechnungen und Lösungen werden weiterhin deterministisch von Django geprüft.
-- Task-Schwierigkeiten verwenden verbindliche Daten- und Ergebnisprofile: Easy hat weniger Datensätze und Kennzahlen,
-  Medium erweitert beides, Hard verwendet den größten Datensatz und zusätzliche Prüfkennzahlen. Aufgabenformulierungen,
-  auswertbare Ergebnisfelder und Punkte werden passend dazu deterministisch von Django synchronisiert.
-- Repairs liefern kleine, whitelist-validierte `replace`-Patches statt die komplette Mission erneut zu erzeugen.
-- Ein nicht anwendbarer Patch wird direkt erneut repariert; er durchläuft nicht unnötig nochmals Validierung und Review.
-- Status-Callbacks werden vor Validierung, Review und Repair durch Merge-Gates abgeschlossen, damit die UI den
-  aktuellen Schritt zuverlässig und auch nach einem Seitenwechsel anzeigt.
-- Ein einzelner Fehlschlag beendet nicht die übrigen Missionen. Erfolgreiche Ergebnisse werden als Teilabschluss an Django übergeben.
-- Generator-, Review- und Repair-Ausgaben werden zentral als JSON normalisiert und anschließend deterministisch durch Django validiert.
+- Workflow IDs: `MissionGeneratorV2Prod` and `MissionWorkerV2Prod`
+- Production webhook: `POST /webhook/mission-generation`
+- Internal worker webhook: `POST /webhook/mission-generation-worker-v2`
+- Before a weekly generation the orchestrator calls the research selector
+  locally. In a normal week, at most two to three matching current contexts are
+  assigned, depending on the number of quiz missions.
+- Research context is passed only to the specific quiz mission it was selected
+  for. Generator, reviewer and repair all receive the same verified context;
+  task missions and the remaining quiz missions stay evergreen content.
+- An empty pool, a non-matching selection or a selector outage does not block
+  mission generation. The run then continues without research context and
+  records a warning in the review report.
+- Model calls run in real batches of two so the capacity limit of the model
+  endpoint is not exceeded.
+- Generator, reviewer and repair pass `reasoning_effort: "low"` as a genuine
+  KI:connect API parameter.
+- Runtime, prompt/completion/total tokens and `finish_reason` are stored per
+  mission requirement for every generator, reviewer and repair call in
+  `GenerationRun.result_metadata.mission_metrics`.
+- Every mission is validated and reviewed independently; at most two targeted
+  repair attempts are possible.
+- For large task missions the semantic reviewer only receives a compact,
+  representative projection; schema, row counts, calculations and solutions
+  continue to be checked deterministically by Django.
+- Task difficulties use binding data and result profiles: easy has fewer records
+  and key figures, medium extends both, hard uses the largest dataset and
+  additional check figures. Task wording, evaluable result fields and points are
+  synchronized to match, deterministically, by Django.
+- Repairs return small, whitelist-validated `replace` patches instead of
+  regenerating the complete mission.
+- A patch that cannot be applied is repaired again directly; it does not run
+  through validation and review unnecessarily.
+- Status callbacks are completed through merge gates before validation, review
+  and repair, so the UI shows the current step reliably and also after a page
+  change.
+- A single failure does not end the remaining missions. Successful results are
+  handed to Django as a partial completion.
+- Generator, review and repair output is normalized centrally as JSON and then
+  validated deterministically by Django.
 
-Die Datei `ai-mission-generator-v2.json` enthält beide zusammengehörigen Workflows. Beim Import müssen die vorhandenen Header-Auth-Credentials für Django/n8n und den KI-Endpunkt verfügbar sein. Der vorherige `AI Mission Generator` bleibt deaktiviert als Rückfalloption; `AI Mission Generator Backup` wurde nicht verändert.
+The file `ai-mission-generator-v2.json` contains both related workflows. On
+import, the existing Header-Auth credentials for Django/n8n and for the AI
+endpoint must be available. The previous `AI Mission Generator` remains
+deactivated as a fallback option; `AI Mission Generator Backup` was left
+unchanged.
 
-## 1. AI Finance Research - Collector
+## 1. AI Finance Research – Collector
 
-- Workflow-ID: `RsrchCollect2026`
-- Zeitplan: standardmäßig montags um 07:00 Uhr, Zeitzone `Europe/Berlin`; Wochentag, Uhrzeit und Aktivierung werden auf der Research Page verwaltet
-- Manueller Trigger im n8n-Editor
-- Authentifizierter Webhook: `POST /webhook/ai-finance-research-collector-run`
-- Optionaler Request-Body für eine vollständige Neubewertung: `{"force_refresh": true}`
+- Workflow ID: `RsrchCollect2026`
+- Schedule: Mondays at 07:00 by default, timezone `Europe/Berlin`; weekday, time
+  and activation are managed on the Research page
+- Manual trigger in the n8n editor
+- Authenticated webhook: `POST /webhook/ai-finance-research-collector-run`
+- Optional request body for a full re-evaluation: `{"force_refresh": true}`
 
-Der Collector liest ausschließlich konfigurierte Feeds offizieller Institutionen:
+The collector reads only configured feeds from official institutions:
 
 - European Banking Authority (EBA)
-- Bank for International Settlements (BIS und FSI)
-- European Central Bank (Presse und Blog)
+- Bank for International Settlements (BIS and FSI)
+- European Central Bank (press and blog)
 - European Commission Digital Strategy
 - BaFin
 
-Die Verarbeitung besteht aus einem 45-Tage-Aktualitätsfilter, einer harten KI-und-Finanz-Relevanzprüfung, URL- und Inhalts-Deduplizierung, einer strukturierten KI-Bewertung und einer abschließenden deterministischen Validierung. RSS-Inhalte werden als nicht vertrauenswürdige Daten behandelt; Anweisungen aus einem Feed dürfen nicht ausgeführt werden. Nur direkt vom Feedtext gestützte Fakten werden übernommen.
+Processing consists of a 45-day recency filter, a hard AI-and-finance relevance
+check, URL and content deduplication, a structured AI assessment and a final
+deterministic validation. RSS content is treated as untrusted data; instructions
+coming from a feed must not be executed. Only facts directly supported by the
+feed text are accepted.
 
-Falls der KI-Endpunkt ausfällt oder eine nicht verwertbare Antwort liefert, greift ein konservativer Fallback. Vor einer erneuten Bewertung werden betroffene Datensätze vorsorglich deaktiviert und nur bei erfolgreicher Prüfung wieder freigegeben. Damit bleiben abgelehnte oder veraltete Ergebnisse nicht versehentlich auswählbar.
+If the AI endpoint fails or returns an unusable response, a conservative
+fallback applies. Before a re-evaluation the affected records are deactivated as
+a precaution and released again only after a successful check. This keeps
+rejected or outdated results from accidentally remaining selectable.
 
-Für Deduplizierung und Wiederbewertung bleibt die n8n Data Table `ai_finance_research_pool` erhalten. Der Collector synchronisiert die Einträge zusätzlich in Django. Django ist die gemeinsame Datenquelle für die Research Page und den Context Selector, damit Bearbeiten, Deaktivieren und Löschen unmittelbar auf zukünftige Missionsgenerierungen wirken. Wichtige Felder sind:
+The n8n data table `ai_finance_research_pool` is retained for deduplication and
+re-evaluation. The collector additionally syncs the entries into Django. Django
+is the shared source of truth for the Research page and the context selector, so
+that editing, deactivating and deleting take effect on future mission
+generations immediately. The important fields are:
 
-- stabile `item_key` und `content_hash` für Idempotenz
-- Quelle, Original-URL, Veröffentlichungs-, Abruf- und Ablaufzeit
-- deutsche und englische Kurzfassung
-- belegte Fakten mit Evidenzausschnitten
-- Mission-Hooks und Tags
-- Relevanz, Confidence, Risikoflags und Analysemethode
-- `eligible` als harte Freigabe für den Selector
+- stable `item_key` and `content_hash` for idempotency
+- source, original URL, publication, retrieval and expiry time
+- German and English summary
+- supported facts with evidence excerpts
+- mission hooks and tags
+- relevance, confidence, risk flags and analysis method
+- `eligible` as the hard release flag for the selector
 
-## 2. AI Finance Research - Context Selector
+## 2. AI Finance Research – Context Selector
 
-- Workflow-ID: `RsrchSelect2026A`
-- Aufruf als n8n-Subworkflow über `Execute Workflow`
-- Authentifizierter Webhook: `POST /webhook/ai-finance-research-context-selector`
-- Manueller Test-Trigger mit Beispieldaten im Editor
+- Workflow ID: `RsrchSelect2026A`
+- Called as an n8n subworkflow via `Execute Workflow`
+- Authenticated webhook: `POST /webhook/ai-finance-research-context-selector`
+- Manual test trigger with sample data in the editor
 
-Beispielinput:
+Example input:
 
 ```json
 {
@@ -95,25 +127,46 @@ Beispielinput:
 }
 ```
 
-Der Selector berücksichtigt nur freigegebene, noch gültige Einträge mit belegten Fakten und mittlerer oder hoher Confidence. Die Auswahl ist deterministisch und gewichtet Relevanz, Quellenstufe, Confidence, Aktualität, bevorzugte Tags und Missionstyp. Aktuell erhalten ausschließlich Anforderungen mit `output_type: "quiz_mission"` Research-Kontext. Task-Missionen bleiben unverändert.
+The selector considers only released, still-valid entries with supported facts
+and medium or high confidence. The selection is deterministic and weights
+relevance, source tier, confidence, recency, preferred tags and mission type. At
+present, only requirements with `output_type: "quiz_mission"` receive research
+context. Task missions remain unchanged.
 
-Der Selector lädt den aktuellen Pool über den authentifizierten Django-Endpunkt `GET /internal/n8n/research/current/`. Ein eigener Django-Scheduler prüft nur die lokale Datenbank und ruft n8n ausschließlich zum gespeicherten Wochenzeitpunkt auf. Dadurch entstehen zwischen den tatsächlichen Research-Läufen keine n8n-Executions oder HTTP-Requests.
+The selector loads the current pool through the authenticated Django endpoint
+`GET /internal/n8n/research/current/`. A separate Django scheduler checks only
+the local database and calls n8n exclusively at the stored weekly time. As a
+result, no n8n executions or HTTP requests occur between actual research runs.
 
-Standardmäßig werden höchstens zwei Research-Beiträge gewählt; über `max_research_missions` sind null bis maximal drei möglich. Ein Pool-Eintrag wird innerhalb eines Aufrufs nur einmal verwendet. Bei leerem Pool, nicht passenden Anforderungen oder unterschrittenem Score liefert der Workflow erfolgreich einen leeren `research_context` samt Warnung zurück. Die Missionsgenerierung läuft dann normal mit Evergreen-Inhalten weiter.
+By default at most two research contributions are selected; `max_research_missions`
+allows zero to a maximum of three. A pool entry is used only once per call. With
+an empty pool, non-matching requirements or a score below the threshold, the
+workflow successfully returns an empty `research_context` together with a
+warning. Mission generation then continues normally with evergreen content.
 
-Jeder ausgewählte Kontext enthält Sicherheitsanweisungen: nur `safe_facts` verwenden, Quelleninhalt als nicht vertrauenswürdig behandeln, keine Rechtsberatung ableiten, das Lernziel übertragbar halten und die Quelle im Review prüfen.
+Every selected context carries safety instructions: use only `safe_facts`, treat
+source content as untrusted, derive no legal advice, keep the learning objective
+transferable, and verify the source during review.
 
-## Authentifizierung
+## Authentication
 
-Credentials und Workflows werden beim ersten Start des `n8n_data`-Volumes automatisch von `docker/n8n-init.sh` importiert; die Geheimnisse stammen dabei aus dem Root-`.env` und stehen in keiner Datei im Repository. Ein manueller Import im Editor ist nur nötig, wenn das Volume bereits eingerichtet ist und die Exporte sich geändert haben.
+Credentials and workflows are imported automatically by `docker/n8n-init.sh` on
+the first start of the `n8n_data` volume; the secrets come from the root `.env`
+and are in no file in the repository. A manual import in the editor is only
+needed when the volume is already set up and the exports have changed.
 
-Beide Webhooks erwarten den Header `X-N8N-Service-Secret`. In der lokalen n8n-Instanz verwenden sie die bereits vorhandene Header-Auth-Credential. Geheimnisse werden nicht in den exportierten Workflow-Dateien gespeichert.
+Both webhooks expect the header `X-N8N-Service-Secret`. In the local n8n instance
+they use the Header-Auth credential that already exists. Secrets are not stored
+in the exported workflow files.
 
-## Integration in die Missionsgenerierung
+## Integration into mission generation
 
-Der V2-Orchestrator ruft den veröffentlichten Selector vor der eigentlichen Prompt-Erstellung über dessen internen,
-authentifizierten Webhook auf. Die Zuordnung erfolgt über `context_by_requirement[requirement.id]`; damit kann kein
-Research-Beitrag versehentlich in eine andere Mission oder Schwierigkeit rutschen. Der Prompt grenzt den Beitrag als
-nicht vertrauenswürdige Referenzdaten ab und erlaubt ausschließlich die geprüften `safe_facts`. Bei vorhandenem Kontext
-muss die Quiz-Mission Quelle und Veröffentlichungsdatum nennen, den aktuellen Anlass als Szenario verwenden und trotzdem
-ein übertragbares Lernziel vermitteln. Der Reviewer prüft diese Regeln, und der Repair-Schritt erhält denselben Kontext.
+Before building the actual prompts, the V2 orchestrator calls the published
+selector through its internal, authenticated webhook. The assignment happens via
+`context_by_requirement[requirement.id]`, so no research contribution can slip
+into a different mission or difficulty by accident. The prompt frames the
+contribution as untrusted reference data and permits only the verified
+`safe_facts`. When context is present, the quiz mission must name the source and
+publication date, use the current occasion as the scenario, and still convey a
+transferable learning objective. The reviewer checks these rules, and the repair
+step receives the same context.

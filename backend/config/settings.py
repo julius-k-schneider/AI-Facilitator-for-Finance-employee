@@ -2,9 +2,8 @@
 Django settings for config project.
 
 Configuration is driven by environment variables so the same code runs locally
-and on Railway. Locally these come from backend/.env (loaded below); on Railway
-they are set in the service's Variables tab (DATABASE_URL is injected by the
-PostgreSQL plugin automatically).
+and in production. Locally these come from backend/.env (loaded below); in
+production they are supplied by the hosting environment (including DATABASE_URL).
 """
 
 import os
@@ -21,7 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 
-# Load backend/.env for local development. On Railway the env vars are already
+# Load backend/.env for local development. In production the env vars are already
 # present, so the missing file is simply ignored.
 load_dotenv(BASE_DIR / ".env")
 
@@ -61,14 +60,14 @@ DEBUG = env_bool("DEBUG", default=False)
 
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
 
-# Railway exposes the public domain of the service via this env var.
-RAILWAY_PUBLIC_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
-if RAILWAY_PUBLIC_DOMAIN:
-    ALLOWED_HOSTS.append(RAILWAY_PUBLIC_DOMAIN)
-
-CSRF_TRUSTED_ORIGINS = ["https://*.railway.app"]
-if RAILWAY_PUBLIC_DOMAIN:
-    CSRF_TRUSTED_ORIGINS.append(f"https://{RAILWAY_PUBLIC_DOMAIN}")
+# Origins trusted for CSRF. Set CSRF_TRUSTED_ORIGINS explicitly (comma-separated,
+# each with a scheme); otherwise the https:// form of every non-local, non-wildcard
+# ALLOWED_HOSTS entry is trusted, which covers the usual single-domain deployment.
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS") or [
+    f"https://{host}"
+    for host in ALLOWED_HOSTS
+    if "*" not in host and host not in {"localhost", "127.0.0.1"}
+]
 
 
 # Application definition

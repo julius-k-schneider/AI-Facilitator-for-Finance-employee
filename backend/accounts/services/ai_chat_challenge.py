@@ -2,8 +2,8 @@ import json
 import os
 from urllib import error, request
 
-from accounts.prompts.chat_challenges import SYSTEM_PROMPT, USER_PROMPT, build_coaching_system_prompt
-from accounts.services.ai_mission_generator import AiMissionGenerationError, extract_json
+from accounts.prompts.chat_challenges import build_coaching_system_prompt
+from accounts.services.generation_planning import AiMissionGenerationError
 
 
 CHAT_CHALLENGE_TYPE = 'ai_chat_challenge'
@@ -112,13 +112,6 @@ def validate_challenge(payload):
         'chat_system_prompt_en': _text(payload.get('chat_system_prompt_en'), 'chat_system_prompt_en'),
         'final_questions': normalized_questions,
     }
-
-
-def generate_chat_challenge():
-    return validate_challenge(extract_json(_completion([
-        {'role': 'system', 'content': SYSTEM_PROMPT},
-        {'role': 'user', 'content': USER_PROMPT},
-    ], json_mode=True)))
 
 
 def chat_reply(challenge, history, message, language):

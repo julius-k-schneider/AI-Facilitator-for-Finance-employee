@@ -26,7 +26,7 @@ from .models import (
     SkillProgressionSettings,
     WeeklyLeaderboardSnapshot,
 )
-from .services.ai_mission_generator import AiMissionGenerationError
+from .services.generation_planning import AiMissionGenerationError
 from .services.ai_chat_challenge import chat_reply, evaluate_final_answers
 from .services.ai_task_challenge import (
     TASK_CHALLENGE_TYPES,
@@ -506,19 +506,6 @@ def translated_feedback(content, language):
     return f'{prefix}: {", ".join(correct_options)}.'
 
 
-def traffic_light_feedback(statement, language):
-    feedback = translated(statement.get('feedback', {}), language)
-    if feedback:
-        return feedback
-    color = statement.get('correct_color', '')
-    labels = {
-        'de': {'green': 'erlaubt', 'yellow': 'nur eingeschraenkt erlaubt', 'red': 'nicht erlaubt'},
-        'en': {'green': 'allowed', 'yellow': 'allowed with restrictions', 'red': 'not allowed'},
-    }
-    prefix = 'Richtige Bewertung' if language == 'de' else 'Correct assessment'
-    return f'{prefix}: {labels[language].get(color, color)}.'
-
-
 def user_mission_attempt(mission, user):
     if hasattr(mission, 'user_attempts'):
         return mission.user_attempts[0] if mission.user_attempts else None
@@ -577,16 +564,7 @@ def mission_payload(mission, user, language='de', include_content=True, create_a
         'completed': attempt is not None,
         'score': attempt.score if attempt else None,
     }
-    if include_content and mission.mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
-        payload['content'] = {
-            'question': translated(content.get('question', {}), language),
-            'statements': [translated(statement.get('text', {}), language) for statement in content.get('statements', [])],
-        }
-        if attempt is not None:
-            payload['content']['feedback'] = [
-                traffic_light_feedback(statement, language) for statement in content.get('statements', [])
-            ]
-    elif include_content and mission.mission_type == Mission.TYPE_PROMPT_RANKING:
+    if include_content and mission.mission_type == Mission.TYPE_PROMPT_RANKING:
         payload['content'] = {
             'question': translated(content.get('question', {}), language),
             'options': [translated(option, language) for option in content.get('options', [])],
@@ -737,51 +715,6 @@ def validate_choice_mission_data(data, allow_past_date=False):
     )
     if any(not str(data.get(field, '')).strip() for field in required_text):
         return None, 'all bilingual text fields are required'
-    if mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
-        statements = data.get('statements') or []
-        colors = {'green', 'yellow', 'red'}
-        if len(statements) != 3 or any(
-            not statement.get('de', '').strip()
-            or not statement.get('en', '').strip()
-            or statement.get('correct_color') not in colors
-            or not statement.get('feedback_de', '').strip()
-            or not statement.get('feedback_en', '').strip()
-            for statement in statements
-        ):
-            return None, 'exactly three bilingual traffic-light statements with feedback are required'
-        try:
-            max_points = int(data.get('max_points', 100))
-        except (TypeError, ValueError):
-            return None, 'invalid points'
-        if max_points < 1 or max_points > 1000:
-            return None, 'invalid points'
-        return {
-            'mission_type': mission_type,
-            'scheduled_date': scheduled_date,
-            'title_de': data['title_de'].strip(),
-            'title_en': data['title_en'].strip(),
-            'description_de': data['description_de'].strip(),
-            'description_en': data['description_en'].strip(),
-            'content': {
-                'question': {'de': data['question_de'].strip(), 'en': data['question_en'].strip()},
-                'statements': [
-                    {
-                        'text': {'de': statement['de'].strip(), 'en': statement['en'].strip()},
-                        'correct_color': statement['correct_color'],
-                        'feedback': {
-                            'de': statement['feedback_de'].strip(),
-                            'en': statement['feedback_en'].strip(),
-                        },
-                    }
-                    for statement in statements
-                ],
-                'micro_learning': {
-                    'de': str(data.get('micro_learning_de', '')).strip(),
-                    'en': str(data.get('micro_learning_en', '')).strip(),
-                },
-            },
-            'max_points': max_points,
-        }, None
 
     options = data.get('options') or []
     minimum_options = 3 if mission_type == Mission.TYPE_PROMPT_RANKING else 2
@@ -1334,26 +1267,6 @@ def complete_mission_view(request):
             'correct_count': evaluation['correct_count'],
             'total_count': evaluation['total_count'],
             'field_results': evaluation['field_results'],
-        }
-    elif mission.mission_type == Mission.TYPE_COMPLIANCE_TRAFFIC_LIGHT:
-        statements = content.get('statements', [])
-        if len(statements) != 3:
-            return JsonResponse({'error': 'invalid traffic-light mission'}, status=400)
-        answers = data.get('answer')
-        if not isinstance(answers, list) or len(answers) != len(statements):
-            return JsonResponse({'error': 'all traffic-light answers are required'}, status=400)
-        allowed_colors = {'green', 'yellow', 'red'}
-        if any(answer not in allowed_colors for answer in answers):
-            return JsonResponse({'error': 'invalid traffic-light answer'}, status=400)
-        expected_colors = [statement.get('correct_color') for statement in statements]
-        correct_count = sum(answer == expected for answer, expected in zip(answers, expected_colors))
-        score = max_points * correct_count // len(statements)
-        stored_answer = {'selected_colors': answers}
-        result_details = {
-            'correct_count': correct_count,
-            'total_count': len(statements),
-            'correct_colors': expected_colors,
-            'item_correct': [answer == expected for answer, expected in zip(answers, expected_colors)],
         }
     elif mission.mission_type == Mission.TYPE_PROMPT_RANKING:
         options = content.get('options', [])

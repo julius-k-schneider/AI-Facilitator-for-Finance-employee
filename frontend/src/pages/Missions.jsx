@@ -1,24 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ActionIcon, Alert, Badge, Box, Button, Group, Loader, Menu, Modal, NumberInput, Paper, Select,
+  ActionIcon, Alert, Badge, Box, Button, Group, Loader, Modal, NumberInput, Paper, Select,
   SegmentedControl, SimpleGrid, Stack, Switch, Tabs, Text, Textarea, TextInput, ThemeIcon, Title,
 } from '@mantine/core'
 import {
   IconArrowRight, IconCalendar, IconCheck, IconChevronLeft,
   IconChevronRight, IconCircleCheck, IconEdit, IconEye, IconRefresh, IconSettings, IconSparkles,
   IconFlame, IconTargetArrow, IconTrash, IconX,
-  IconBug,
   IconAlertTriangle,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useUserProgress } from '../hooks/useUserProgress'
 import {
-  approveAllReviewMissions, approveMission, createMission, deleteMission, generateTaskChallenge,
+  approveAllReviewMissions, approveMission, createMission, deleteMission,
   getArchivedMissions, getAvailableMissions, getCurrentWeeklyGenerationRun, getDailyMissions, getGenerationRun,
   getMissionSchedule, getReviewMissions, regenerateMission, rejectMission, updateMission,
   rejectAllReviewMissions, startNextWeekMissionGeneration,
 } from '../services/missionService'
-import { createMissionTypeDefaults, createTestMissions, defaultMissionType, getMissionType, missionTypes, taskChallengeTypes } from './missions/missionTypes'
+import { createMissionTypeDefaults, defaultMissionType, getMissionType, missionTypes } from './missions/missionTypes'
 import MissionRunner from './missions/MissionRunner'
 import './Missions.css'
 
@@ -137,6 +136,12 @@ function missionToForm(mission) {
     correct_order: mission.correct_order?.length ? mission.correct_order : (mission.options || []).map((_, index) => index),
     options: (mission.options || []).map((option) => ({ ...option })),
     statements: mission.statements?.length ? mission.statements.map((statement) => ({ ...statement })) : createEmptyForm().statements,
+    // Task challenges keep their case data and result fields here; without them
+    // prepareForm() would refill the editor with empty defaults.
+    case_format: mission.case_format,
+    case_data_de: (mission.case_data_de || []).map((row) => row),
+    case_data_en: (mission.case_data_en || []).map((row) => row),
+    result_fields: (mission.result_fields || []).map((field) => ({ ...field })),
   }
 }
 
@@ -197,13 +202,16 @@ function MissionSolutionContent({ mission, language, showSolution = true }) {
 
 function MissionCard({ mission, onOpen, archiveMode = false }) {
   const { i18n, t } = useTranslation()
-  const missionDate = new Date(`${mission.scheduled_date}T12:00:00`)
-  const formattedMissionDate = missionDate.toLocaleDateString(i18n.resolvedLanguage, {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
+  // Test missions are not scheduled, so the date row is skipped for them.
+  const missionDate = mission.scheduled_date ? new Date(`${mission.scheduled_date}T12:00:00`) : null
+  const formattedMissionDate = missionDate && !Number.isNaN(missionDate.getTime())
+    ? missionDate.toLocaleDateString(i18n.resolvedLanguage, {
+      weekday: 'long',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+    : ''
   return (
     <Paper withBorder radius="lg" p="xl" bg="white">
       <Stack gap="lg" h="100%">
@@ -218,10 +226,10 @@ function MissionCard({ mission, onOpen, archiveMode = false }) {
         <Box style={{ flex: 1 }}>
           <Text fw={700} fz="lg">{mission.title}</Text>
           <Text c="dimmed" fz="sm" mt={5}>{mission.description}</Text>
-          <Group gap={6} mt="sm" align="center">
+          {formattedMissionDate && <Group gap={6} mt="sm" align="center">
             <IconCalendar size={15} style={{ display: 'block', flexShrink: 0 }} />
             <Text c="dimmed" fz="sm" lh={1}>{formattedMissionDate}</Text>
-          </Group>
+          </Group>}
         </Box>
         <Group justify="space-between">
           <Badge variant="light" color="secondary">{missionTypeLabel(t, mission.type)}</Badge>
@@ -754,6 +762,28 @@ function MissionReview({ enabled, onPublished }) {
   }, [enabled, generationWeek])
 
   const finalizeGeneration = useCallback(async (run) => {
+    if (run.status === 'completed' && run.automatic_retry_run_id) {
+      const data = await getGenerationRun(run.automatic_retry_run_id)
+      const retryRun = data.generation_run
+      await Promise.all([loadReview(), loadGenerationSchedule()])
+      rememberWeeklyGenerationRun(retryRun.id)
+      setGenerationRun(retryRun)
+      setGenerating(activeGenerationStatuses.has(retryRun.status))
+      if (!activeGenerationStatuses.has(retryRun.status)) {
+        forgetWeeklyGenerationRun()
+        setGenerationRun(null)
+        if (retryRun.status === 'completed') {
+          setError('')
+          setMessage('')
+          setGenerationResult(retryRun)
+        } else {
+          const failures = Array.isArray(retryRun.failed_requirements) ? retryRun.failed_requirements : []
+          setGenerationResult(failures.length > 0 ? retryRun : null)
+          setError(failures.length > 0 ? '' : (retryRun.error_message || t('missions.review.generationStatus.failed')))
+        }
+      }
+      return
+    }
     forgetWeeklyGenerationRun()
     setGenerating(false)
     setGenerationRun(null)
@@ -875,22 +905,6 @@ function MissionReview({ enabled, onPublished }) {
     }
   }
 
-  const generateTask = async (missionType) => {
-    setGenerating(true)
-    setError('')
-    setMessage('')
-    setGenerationResult(null)
-    try {
-      await generateTaskChallenge(missionType, generationWeek)
-      setMessage(t('missions.review.taskGenerated'))
-      await Promise.all([loadReview(), loadGenerationSchedule()])
-    } catch (nextError) {
-      setError(nextError.message)
-    } finally {
-      setGenerating(false)
-    }
-  }
-
   const runAction = async (mission, action) => {
     if (action === 'reject' && !window.confirm(t('missions.review.rejectConfirm', { title: mission.title_de }))) return
     setActiveAction(`${action}-${mission.id}`)
@@ -934,37 +948,12 @@ function MissionReview({ enabled, onPublished }) {
   return (
     <Paper withBorder radius="lg" p={{ base: 'lg', md: 'xl' }} bg="white" mt="xl">
       <Stack gap="lg">
-        <Group justify="space-between" align="flex-start">
-          <Group align="flex-start" wrap="nowrap">
-            <ThemeIcon size={44} radius="md" variant="light" color="accent"><IconSparkles size={23} /></ThemeIcon>
-            <Box>
-              <Title order={2} fz="xl">{t('missions.review.title')}</Title>
-              <Text c="dimmed" fz="sm" mt={3}>{t('missions.review.description')}</Text>
-            </Box>
-          </Group>
-          <Stack gap="xs" align="stretch">
-            <Button color="brand" leftSection={<IconSparkles size={17} />} loading={generating} onClick={generate}>
-              {t('missions.review.generate')}
-            </Button>
-            <Menu position="bottom-end" withinPortal>
-              <Menu.Target>
-                <Button color="brand" variant="light" leftSection={<IconTargetArrow size={17} />} loading={generating}>
-                  {t('missions.review.generateTask')}
-                </Button>
-              </Menu.Target>
-              <Menu.Dropdown>
-                {taskChallengeTypes.map((definition) => (
-                  <Menu.Item key={definition.id} onClick={() => generateTask(definition.id)}>
-                    {t(`missions.types.${definition.labelKey}`)}
-                  </Menu.Item>
-                ))}
-              </Menu.Dropdown>
-            </Menu>
-            <Group gap="xs" grow>
-              <Button color="green" variant="light" leftSection={<IconCheck size={16} />} disabled={missions.length === 0} loading={activeAction === 'approve-all'} onClick={() => runBulkAction('approve')}>{t('missions.review.approveAll')}</Button>
-              <Button color="red" variant="light" leftSection={<IconX size={16} />} disabled={missions.length === 0} loading={activeAction === 'reject-all'} onClick={() => runBulkAction('reject')}>{t('missions.review.rejectAll')}</Button>
-            </Group>
-          </Stack>
+        <Group align="flex-start" wrap="nowrap">
+          <ThemeIcon size={44} radius="md" variant="light" color="accent"><IconSparkles size={23} /></ThemeIcon>
+          <Box>
+            <Title order={2} fz="xl">{t('missions.review.title')}</Title>
+            <Text c="dimmed" fz="sm" mt={3}>{t('missions.review.description')}</Text>
+          </Box>
         </Group>
         <Group justify="space-between">
           <Text fw={700}>{t('missions.review.selectedWeek', {
@@ -974,7 +963,13 @@ function MissionReview({ enabled, onPublished }) {
           <Button variant="light" leftSection={<IconCalendar size={17} />} onClick={() => setWeekSelectionOpen((current) => !current)}>{t('missions.review.selectWeekButton')}</Button>
         </Group>
         <Modal opened={weekSelectionOpen} onClose={() => setWeekSelectionOpen(false)} title={t('missions.review.selectWeek')} size="lg" centered>
-          <Stack gap="md"><Text c="dimmed" fz="sm">{t('missions.review.selectWeekDescription')}</Text><Calendar month={generationMonth} setMonth={setGenerationMonth} schedule={generationSchedule} selectedWeekStart={generationWeek} onSelect={(value) => { setGenerationWeek(value); setWeekSelectionOpen(false) }} weekMode /></Stack>
+          <Stack gap="md">
+            <Text c="dimmed" fz="sm">{t('missions.review.selectWeekDescription')}</Text>
+            <Calendar month={generationMonth} setMonth={setGenerationMonth} schedule={generationSchedule} selectedWeekStart={generationWeek} onSelect={setGenerationWeek} weekMode />
+            <Button color="brand" leftSection={<IconSparkles size={17} />} loading={generating} onClick={() => { setWeekSelectionOpen(false); generate() }}>
+              {t('missions.review.generate')}
+            </Button>
+          </Stack>
         </Modal>
         {showResearchFreshnessWarning && <Alert color="orange" icon={<IconAlertTriangle size={18} />} title={t('missions.review.researchFreshnessWarningTitle')}>
           {t('missions.review.researchFreshnessWarning', { count: weeksAhead })}
@@ -986,6 +981,10 @@ function MissionReview({ enabled, onPublished }) {
         {loading ? <Text c="dimmed">{t('missions.review.loading')}</Text> : missions.length === 0 ? (
           <Paper withBorder radius="md" p="xl" bg="gray.0"><Text ta="center" c="dimmed">{t('missions.review.empty')}</Text></Paper>
         ) : <Stack gap="md">
+          <Group gap="xs" justify="flex-end">
+            <Button color="green" variant="light" leftSection={<IconCheck size={16} />} loading={activeAction === 'approve-all'} onClick={() => runBulkAction('approve')}>{t('missions.review.approveAll')}</Button>
+            <Button color="red" variant="light" leftSection={<IconX size={16} />} loading={activeAction === 'reject-all'} onClick={() => runBulkAction('reject')}>{t('missions.review.rejectAll')}</Button>
+          </Group>
           <Box className="mission-review-switcher" role="tablist" aria-label={t('missions.review.missionNavigation')}>
             {missions.map((mission) => {
               const selected = mission.id === activeReviewMission?.id
@@ -1012,20 +1011,6 @@ function MissionReview({ enabled, onPublished }) {
       </Stack>
     </Paper>
   )
-}
-
-function MissionTestArea({ language, onSelect }) {
-  const { t } = useTranslation()
-  const [opened, setOpened] = useState(false)
-  const examples = createTestMissions(language)
-  return <>
-    <Paper withBorder radius="lg" p="xl" bg="white" mt="xl">
-      <Group justify="space-between"><Box><Group gap="xs"><IconBug size={20} /><Text fw={700}>{t('missions.test.title')}</Text></Group><Text fz="sm" c="dimmed" mt={4}>{t('missions.test.description')}</Text></Box><Button variant="light" leftSection={<IconBug size={17} />} onClick={() => setOpened(true)}>{t('missions.test.button')}</Button></Group>
-    </Paper>
-    <Modal opened={opened} onClose={() => setOpened(false)} title={t('missions.test.title')} size="xl" centered>
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">{examples.map((mission) => <MissionCard key={mission.id} mission={mission} onOpen={(selected) => { setOpened(false); onSelect(selected) }} />)}</SimpleGrid>
-    </Modal>
-  </>
 }
 
 function defaultArchiveMonth() {
@@ -1180,7 +1165,6 @@ export default function Missions({ user }) {
   const [activeTab, setActiveTab] = useState('today')
   const [archiveMonth, setArchiveMonth] = useState(defaultArchiveMonth)
   const [archiveType, setArchiveType] = useState('all')
-  const [testMissionId, setTestMissionId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [availableLoading, setAvailableLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1192,7 +1176,6 @@ export default function Missions({ user }) {
   const activeMissionId = activeMission?.id
   const activeMissionDate = activeMission?.scheduled_date
   const activeMissionType = activeMission?.type
-  const testMission = createTestMissions(language).find((mission) => mission.id === testMissionId)
 
   const load = useCallback((showLoading = true) => {
     if (showLoading) setLoading(true)
@@ -1280,7 +1263,6 @@ export default function Missions({ user }) {
     return () => { active = false }
   }, [activeMissionId, activeMissionDate, activeMissionType, activeMission?.completed, missions, availableMissions, language])
 
-  if (testMission) return <MissionRunner mission={testMission} language={language} testMode onBack={() => setTestMissionId(null)} onCompleted={() => {}} />
   if (activeArchiveMission) return <MissionRunner mission={activeArchiveMission} language={language} readOnly showSubmit={false} onBack={() => { setActiveArchiveMission(null); setActiveTab('archive') }} backLabel={t('missions.archive.back')} />
   if (activeMission) return <MissionRunner mission={activeMission} language={language} onBack={() => { setActiveMission(null); load(); loadAvailable(false) }} onCompleted={(completed) => {
     setActiveMission(completed)
@@ -1311,7 +1293,6 @@ export default function Missions({ user }) {
         <Tabs.Panel value="today">
           <MissionList missions={missions} loading={loading} error={error} emptyTitle={t('missions.todayEmptyTitle')} emptyText={t('missions.todayEmptyText')} onSelect={setActiveMission} />
           <MissionReview enabled={canCreate} onPublished={() => load(false)} />
-          {user?.role === 'admin' && <MissionTestArea language={language} onSelect={(selected) => setTestMissionId(selected.id)} />}
         </Tabs.Panel>
         <Tabs.Panel value="available">
           <MissionList missions={availableMissions} loading={availableLoading} error={availableError} emptyTitle={t('missions.availableEmptyTitle')} emptyText={t('missions.availableEmptyText')} onSelect={setActiveMission} />

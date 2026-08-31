@@ -9,8 +9,7 @@
     }
   },
   "language": {
-    "current": "English",
-    "switchAria": "Switch language to German"
+    "current": "English"
   },
   "skillLevels": { "beginner": "Beginner", "advanced": "Advanced", "pro": "Pro" },
   "difficulties": { "easy": "Easy", "medium": "Medium", "hard": "Hard" },
@@ -30,12 +29,12 @@
     "accountant": "Accountant"
   },
   "sidebar": {
-    "subtitle": "AI FACILITATOR",
+    "subtitle": "FIN.PILOT",
     "tooltipProfile": "Profile",
     "tooltipLogout": "Logout"
   },
   "login": {
-    "platform": "AI ENABLEMENT PLATFORM",
+    "platform": "FIN.PILOT",
     "heroTitle": "Build the AI skills of tomorrow.",
     "heroSubtitle": "{{tagline}}. Learn, apply and grow – right in your day-to-day work in finance.",
     "highlights": [
@@ -88,8 +87,6 @@
     "description": "One mission at your current skill level awaits you every day. Missed missions stay available until Monday 12:00 noon of the following week.",
     "points": "points",
     "loading": "Loading missions...",
-    "emptyTitle": "No missions found",
-    "emptyText": "Missions will appear here as soon as they are available.",
     "todayEmptyTitle": "No missions are scheduled for today",
     "todayEmptyText": "Missions will appear here as soon as they are published for today.",
     "availableEmptyTitle": "No available catch-up missions",
@@ -101,7 +98,6 @@
     "rankingInstruction": "Sort the prompts from worst to best.",
     "moveUp": "Move up",
     "moveDown": "Move down",
-    "trafficLight": { "green": "Green - allowed", "yellow": "Yellow - restricted", "red": "Red - not allowed" },
     "streak": {
       "current": "Current streak",
       "best": "Best: {{count}}"
@@ -119,7 +115,6 @@
       "filterTitle": "Browse archive",
       "filterText": "Shows only past published missions you have already completed. Viewing them does not award points.",
       "month": "Month",
-      "period": "Period",
       "week": "Week",
       "day": "Day",
       "modeMonth": "Month",
@@ -131,7 +126,6 @@
       "loading": "Loading archive...",
       "emptyTitle": "No archived missions found",
       "emptyText": "There are no past completed missions in this period.",
-      "monthResult": "Archive for {{month}}",
       "rangeResult": "Archive for {{range}}",
       "completedTitle": "Completed at the time",
       "score": "{{score}} of {{max}} points"
@@ -139,15 +133,17 @@
     "types": {
       "singleChoice": "Single choice",
       "multipleChoice": "Multiple choice",
-      "complianceDecision": "Compliance decision",
       "promptSelection": "Prompt selection"
-      ,"promptRanking": "Prompt ranking",
-      "complianceTrafficLight": "Compliance traffic light"
+      ,"promptRanking": "Prompt ranking"
       ,"aiChatChallenge": "AI chat challenge"
       ,"bulkCategorization": "Bulk categorization"
       ,"planActualDeviation": "Plan vs. actual deviation"
       ,"duplicatePaymentHunt": "Duplicate payment hunt"
       ,"invoiceExtraction": "Invoice extraction"
+      ,"policyViolationCheck": "Travel policy check"
+      ,"receivablesAging": "Receivables aging"
+      ,"vatRateAudit": "VAT rate audit"
+      ,"bankReconciliation": "Bank reconciliation"
     },
     "result": {
       "correctPrefix": "Correct.",
@@ -156,7 +152,6 @@
       "wrongTitle": "Wrong",
       "partialTitle": "Partly correct",
       "pointsEarned": "You receive {{points}} points.",
-      "completed": "The mission is complete.",
       "partialSummary": "{{correct}} of {{total}} statements are correct. You receive {{points}} points.",
       "explanationLabel": "Why?"
     },
@@ -169,7 +164,6 @@
       "demotion": "Your current skill level is now {{level}}. Your next missions will be adjusted accordingly."
     },
     "creator": {
-      "button": "Manage missions",
       "manageTitle": "Manage missions",
       "manageDescription": "Select a day in the monthly overview, inspect its scheduled mission, or edit every German and English content field.",
       "title": "Create mission",
@@ -197,8 +191,6 @@
       "answers": "Answer options",
       "addAnswer": "Add answer",
       "correctAnswer": "Correct answer",
-      "statements": "Compliance statements",
-      "correctColor": "Correct traffic-light color",
       "rankingSolution": "Correct order: worst to best prompt",
       "points": "Points",
       "save": "Schedule mission",
@@ -245,7 +237,7 @@
     "review": {
       "title": "AI-generated missions for review",
       "description": "Review bilingual proposals before they are published as daily missions.",
-      "generate": "Generate selected week",
+      "generate": "Generate",
       "selectWeek": "Select week for generation",
       "selectWeekButton": "Select week",
       "selectWeekDescription": "Select a week through Monday to Friday in the calendar. Existing missions remain visible for each day.",
@@ -288,8 +280,6 @@
           "repairing": "Flagged content is being repaired and will then be validated again."
         }
       },
-      "generateTask": "Generate AI hands-on task",
-      "taskGenerated": "A new AI hands-on task was created as a proposal.",
       "loading": "Loading review missions...",
       "empty": "There are currently no AI-generated missions awaiting review.",
       "status": "Draft / review",
@@ -305,11 +295,6 @@
       "approveSuccess": "The mission was approved.",
       "regenerateSuccess": "The mission was regenerated.",
       "rejectSuccess": "The mission proposal was rejected."
-    },
-    "test": {
-      "title": "Mission debug area",
-      "description": "Test every mission type with sample data without changing points or database records.",
-      "button": "Test missions"
     }
   },
   "research": {
@@ -427,22 +412,22 @@
     "generate": "Generate exercise",
     "back": "Back to training",
     "result": {
-      "correct": "Correctly solved!",
-      "wrong": "That answer was not correct yet. Use the feedback for your next exercise.",
       "partial": "{{correct}} of {{total}} statements were correct."
     },
     "types": {
       "singleChoice": { "title": "Single choice", "description": "Practice a question with exactly one correct answer." },
       "multipleChoice": { "title": "Multiple choice", "description": "Identify all applicable answers in a practical task." },
-      "complianceDecision": { "title": "Compliance decision", "description": "Practice safe decisions about AI usage in finance." },
       "promptSelection": { "title": "Prompt selection", "description": "Choose the clearest and most useful prompt for a situation." },
-      "promptRanking": { "title": "Prompt ranking", "description": "Sort prompts from the weakest to the strongest instruction." },
-      "complianceTrafficLight": { "title": "Compliance traffic light", "description": "Assess three scenarios as allowed, restricted, or prohibited." }
+      "promptRanking": { "title": "Prompt ranking", "description": "Sort prompts from the weakest to the strongest instruction." }
       ,"aiChatChallenge": { "title": "AI chat challenge", "description": "Solve a finance case with no more than three focused questions to an embedded AI chat." }
       ,"bulkCategorization": { "title": "Bulk categorization", "description": "Use your AI assistant to assign many booking lines to categories and enter the totals per category." }
       ,"planActualDeviation": { "title": "Plan vs. actual deviation", "description": "Use your AI assistant to find cost centers that overran their budget and enter the key figures." }
       ,"duplicatePaymentHunt": { "title": "Duplicate payment hunt", "description": "Use your AI assistant to find accidental duplicate payments in a payment run." }
       ,"invoiceExtraction": { "title": "Invoice extraction", "description": "Use your AI assistant to extract key figures from many invoice texts." }
+      ,"policyViolationCheck": { "title": "Travel policy check", "description": "Use your AI assistant to check expense lines against a given travel policy." }
+      ,"receivablesAging": { "title": "Receivables aging", "description": "Derive due dates from the payment terms and age the open receivables." }
+      ,"vatRateAudit": { "title": "VAT rate audit", "description": "Use your AI assistant to find bookings where the wrong VAT rate was applied." }
+      ,"bankReconciliation": { "title": "Bank reconciliation", "description": "Reconcile free-text payment references from the bank statement against the ledger." }
     },
     "chat": {
       "caseData": "Case data",
@@ -469,7 +454,6 @@
   "agent": {
     "badge": "YOUR AGENT",
     "title": "Your Agent",
-    "description": "Ask free-form questions about AI use, finance work, prompts, summaries, or safe next steps.",
     "emptyTitle": "How should your agent help?",
     "emptyText": "You can write like in a normal chat. Please do not enter confidential, personal, or Lufthansa-internal data.",
     "you": "You",
@@ -553,7 +537,7 @@
   "onboarding": {
     "badge": "ONBOARDING",
     "hubTitle": "Onboarding",
-    "hubSubtitle": "Complete all chapters and the final quiz to unlock the daily challenges.",
+    "hubSubtitle": "Complete all chapters to unlock the daily challenges.",
     "completedBadge": "Completed",
     "overviewProgress": "{{done}} of {{total}} steps",
     "start": "Start onboarding",
@@ -570,15 +554,11 @@
     "wrong": "Not quite",
     "explanation": "Explanation",
     "next": "Continue",
-    "toFinal": "To the final quiz",
     "showResult": "Show result",
     "retry": "Try again",
     "quizPassed": "Passed!",
     "quizFailed": "Not passed yet",
     "score": "{{correct}} of {{total}} correct",
-    "finalTitle": "Final quiz",
-    "finalHeading": "Last step: final quiz",
-    "finalSubtitle": "Answer the following questions to complete your onboarding and unlock the daily challenges.",
     "finish": "Complete onboarding"
   },
   "pages": {
@@ -611,7 +591,6 @@
         "missions": "Completed missions",
         "streak": "Best streak"
       },
-      "days": "days",
       "topPerformers": "Top performers",
       "podiumTitle": "Top of the leaderboard",
       "fullRanking": "Full ranking",
@@ -621,10 +600,8 @@
       "employee": "Employee",
       "points": "Points",
       "streak": "Best streak",
-      "challenges": "Challenges",
       "missions": "Missions",
       "level": "Level",
-      "streakDays": "{{count}} days",
       "you": "You",
       "rankLabel": "Rank #{{rank}}",
       "emptyTitle": "No leaderboard data yet",
